@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}Início | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">Sistema de Inventário</h1>
+    <p class="text-muted mb-0">Painel principal do sistema de controle de estoque e inventário.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <span class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
+                        <i class="bi bi-box-seam fs-4"></i>
+                    </span>
+                    <span class="badge text-bg-light text-muted">Cadastro</span>
+                </div>
+                <h2 class="h5 card-title fw-semibold">Produtos</h2>
+                <p class="card-text text-muted small mb-0">
+                    Gerenciamento de produtos cadastrados no sistema.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <span class="rounded-circle bg-success bg-opacity-10 p-3 text-success">
+                        <i class="bi bi-geo-alt fs-4"></i>
+                    </span>
+                    <span class="badge text-bg-light text-muted">Cadastro</span>
+                </div>
+                <h2 class="h5 card-title fw-semibold">Posições</h2>
+                <p class="card-text text-muted small mb-0">
+                    Controle de endereços e posições de armazenagem.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <span class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning">
+                        <i class="bi bi-database fs-4"></i>
+                    </span>
+                    <span class="badge text-bg-light text-muted">Estoque</span>
+                </div>
+                <h2 class="h5 card-title fw-semibold">Estoque SAP</h2>
+                <p class="card-text text-muted small mb-0">
+                    Visualização do estoque integrado ao SAP.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <span class="rounded-circle bg-info bg-opacity-10 p-3 text-info">
+                        <i class="bi bi-clipboard-check fs-4"></i>
+                    </span>
+                    <span class="badge text-bg-light text-muted">Inventário</span>
+                </div>
+                <h2 class="h5 card-title fw-semibold">Inventários</h2>
+                <p class="card-text text-muted small mb-0">
+                    Controle e acompanhamento de inventários físicos.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

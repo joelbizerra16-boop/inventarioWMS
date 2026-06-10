@@ -1,0 +1,531 @@
+{% extends base_template %}
+{% load static %}
+
+{% block title %}Pocket Cíclico | Sistema de Inventário{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="pocket-page">
+    <div class="mb-2">
+        <h1 class="h4 fw-semibold text-dark mb-0">Pocket Cíclico</h1>
+        <p class="text-muted small mb-0">Ciclo #{{ ciclo.pk }}</p>
+    </div>
+
+    <div id="pocket-feedback" class="mb-2" aria-live="polite"></div>
+
+    <div class="pocket-kpi-grid mb-3" role="group" aria-label="Indicadores do lote">
+        <div class="pocket-kpi-compact">
+            <div class="pocket-kpi-compact-label">Lote</div>
+            <div class="pocket-kpi-compact-valor" id="pocket-kpi-total-lote">{{ painel.resumo.total_lote }}</div>
+        </div>
+        <div class="pocket-kpi-compact">
+            <div class="pocket-kpi-compact-label">Contados</div>
+            <div class="pocket-kpi-compact-valor pocket-kpi-verde" id="pocket-kpi-contados">{{ painel.resumo.contados }}</div>
+        </div>
+        <div class="pocket-kpi-compact">
+            <div class="pocket-kpi-compact-label">Faltam</div>
+            <div class="pocket-kpi-compact-valor pocket-kpi-cinza" id="pocket-kpi-pendentes">{{ painel.resumo.pendentes }}</div>
+        </div>
+        <div class="pocket-kpi-compact">
+            <div class="pocket-kpi-compact-label">Diverg.</div>
+            <div class="pocket-kpi-compact-valor pocket-kpi-vermelho" id="pocket-kpi-divergentes">{{ painel.resumo.divergentes }}</div>
+        </div>
+        <div class="pocket-kpi-compact">
+            <div class="pocket-kpi-compact-label">Exec.</div>
+            <div class="pocket-kpi-compact-valor pocket-kpi-azul" id="pocket-kpi-executado">{{ painel.resumo.percentual_executado }}%</div>
+        </div>
+        <div class="pocket-kpi-compact">
+            <div class="pocket-kpi-compact-label">Valid.</div>
+            <div class="pocket-kpi-compact-valor pocket-kpi-verde" id="pocket-kpi-validados">{{ painel.resumo.validados }}</div>
+        </div>
+    </div>
+
+    <div id="pocket-lote-concluido" class="alert alert-success py-2 small mb-3{% if painel.fila or painel.divergencias %} d-none{% endif %}">
+        <strong>Lote diário concluído.</strong> Não é possível registrar novas contagens neste lote.
+    </div>
+
+    <div class="modal fade" id="modal-ciclo-concluido" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h2 class="modal-title h5 fw-semibold">Inventário Cíclico concluído</h2>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">Inventário Cíclico concluído com sucesso.</p>
+                    <ul class="list-unstyled small mb-0" id="modal-ciclo-concluido-dados"></ul>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <a href="{% url 'ciclico' %}" class="btn btn-primary w-100">Ir para o painel do ciclo</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if painel.fila %}
+    <div class="card border-0 shadow-sm pocket-card mb-4" id="pocket-fila-card">
+        <div class="card-header bg-white fw-semibold">Fila de contagem</div>
+        <div class="card-body p-3">
+            <form method="post" novalidate id="pocket-contagem-form">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="contagem">
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label for="{{ form.sku_id.id_for_label }}" class="form-label fw-semibold">
+                        {{ form.sku_id.label }}
+                    </label>
+                    {{ form.sku_id }}
+                    {% if form.sku_id.errors %}
+                    <div class="text-danger small mt-1">{{ form.sku_id.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div id="sku-detalhes" class="pocket-sku-detalhes mb-3 d-none">
+                    <div class="row g-2 small">
+                        <div class="col-6">
+                            <span class="text-muted">SKU</span>
+                            <div class="fw-semibold" id="sku-codigo">—</div>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted">Embalagem</span>
+                            <div class="fw-semibold" id="sku-embalagem">—</div>
+                        </div>
+                        <div class="col-12">
+                            <span class="text-muted">Descrição</span>
+                            <div class="fw-semibold" id="sku-descricao">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label for="{{ form.codigo_posicao.id_for_label }}" class="form-label fw-semibold">
+                            {{ form.codigo_posicao.label }}
+                        </label>
+                        {{ form.codigo_posicao }}
+                        {% if form.codigo_posicao.errors %}
+                        <div class="text-danger small mt-1">{{ form.codigo_posicao.errors }}</div>
+                        <a href="{% url 'pocket:precadastro_posicao_ciclico' %}?codigo={{ form.codigo_posicao.value|default:''|urlencode }}" class="btn btn-sm btn-outline-warning mt-2">
+                            Pré-cadastrar posição
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div class="col-6">
+                        <label for="posicao-alocacao" class="form-label fw-semibold">Posição</label>
+                        <input type="text" id="posicao-alocacao" class="form-control form-control-lg pocket-input pocket-readonly" readonly tabindex="-1" placeholder="—">
+                    </div>
+                </div>
+
+                <div id="pocket-indicadores" class="pocket-indicadores mb-3 d-none">
+                    <div class="pocket-indicador-item">
+                        <div class="pocket-indicador-label">Bipado</div>
+                        <div class="pocket-indicador-valor" id="indicador-bipado">0</div>
+                    </div>
+                    <div class="pocket-indicador-item">
+                        <div class="pocket-indicador-label">Cosan</div>
+                        <div class="pocket-indicador-valor" id="indicador-cosan">0</div>
+                    </div>
+                    <div class="pocket-indicador-item">
+                        <div class="pocket-indicador-label">Brida</div>
+                        <div class="pocket-indicador-valor" id="indicador-brida">0</div>
+                    </div>
+                    <div class="pocket-indicador-item">
+                        <div class="pocket-indicador-label">Total</div>
+                        <div class="pocket-indicador-valor" id="indicador-total">0</div>
+                    </div>
+                    <div class="pocket-indicador-item pocket-indicador-status">
+                        <div class="pocket-indicador-label">Status</div>
+                        <div class="pocket-indicador-valor pocket-indicador-valor-status">
+                            <span class="pocket-indicador-dot vermelho" id="indicador-status" aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="{{ form.quantidade_fisica.id_for_label }}" class="form-label fw-semibold">
+                        {{ form.quantidade_fisica.label }}
+                    </label>
+                    {{ form.quantidade_fisica }}
+                    {% if form.quantidade_fisica.errors %}
+                    <div class="text-danger small mt-1">{{ form.quantidade_fisica.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 pocket-btn" id="pocket-btn-salvar">
+                    <i class="bi bi-check2-circle me-1"></i>Salvar Contagem
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if painel.divergencias %}
+    <div class="card border-0 shadow-sm pocket-card mb-4">
+        <div class="card-header bg-white fw-semibold">Divergências pendentes</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>SKU</th>
+                            <th class="text-end">SAP</th>
+                            <th class="text-end">Físico</th>
+                            <th class="text-end">Dif</th>
+                            <th class="text-end">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in painel.divergencias %}
+                        <tr>
+                            <td>
+                                {% if item.indicador == 'laranja' %}🟠{% elif item.indicador == 'vermelho' %}🔴{% else %}🟢{% endif %}
+                                {{ item.codigo_produto }}
+                            </td>
+                            <td class="text-end">{{ item.sap }}</td>
+                            <td class="text-end">{{ item.fisico }}</td>
+                            <td class="text-end fw-semibold">
+                                {% if item.diferenca > 0 %}+{% endif %}{{ item.diferenca }}
+                            </td>
+                            <td class="text-end">
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="acao" value="recontar">
+                                    <input type="hidden" name="sku_id" value="{{ item.pk }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning">Recontar</button>
+                                </form>
+                                {% if pode_supervisionar %}
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="acao" value="aceitar_divergencia">
+                                    <input type="hidden" name="sku_id" value="{{ item.pk }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">Aceitar</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card border-0 shadow-sm pocket-card mb-4 d-none" aria-hidden="true">
+        <div class="card-header bg-white fw-semibold">Últimas contagens</div>
+        <div class="card-body">
+            {% if historico %}
+            <div class="d-grid gap-3" id="pocket-historico-lista">
+                {% for item in historico %}
+                <div class="pocket-historico-item">
+                    <div class="small text-muted">{{ item.data_hora }}</div>
+                    <div class="fw-semibold">{{ item.posicao }} — {{ item.produto }}</div>
+                    <div>Quantidade: {{ item.quantidade }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-0" id="pocket-historico-vazio">Nenhuma contagem registrada nesta sessão.</p>
+            <div class="d-grid gap-3 d-none" id="pocket-historico-lista"></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="d-grid gap-2">
+        <a href="{% url 'pocket:selecionar' %}" class="btn btn-outline-secondary pocket-btn">Trocar modo</a>
+        <a href="{% url 'ciclico_executar' %}" class="btn btn-outline-primary pocket-btn">Painel Executar Ciclo</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ form.mapa_posicoes|json_script:"pocket-posicoes-data" }}
+{{ painel.skus_json|json_script:"pocket-skus-lote-data" }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var mapaPosicoes = JSON.parse(document.getElementById('pocket-posicoes-data').textContent);
+    var skusLote = JSON.parse(document.getElementById('pocket-skus-lote-data').textContent);
+    var skuSelect = document.getElementById('pocket-sku-lote');
+    var detalhes = document.getElementById('sku-detalhes');
+    var indicadores = document.getElementById('pocket-indicadores');
+    var posicaoInput = document.getElementById('{{ form.codigo_posicao.id_for_label }}');
+    var posicaoAlocacao = document.getElementById('posicao-alocacao');
+    var quantidadeInput = document.getElementById('{{ form.quantidade_fisica.id_for_label }}');
+    var form = document.getElementById('pocket-contagem-form');
+    var feedback = document.getElementById('pocket-feedback');
+    var csrfInput = form ? form.querySelector('[name=csrfmiddlewaretoken]') : null;
+
+    var mapaSkus = {};
+    skusLote.forEach(function (item) {
+        mapaSkus[String(item.pk)] = item;
+    });
+
+    function formatarNumero(valor) {
+        var numero = Number(valor);
+        if (Number.isNaN(numero)) {
+            return '0';
+        }
+        if (Number.isInteger(numero)) {
+            return String(numero);
+        }
+        return String(numero);
+    }
+
+    function aplicarIndicadores(dados) {
+        if (!indicadores || !dados) {
+            return;
+        }
+        document.getElementById('indicador-bipado').textContent = formatarNumero(dados.bipado);
+        document.getElementById('indicador-cosan').textContent = formatarNumero(dados.cosan);
+        document.getElementById('indicador-brida').textContent = formatarNumero(dados.brida);
+        document.getElementById('indicador-total').textContent = formatarNumero(dados.total);
+        var statusDot = document.getElementById('indicador-status');
+        statusDot.className = 'pocket-indicador-dot ' + (dados.indicador || 'vermelho');
+    }
+
+    function atualizarResumo(resumo) {
+        if (!resumo) {
+            return;
+        }
+        document.getElementById('pocket-kpi-total-lote').textContent = resumo.total_lote;
+        document.getElementById('pocket-kpi-contados').textContent = resumo.contados;
+        document.getElementById('pocket-kpi-validados').textContent = resumo.validados;
+        document.getElementById('pocket-kpi-pendentes').textContent = resumo.pendentes;
+        document.getElementById('pocket-kpi-divergentes').textContent = resumo.divergentes;
+        document.getElementById('pocket-kpi-executado').textContent = resumo.percentual_executado + '%';
+
+        var alertaConcluido = document.getElementById('pocket-lote-concluido');
+        if (alertaConcluido) {
+            alertaConcluido.classList.toggle('d-none', !resumo.lote_concluido);
+        }
+        if (resumo.lote_concluido && form) {
+            form.querySelectorAll('input, select, button').forEach(function (el) {
+                el.disabled = true;
+            });
+        }
+    }
+
+    function exibirCicloConcluido(dados) {
+        if (!dados) {
+            return;
+        }
+        var lista = document.getElementById('modal-ciclo-concluido-dados');
+        if (lista) {
+            lista.innerHTML = [
+                '<li><strong>Total planejado:</strong> ' + dados.total_planejado + '</li>',
+                '<li><strong>Total contado:</strong> ' + dados.total_contado + '</li>',
+                '<li><strong>Validados:</strong> ' + dados.validados + '</li>',
+                '<li><strong>Divergentes:</strong> ' + dados.divergentes + '</li>',
+                '<li><strong>Acuracidade final:</strong> ' + dados.acuracidade + '%</li>',
+            ].join('');
+        }
+        var modalEl = document.getElementById('modal-ciclo-concluido');
+        if (modalEl && window.bootstrap) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+        if (form) {
+            form.querySelectorAll('input, select, button').forEach(function (el) {
+                el.disabled = true;
+            });
+        }
+    }
+
+    function finalizarFilaOperacional() {
+        var filaCard = document.getElementById('pocket-fila-card');
+        if (filaCard) {
+            filaCard.classList.add('d-none');
+        }
+        if (form) {
+            form.querySelectorAll('input, select, button').forEach(function (el) {
+                el.disabled = true;
+            });
+        }
+        exibirFeedback('Lote diário concluído.', 'success');
+    }
+
+    function sincronizarFila(skusLote, proximoSkuId) {
+        mapaSkus = {};
+        if (!skuSelect) {
+            return;
+        }
+        skuSelect.innerHTML = '';
+        (skusLote || []).forEach(function (item) {
+            mapaSkus[String(item.pk)] = item;
+            var opcao = document.createElement('option');
+            opcao.value = String(item.pk);
+            opcao.textContent = item.codigo_produto + ' — ' + item.descricao;
+            skuSelect.appendChild(opcao);
+        });
+        if (!skusLote || skusLote.length === 0) {
+            detalhes.classList.add('d-none');
+            indicadores.classList.add('d-none');
+            finalizarFilaOperacional();
+            return;
+        }
+        var alvo = proximoSkuId ? String(proximoSkuId) : String(skusLote[0].pk);
+        skuSelect.value = alvo;
+        atualizarSku();
+        if (posicaoInput) {
+            posicaoInput.value = '';
+            posicaoInput.focus();
+            posicaoInput.select();
+        }
+        if (posicaoAlocacao) {
+            posicaoAlocacao.value = '';
+        }
+        if (quantidadeInput) {
+            quantidadeInput.value = '';
+        }
+    }
+
+    function exibirFeedback(mensagem, tipo) {
+        if (!feedback) {
+            return;
+        }
+        feedback.innerHTML = '<div class="alert alert-' + (tipo || 'success') + ' mb-0">' + mensagem + '</div>';
+        window.setTimeout(function () {
+            feedback.innerHTML = '';
+        }, 3500);
+    }
+
+    function atualizarSku() {
+        if (!skuSelect) {
+            return;
+        }
+        var sku = mapaSkus[skuSelect.value];
+        if (!sku) {
+            detalhes.classList.add('d-none');
+            indicadores.classList.add('d-none');
+            return;
+        }
+        detalhes.classList.remove('d-none');
+        indicadores.classList.remove('d-none');
+        document.getElementById('sku-codigo').textContent = sku.codigo_produto;
+        document.getElementById('sku-descricao').textContent = sku.descricao;
+        document.getElementById('sku-embalagem').textContent = sku.embalagem || '—';
+        aplicarIndicadores(sku);
+    }
+
+    function atualizarPosicao(focarQuantidade) {
+        if (!posicaoInput) {
+            return;
+        }
+        var codigo = posicaoInput.value.trim();
+        posicaoAlocacao.value = mapaPosicoes[codigo] || '';
+        if (focarQuantidade && mapaPosicoes[codigo] && quantidadeInput) {
+            quantidadeInput.focus();
+            quantidadeInput.select();
+        }
+    }
+
+    function removerSkuDaFila(skuId, dadosResposta) {
+        if (dadosResposta && dadosResposta.skus_lote) {
+            sincronizarFila(dadosResposta.skus_lote, dadosResposta.proximo_sku_id);
+            return;
+        }
+        delete mapaSkus[String(skuId)];
+        if (!skuSelect) {
+            return;
+        }
+        var opcao = skuSelect.querySelector('option[value="' + skuId + '"]');
+        if (opcao) {
+            opcao.remove();
+        }
+        if (skuSelect.options.length > 0) {
+            skuSelect.selectedIndex = 0;
+            atualizarSku();
+            posicaoInput.value = '';
+            posicaoAlocacao.value = '';
+            quantidadeInput.value = '';
+            posicaoInput.focus();
+            posicaoInput.select();
+            return;
+        }
+        sincronizarFila([], null);
+    }
+
+    if (skuSelect) {
+        skuSelect.addEventListener('change', function () {
+            atualizarSku();
+            if (posicaoInput) {
+                posicaoInput.focus();
+                posicaoInput.select();
+            }
+        });
+        atualizarSku();
+    }
+
+    if (posicaoInput) {
+        posicaoInput.addEventListener('change', function () { atualizarPosicao(true); });
+        posicaoInput.addEventListener('blur', function () { atualizarPosicao(false); });
+        atualizarPosicao(false);
+        if (posicaoAlocacao.value && quantidadeInput) {
+            quantidadeInput.focus();
+        } else {
+            posicaoInput.focus();
+            posicaoInput.select();
+        }
+    }
+
+    if (form) {
+        form.addEventListener('submit', function (evento) {
+            evento.preventDefault();
+            var botao = document.getElementById('pocket-btn-salvar');
+            botao.disabled = true;
+            fetch(window.location.href, {
+                method: 'POST',
+                body: new FormData(form),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfInput ? csrfInput.value : '',
+                },
+            })
+                .then(function (resposta) {
+                    return resposta.json().then(function (dados) {
+                        return { ok: resposta.ok, dados: dados };
+                    });
+                })
+                .then(function (resultado) {
+                    botao.disabled = false;
+                    if (!resultado.ok) {
+                        var msg = resultado.dados.message || 'Não foi possível salvar a contagem.';
+                        exibirFeedback(msg, 'danger');
+                        return;
+                    }
+                    var dados = resultado.dados;
+                    var skuId = skuSelect ? skuSelect.value : '';
+                    if (mapaSkus[skuId]) {
+                        Object.assign(mapaSkus[skuId], dados.indicadores);
+                    }
+                    aplicarIndicadores(dados.indicadores);
+                    atualizarResumo(dados.resumo);
+                    if (dados.resumo && dados.resumo.ciclo_concluido) {
+                        exibirCicloConcluido(dados.resumo.ciclo_encerrado);
+                    }
+                    exibirFeedback(
+                        dados.message,
+                        dados.tipo_mensagem === 'warning' ? 'warning' : 'success',
+                    );
+                    quantidadeInput.value = '';
+                    if (dados.sku_removido_fila) {
+                        removerSkuDaFila(skuId, dados);
+                        return;
+                    }
+                    posicaoInput.focus();
+                    posicaoInput.select();
+                })
+                .catch(function () {
+                    botao.disabled = false;
+                    exibirFeedback('Erro ao salvar a contagem.', 'danger');
+                });
+        });
+    }
+});
+</script>
+{% endblock %}

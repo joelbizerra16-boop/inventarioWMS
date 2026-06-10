@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block title %}Estoque Físico | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Estoque Físico</h1>
+        <p class="text-muted mb-0">
+            Consulta do estoque oficial publicado após finalização do inventário. Somente leitura.
+        </p>
+        {% if info_publicacao %}
+        <p class="text-muted small mb-0 mt-1">
+            Estoque publicado pelo Inventário <strong>#{{ info_publicacao.inventario_id }}</strong>
+            — Publicado em: {{ info_publicacao.data_publicacao|date:"d/m/Y H:i" }}
+        </p>
+        {% endif %}
+    </div>
+    <a
+        href="{% url 'estoque_fisico:exportar' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}"
+        class="btn btn-outline-success"
+    >
+        <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="q" class="form-label">Pesquisar</label>
+                <input
+                    type="text"
+                    name="q"
+                    id="q"
+                    class="form-control"
+                    placeholder="Código alocação, alocação, produto ou descrição"
+                    value="{{ termo_busca }}"
+                >
+            </div>
+
+            <div class="col-md-3">
+                <label for="setor" class="form-label">Setor</label>
+                <select name="setor" id="setor" class="form-select">
+                    <option value="">Todos</option>
+                    {% for setor in setores %}
+                    <option value="{{ setor }}" {% if setor_selecionado == setor %}selected{% endif %}>
+                        {{ setor }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <div class="form-check mt-4">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        name="somente_positivo"
+                        id="somente_positivo"
+                        value="1"
+                        {% if somente_positivo %}checked{% endif %}
+                    >
+                    <label class="form-check-label" for="somente_positivo">
+                        Somente quantidade &gt; 0
+                    </label>
+                </div>
+            </div>
+
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Código Alocação</th>
+                        <th>Alocação</th>
+                        <th>Código Produto</th>
+                        <th>Descrição</th>
+                        <th class="text-end">Quantidade</th>
+                        <th class="pe-4">Data Atualização</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for registro in registros %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ registro.posicao.codigo }}</td>
+                        <td>{{ registro.posicao.posicao }}</td>
+                        <td>{{ registro.produto.codigo_produto }}</td>
+                        <td>{{ registro.produto.descricao }}</td>
+                        <td class="text-end fw-semibold">{{ registro.quantidade }}</td>
+                        <td class="pe-4">{{ registro.data_atualizacao|date:"d/m/Y H:i" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-5">
+                            Nenhum registro de estoque físico encontrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'includes/paginacao.html' %}
+    </div>
+</div>
+{% endblock %}

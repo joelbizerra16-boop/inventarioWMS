@@ -1,0 +1,42 @@
+{% extends base_template %}
+{% load static %}
+
+{% block title %}Pré-Cadastro Posição | Pocket Cíclico{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="pocket-page">
+    <div class="mb-4">
+        <h1 class="h3 fw-semibold text-dark mb-1">Pré-Cadastro de Posição</h1>
+        <p class="text-muted mb-0">
+            {% if voltar_rotulo == 'Voltar ao Pocket' %}
+            A posição ficará disponível imediatamente para contagem.
+            {% else %}
+            Modo Cíclico — a posição ficará disponível imediatamente para contagem.
+            {% endif %}
+        </p>
+    </div>
+    <div class="card border-0 shadow-sm pocket-card">
+        <div class="card-body p-4">
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+                {% for field in form %}
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+                </div>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary w-100 pocket-btn">Salvar pré-cadastro</button>
+            </form>
+            <a href="{{ voltar_url|default:'/pocket/ciclico/' }}" class="btn btn-outline-secondary w-100 pocket-btn mt-2">{{ voltar_rotulo|default:"Voltar à contagem" }}</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

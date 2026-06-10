@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">{{ titulo }}</h1>
+    <p class="text-muted mb-0">Informe os dados do inventário.</p>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="{{ form.usuario.id_for_label }}" class="form-label">
+                        {{ form.usuario.label }}
+                    </label>
+                    {{ form.usuario }}
+                    {% if form.usuario.errors %}
+                    <div class="text-danger small mt-1">{{ form.usuario.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-12">
+                    <label for="{{ form.observacao.id_for_label }}" class="form-label">
+                        {{ form.observacao.label }}
+                    </label>
+                    {{ form.observacao }}
+                    {% if form.observacao.errors %}
+                    <div class="text-danger small mt-1">{{ form.observacao.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary">{{ botao }}</button>
+                <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

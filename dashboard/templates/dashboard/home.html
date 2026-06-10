@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard | Sistema de Inventário{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+<div class="dashboard-header">
+    <h1 class="fw-semibold">Dashboard Operacional</h1>
+    <p class="mb-0">Visão executiva compacta — indicadores, estoque e inventários.</p>
+</div>
+
+<p class="dashboard-section-title text-uppercase fw-semibold">Cadastros e Estoque</p>
+<div class="row dashboard-kpi-row">
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Total de Produtos</p>
+            <p class="dashboard-kpi-value">{{ indicadores.total_produtos }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Total de Posições</p>
+            <p class="dashboard-kpi-value">{{ indicadores.total_posicoes }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Estoque SAP</p>
+            <p class="dashboard-kpi-value">{{ indicadores.produtos_estoque_sap }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Estoque Físico</p>
+            <p class="dashboard-kpi-value">{{ indicadores.produtos_estoque_fisico }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Acuracidade Geral</p>
+            <p class="dashboard-kpi-value">{{ indicadores.acuracidade }}%</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Acuracidade Cíclico</p>
+            <p class="dashboard-kpi-value">
+                {% if indicadores.ciclico_acuracidade is not None %}{{ indicadores.ciclico_acuracidade }}%{% else %}—{% endif %}
+            </p>
+        </div>
+    </div>
+</div>
+
+<p class="dashboard-section-title text-uppercase fw-semibold">Inventário Geral</p>
+<div class="row dashboard-kpi-row">
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Abertos</p>
+            <p class="dashboard-kpi-value">{{ indicadores.inventarios_abertos }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Em Andamento</p>
+            <p class="dashboard-kpi-value">{{ indicadores.inventarios_em_andamento }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Finalizados</p>
+            <p class="dashboard-kpi-value text-success">{{ indicadores.inventarios_finalizados }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Corretos</p>
+            <p class="dashboard-kpi-value text-success">{{ indicadores.produtos_corretos }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Divergentes</p>
+            <p class="dashboard-kpi-value text-danger">{{ indicadores.produtos_divergentes }}</p>
+        </div>
+    </div>
+</div>
+
+<p class="dashboard-section-title text-uppercase fw-semibold">Inventário Cíclico</p>
+<div class="row dashboard-kpi-row mb-2">
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Itens Planejados</p>
+            <p class="dashboard-kpi-value">{{ indicadores.ciclico_itens_planejados }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">Itens Contados</p>
+            <p class="dashboard-kpi-value text-success">{{ indicadores.ciclico_itens_contados }}</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">% Concluído</p>
+            <p class="dashboard-kpi-value">{{ indicadores.ciclico_percentual_concluido }}%</p>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+        <div class="dashboard-kpi">
+            <p class="dashboard-kpi-label">SKUs Divergentes</p>
+            <p class="dashboard-kpi-value text-danger">{{ indicadores.ciclico_skus_divergentes }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="dashboard-charts-section">
+<div class="dashboard-charts-toolbar">
+    <p class="dashboard-section-title text-uppercase fw-semibold mb-0">Gráficos Operacionais</p>
+    <select id="visaoGraficos" class="form-select form-select-sm" aria-label="Visão dos gráficos">
+        <option value="geral">Inventário Geral</option>
+        <option value="ciclico">Inventário Cíclico</option>
+    </select>
+</div>
+
+<div class="dashboard-charts-panel is-active" data-dashboard-panel="geral">
+    <div class="row g-2 dashboard-charts-row">
+        {% for grafico in indicadores.graficos_geral %}
+        {% include 'dashboard/_chart_card.html' with grafico=grafico cols='md-6' %}
+        {% endfor %}
+    </div>
+</div>
+
+<div class="dashboard-charts-panel" data-dashboard-panel="ciclico">
+    <div class="row g-2 dashboard-charts-row">
+        {% for grafico in indicadores.graficos_ciclico|slice:":3" %}
+        {% include 'dashboard/_chart_card.html' with grafico=grafico cols='md-4' %}
+        {% endfor %}
+    </div>
+    <div class="row g-2 dashboard-charts-row">
+        {% for grafico in indicadores.graficos_ciclico|slice:"3:" %}
+        {% include 'dashboard/_chart_card.html' with grafico=grafico cols='md-6' %}
+        {% endfor %}
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ graficos_payload|json_script:"dashboard-graficos-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

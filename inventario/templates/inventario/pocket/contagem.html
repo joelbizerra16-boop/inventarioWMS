@@ -1,0 +1,185 @@
+{% extends base_template %}
+{% load static %}
+
+{% block title %}Pocket{% if modo_ciclico %} Cíclico{% else %} #{{ inventario.pk }}{% endif %} | Sistema de Inventário{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="pocket-page">
+    <div class="mb-4">
+        <h1 class="h3 fw-semibold text-dark mb-1">Contagem Pocket</h1>
+        <p class="text-muted mb-0">
+            {% if modo_ciclico %}
+            Modo Cíclico — Ciclo #{{ ciclo.pk }}{% if lote_info %} ({{ lote_info.skus_no_lote }} SKU(s) no lote){% endif %}
+            {% else %}
+            Modo Inventário — #{{ inventario.pk }} — {{ inventario.get_status_display }}
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="card border-0 shadow-sm pocket-card mb-4">
+        <div class="card-body p-4">
+            <form method="post" novalidate id="pocket-contagem-form">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label for="{{ form.codigo_posicao.id_for_label }}" class="form-label fw-semibold">
+                            {{ form.codigo_posicao.label }}
+                        </label>
+                        {{ form.codigo_posicao }}
+                        {% if form.codigo_posicao.errors %}
+                        <div class="text-danger small mt-1">{{ form.codigo_posicao.errors }}</div>
+                        {% if not modo_ciclico %}
+                        <a href="{% url 'pocket:precadastro_posicao' inventario.pk %}?codigo={{ form.codigo_posicao.value|default:''|urlencode }}" class="btn btn-sm btn-outline-warning mt-2">
+                            Pré-cadastrar posição
+                        </a>
+                        {% else %}
+                        <a href="{% url 'pocket:precadastro_posicao_ciclico' %}?codigo={{ form.codigo_posicao.value|default:''|urlencode }}" class="btn btn-sm btn-outline-warning mt-2">
+                            Pré-cadastrar posição
+                        </a>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                    <div class="col-6">
+                        <label for="posicao-alocacao" class="form-label fw-semibold">Posição</label>
+                        <input type="text" id="posicao-alocacao" class="form-control form-control-lg pocket-input pocket-readonly" readonly tabindex="-1" placeholder="—">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.codigo_produto.id_for_label }}" class="form-label fw-semibold">
+                        {{ form.codigo_produto.label }}
+                    </label>
+                    {{ form.codigo_produto }}
+                    {% if form.codigo_produto.errors %}
+                    <div class="text-danger small mt-1">{{ form.codigo_produto.errors }}</div>
+                    {% if not modo_ciclico %}
+                    <a href="{% url 'pocket:precadastro_produto' inventario.pk %}?codigo={{ form.codigo_produto.value|default:''|urlencode }}" class="btn btn-sm btn-outline-warning mt-2">
+                        Pré-cadastrar produto
+                    </a>
+                    {% endif %}
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <label for="produto-descricao" class="form-label fw-semibold">Descrição Produto</label>
+                    <input type="text" id="produto-descricao" class="form-control form-control-lg pocket-input pocket-readonly" readonly tabindex="-1" placeholder="—">
+                </div>
+
+                {% if modo_ciclico %}
+                <div class="mb-3">
+                    <label for="{{ form.dispositivo.id_for_label }}" class="form-label fw-semibold">{{ form.dispositivo.label }}</label>
+                    {{ form.dispositivo }}
+                </div>
+                {% endif %}
+
+                <div class="mb-4">
+                    <label for="{{ form.quantidade_fisica.id_for_label }}" class="form-label fw-semibold">
+                        {{ form.quantidade_fisica.label }}
+                    </label>
+                    {{ form.quantidade_fisica }}
+                    {% if form.quantidade_fisica.errors %}
+                    <div class="text-danger small mt-1">{{ form.quantidade_fisica.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 pocket-btn">
+                    <i class="bi bi-check2-circle me-1"></i>Salvar Contagem
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm pocket-card mb-4 d-none" aria-hidden="true">
+        <div class="card-header bg-white fw-semibold">Últimas contagens</div>
+        <div class="card-body">
+            {% if historico %}
+            <div class="d-grid gap-3">
+                {% for item in historico %}
+                <div class="pocket-historico-item">
+                    <div class="small text-muted">{{ item.data_hora }}</div>
+                    <div class="fw-semibold">{{ item.posicao }} — {{ item.produto }}</div>
+                    <div>Quantidade: {{ item.quantidade }}</div>
+                    {% if item.dispositivo %}<div class="small text-muted">{{ item.dispositivo }}</div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">Nenhuma contagem registrada nesta sessão.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="d-grid gap-2">
+        <a href="{% url 'pocket:selecionar' %}" class="btn btn-outline-secondary pocket-btn">Trocar modo</a>
+        {% if not modo_ciclico %}
+        <a href="{% url 'inventario:contagem_lista' inventario.pk %}" class="btn btn-outline-primary pocket-btn">Ver contagem web</a>
+        {% else %}
+        <a href="{% url 'ciclico_executar' %}" class="btn btn-outline-primary pocket-btn">Painel Executar Ciclo</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ form.mapa_posicoes|json_script:"pocket-posicoes-data" }}
+{{ form.mapa_produtos|json_script:"pocket-produtos-data" }}
+{{ form.mapa_ean|json_script:"pocket-ean-data" }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var mapaPosicoes = JSON.parse(document.getElementById('pocket-posicoes-data').textContent);
+    var mapaProdutos = JSON.parse(document.getElementById('pocket-produtos-data').textContent);
+    var mapaEan = JSON.parse(document.getElementById('pocket-ean-data').textContent);
+    var posicaoInput = document.getElementById('{{ form.codigo_posicao.id_for_label }}');
+    var posicaoAlocacao = document.getElementById('posicao-alocacao');
+    var produtoInput = document.getElementById('{{ form.codigo_produto.id_for_label }}');
+    var produtoDescricao = document.getElementById('produto-descricao');
+    var quantidadeInput = document.getElementById('{{ form.quantidade_fisica.id_for_label }}');
+
+    function atualizarPosicao(focarProduto) {
+        var codigo = posicaoInput.value.trim();
+        posicaoAlocacao.value = mapaPosicoes[codigo] || '';
+        if (focarProduto && mapaPosicoes[codigo]) {
+            produtoInput.focus();
+            produtoInput.select();
+        }
+    }
+
+    function atualizarProduto(focarQuantidade) {
+        var codigo = produtoInput.value.trim();
+        var descricao = mapaProdutos[codigo] || '';
+        if (!descricao && mapaEan[codigo]) {
+            descricao = mapaEan[codigo].descricao;
+        }
+        produtoDescricao.value = descricao;
+        if (focarQuantidade && descricao) {
+            quantidadeInput.focus();
+            quantidadeInput.select();
+        }
+    }
+
+    posicaoInput.addEventListener('change', function () { atualizarPosicao(true); });
+    posicaoInput.addEventListener('blur', function () { atualizarPosicao(false); });
+    produtoInput.addEventListener('change', function () { atualizarProduto(true); });
+    produtoInput.addEventListener('blur', function () { atualizarProduto(false); });
+    atualizarPosicao(false);
+    if (posicaoAlocacao.value) {
+        produtoInput.focus();
+    } else {
+        posicaoInput.focus();
+        posicaoInput.select();
+    }
+    if (produtoInput.value) {
+        atualizarProduto(false);
+    }
+});
+</script>
+{% endblock %}

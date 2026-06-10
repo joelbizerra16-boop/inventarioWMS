@@ -1,0 +1,106 @@
+<nav class="navbar navbar-expand-lg navbar-dark app-topbar">
+
+    <div class="container-fluid px-4">
+
+        <button
+
+            id="sidebarToggle"
+
+            class="btn btn-outline-light d-none d-lg-inline-flex align-items-center justify-content-center me-2"
+
+            type="button"
+
+            aria-label="Recolher menu lateral"
+
+            aria-expanded="true"
+
+            aria-controls="appSidebar"
+
+        >
+
+            <i class="bi bi-list fs-5" aria-hidden="true"></i>
+
+        </button>
+
+
+
+        <button
+
+            class="btn btn-outline-light d-lg-none me-2"
+
+            type="button"
+
+            data-bs-toggle="offcanvas"
+
+            data-bs-target="#sidebarOffcanvas"
+
+            aria-controls="sidebarOffcanvas"
+
+            aria-label="Abrir menu"
+
+        >
+
+            <i class="bi bi-list fs-5" aria-hidden="true"></i>
+
+        </button>
+
+
+
+        <span class="navbar-brand mb-0 h1 fw-semibold">
+
+            Sistema de Inventário
+
+        </span>
+
+
+
+        <div class="d-flex align-items-center gap-3 ms-auto text-white">
+
+            {% if user.is_authenticated %}
+
+            <span class="small d-none d-sm-inline">
+
+                <i class="bi bi-person-circle me-1"></i>
+
+                {% if user.perfil_operacional %}
+
+                {{ user.perfil_operacional.nome }}
+
+                <span class="opacity-75">({{ user.perfil_operacional.get_perfil_display }})</span>
+
+                {% else %}
+
+                {{ user.get_username }}
+
+                {% endif %}
+
+            </span>
+
+            <form method="post" action="{% url 'accounts:logout' %}" class="d-inline">
+
+                {% csrf_token %}
+
+                <button type="submit" class="btn btn-sm btn-outline-light">
+
+                    <i class="bi bi-box-arrow-right me-1"></i>Sair
+
+                </button>
+
+            </form>
+
+            {% endif %}
+
+            <span class="small">
+
+                <i class="bi bi-calendar3 me-1"></i>
+
+                {% now "d/m/Y" %}
+
+            </span>
+
+        </div>
+
+    </div>
+
+</nav>
+

@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Confronto Físico x Contábil | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">Confronto Físico x Contábil</h1>
+    <p class="text-muted mb-0">Análise comparativa entre estoque inventariado e estoque contábil SAP.</p>
+</div>
+
+{% if inventario_selecionado and resultado %}
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Total de Produtos</p>
+                <p class="h4 fw-semibold mb-0">{{ resultado.resumo.total_produtos }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Produtos Corretos</p>
+                <p class="h4 fw-semibold text-success mb-0">{{ resultado.resumo.produtos_corretos }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Produtos Divergentes</p>
+                <p class="h4 fw-semibold text-danger mb-0">{{ resultado.resumo.produtos_divergentes }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Acuracidade</p>
+                <p class="h4 fw-semibold text-primary mb-0">{{ resultado.resumo.acuracidade }}%</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label for="inventario" class="form-label">Inventário</label>
+                <select name="inventario" id="inventario" class="form-select" required>
+                    <option value="">Selecione um inventário</option>
+                    {% for inv in inventarios %}
+                    <option value="{{ inv.pk }}" {% if inventario_id == inv.pk|stringformat:"s" %}selected{% endif %}>
+                        #{{ inv.pk }} — {{ inv.usuario.nome }} — {{ inv.get_status_display }} — {{ inv.data_criacao|date:"d/m/Y" }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label for="filtro" class="form-label">Filtro</label>
+                <select name="filtro" id="filtro" class="form-select">
+                    <option value="todos" {% if filtro_status == 'todos' %}selected{% endif %}>Todos</option>
+                    <option value="divergencias" {% if filtro_status == 'divergencias' %}selected{% endif %}>Somente Divergências</option>
+                    <option value="corretos" {% if filtro_status == 'corretos' %}selected{% endif %}>Somente Corretos</option>
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label for="q" class="form-label">Pesquisar</label>
+                <input
+                    type="text"
+                    name="q"
+                    id="q"
+                    class="form-control"
+                    placeholder="Código ou descrição"
+                    value="{{ termo_busca }}"
+                >
+            </div>
+
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-arrow-repeat me-1"></i>Executar Confronto
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if inventario_selecionado and resultado %}
+<div class="alert alert-info">
+    Confronto do inventário <strong>#{{ inventario_selecionado.pk }}</strong>
+    — {{ inventario_selecionado.get_status_display }}
+    — somente análise, sem alteração de estoque.
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Código</th>
+                        <th>Descrição</th>
+                        <th>Embalagem</th>
+                        <th>Setor</th>
+                        <th>Físico</th>
+                        <th>Canal 110 (COSAN)</th>
+                        <th>Canal 1 (BRIDA)</th>
+                        <th>Total Contábil</th>
+                        <th>Diferença</th>
+                        <th class="pe-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in resultado.linhas %}
+                    <tr class="table-{{ linha.status_classe }}">
+                        <td class="ps-4 fw-semibold">{{ linha.codigo_produto }}</td>
+                        <td>{{ linha.descricao }}</td>
+                        <td>{{ linha.embalagem|default:"—" }}</td>
+                        <td>{{ linha.setor|default:"—" }}</td>
+                        <td>{{ linha.fisico }}</td>
+                        <td>{{ linha.canal_110 }}</td>
+                        <td>{{ linha.canal_1 }}</td>
+                        <td>{{ linha.total_contabil }}</td>
+                        <td class="fw-semibold">{{ linha.diferenca }}</td>
+                        <td class="pe-4">
+                            <span class="badge text-bg-{{ linha.status_classe }}">{{ linha.status_label }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-5">
+                            Nenhum produto encontrado para os filtros selecionados.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% elif inventario_id %}
+<div class="alert alert-warning">
+    Selecione um inventário válido para executar o confronto.
+</div>
+{% else %}
+<div class="alert alert-secondary">
+    Selecione um inventário e clique em <strong>Executar Confronto</strong>.
+</div>
+{% endif %}
+{% endblock %}

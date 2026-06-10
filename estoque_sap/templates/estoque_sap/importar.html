@@ -1,0 +1,489 @@
+{% extends 'base.html' %}
+
+
+
+{% block title %}Importar Estoque SAP | Sistema de Inventário{% endblock %}
+
+
+
+{% block content %}
+
+<div class="mb-4">
+
+    <h1 class="h3 fw-semibold text-dark mb-1">Importar Estoque SAP</h1>
+
+    <p class="text-muted mb-0">Importação do estoque contábil via planilha Excel do SAP B1.</p>
+
+</div>
+
+
+
+{% if etapa == 'upload' %}
+
+<div class="card border-0 shadow-sm">
+
+    <div class="card-body p-4">
+
+        <div class="alert alert-info">
+
+            <strong>Layouts aceitos:</strong>
+
+            <div class="mt-2">
+
+                <span class="fw-semibold">SAP B1:</span>
+
+                CodProduto | Descricao | 0 | 1 | 2 | 66 | 80 | 81 | 82 | 99 | 110
+
+            </div>
+
+            <div class="mt-1">
+
+                <span class="fw-semibold">Interno:</span>
+
+                codigo_produto | descricao | canal_0 | canal_1 | canal_2 | canal_66 |
+
+                canal_80 | canal_81 | canal_82 | canal_99 | canal_110
+
+            </div>
+
+            <div class="small mt-2 mb-0">
+
+                A coluna <strong>Total</strong> (quando presente) é usada apenas para conferência.
+
+                O total gravado é a soma dos canais.
+
+            </div>
+
+        </div>
+
+
+
+        <form method="post" enctype="multipart/form-data">
+
+            {% csrf_token %}
+
+            <input type="hidden" name="acao" value="preview">
+
+
+
+            <div class="mb-3">
+
+                <label for="{{ form.arquivo.id_for_label }}" class="form-label">
+
+                    {{ form.arquivo.label }}
+
+                </label>
+
+                {{ form.arquivo }}
+
+                {% if form.arquivo.errors %}
+
+                <div class="text-danger small mt-1">{{ form.arquivo.errors }}</div>
+
+                {% endif %}
+
+            </div>
+
+
+
+            <div class="d-flex gap-2">
+
+                <button type="submit" class="btn btn-primary">
+
+                    <i class="bi bi-upload me-1"></i>Validar Arquivo
+
+                </button>
+
+                <a href="{% url 'estoque_sap:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+{% endif %}
+
+
+
+{% if etapa == 'preview' %}
+
+{% if preview.colunas_detectadas %}
+
+<div class="alert alert-secondary small mb-4">
+
+    <strong>Colunas detectadas:</strong> {{ preview.colunas_detectadas|join:", " }}
+
+    <br>
+
+    <strong>Colunas normalizadas:</strong> {{ preview.colunas_normalizadas|join:", " }}
+
+</div>
+
+{% endif %}
+
+<div class="row g-3 mb-4">
+
+    <div class="col-md-4">
+
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-body text-center">
+
+                <p class="text-muted small mb-1">Total de Linhas</p>
+
+                <p class="h4 fw-semibold mb-0">{{ preview.total_linhas }}</p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="col-md-4">
+
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-body text-center">
+
+                <p class="text-muted small mb-1">Linhas Válidas</p>
+
+                <p class="h4 fw-semibold text-success mb-0">{{ preview.linhas_validas }}</p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="col-md-4">
+
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-body text-center">
+
+                <p class="text-muted small mb-1">Linhas Inválidas</p>
+
+                <p class="h4 fw-semibold text-danger mb-0">{{ preview.linhas_invalidas }}</p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<div class="card border-0 shadow-sm mb-4">
+
+    <div class="card-body p-0">
+
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle mb-0">
+
+                <thead class="table-light">
+
+                    <tr>
+
+                        <th class="ps-4">Código Produto</th>
+
+                        <th>Descrição</th>
+
+                        <th class="text-end">Canal 1 (BRIDA)</th>
+
+                        <th class="text-end">Canal 110 (COSAN)</th>
+
+                        <th class="text-end">Total</th>
+
+                        <th>Status</th>
+
+                        <th>Erro</th>
+
+                        <th class="text-center pe-4">Ações</th>
+
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    {% for linha in preview.linhas %}
+
+                    <tr>
+
+                        <td class="ps-4 fw-semibold">{{ linha.codigo_produto|default:"—" }}</td>
+
+                        <td>{{ linha.descricao|default:"—" }}</td>
+
+                        <td class="text-end">{{ linha.canais.canal_1 }}</td>
+
+                        <td class="text-end">{{ linha.canais.canal_110 }}</td>
+
+                        <td class="text-end fw-semibold">{{ linha.total }}</td>
+
+                        <td>
+
+                            {% if linha.status == 'Válido' %}
+
+                            <span class="badge text-bg-success">{{ linha.status }}</span>
+
+                            {% elif linha.status == 'Produto não encontrado' %}
+
+                            <span class="badge text-bg-warning text-dark">{{ linha.status }}</span>
+
+                            {% elif linha.status == 'Dados inconsistentes' %}
+
+                            <span class="badge text-bg-danger">{{ linha.status }}</span>
+
+                            {% else %}
+
+                            <span class="badge text-bg-secondary">{{ linha.status }}</span>
+
+                            {% endif %}
+
+                        </td>
+
+                        <td class="small text-danger">
+
+                            {{ linha.erros|join:", "|default:"—" }}
+
+                        </td>
+
+                        <td class="text-center pe-4 grid-acoes-cell">
+
+                            <div class="grid-acoes">
+
+                                {% if linha.permite_validar_produto %}
+
+                                <form method="post" class="d-inline m-0">
+
+                                    {% csrf_token %}
+
+                                    <input type="hidden" name="acao" value="validar_produto">
+
+                                    <input type="hidden" name="linha" value="{{ linha.linha }}">
+
+                                    <button
+
+                                        type="submit"
+
+                                        class="grid-acao grid-acao-sucesso"
+
+                                        data-bs-toggle="tooltip"
+
+                                        data-bs-placement="top"
+
+                                        title="Validar Produto"
+
+                                        aria-label="Validar Produto"
+
+                                    >
+
+                                        <i class="bi bi-plus-circle"></i>
+
+                                    </button>
+
+                                </form>
+
+                                {% endif %}
+
+                                {% if not linha.valida %}
+
+                                <form method="post" class="d-inline m-0">
+
+                                    {% csrf_token %}
+
+                                    <input type="hidden" name="acao" value="excluir_linha">
+
+                                    <input type="hidden" name="linha" value="{{ linha.linha }}">
+
+                                    <button
+
+                                        type="submit"
+
+                                        class="grid-acao grid-acao-excluir"
+
+                                        data-bs-toggle="tooltip"
+
+                                        data-bs-placement="top"
+
+                                        title="Excluir Linha"
+
+                                        aria-label="Excluir Linha"
+
+                                    >
+
+                                        <i class="bi bi-trash"></i>
+
+                                    </button>
+
+                                </form>
+
+                                {% endif %}
+
+                            </div>
+
+                        </td>
+
+                    </tr>
+
+                    {% empty %}
+
+                    <tr>
+
+                        <td colspan="8" class="text-center text-muted py-5">
+
+                            Nenhuma linha disponível para preview.
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<div class="d-flex gap-2">
+
+    {% if preview.linhas_validas > 0 %}
+
+    <form method="post">
+
+        {% csrf_token %}
+
+        <input type="hidden" name="acao" value="confirmar">
+
+        <button type="submit" class="btn btn-success">
+
+            <i class="bi bi-check-lg me-1"></i>Confirmar Importação
+
+        </button>
+
+    </form>
+
+    {% else %}
+
+    <span class="text-muted align-self-center">Nenhuma linha válida para importação.</span>
+
+    {% endif %}
+
+
+
+    <form method="post">
+
+        {% csrf_token %}
+
+        <input type="hidden" name="acao" value="cancelar">
+
+        <button type="submit" class="btn btn-outline-secondary">Cancelar</button>
+
+    </form>
+
+</div>
+
+{% endif %}
+
+
+
+{% if etapa == 'resultado' %}
+
+<div class="row g-3 mb-4">
+
+    <div class="col-md-4">
+
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-body text-center">
+
+                <p class="text-muted small mb-1">Registros Inseridos</p>
+
+                <p class="h4 fw-semibold text-success mb-0">{{ resultado.inseridos }}</p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="col-md-4">
+
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-body text-center">
+
+                <p class="text-muted small mb-1">Registros Atualizados</p>
+
+                <p class="h4 fw-semibold text-primary mb-0">{{ resultado.atualizados }}</p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="col-md-4">
+
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-body text-center">
+
+                <p class="text-muted small mb-1">Registros Rejeitados</p>
+
+                <p class="h4 fw-semibold text-danger mb-0">{{ resultado.rejeitados }}</p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<a href="{% url 'estoque_sap:lista' %}" class="btn btn-primary">
+
+    <i class="bi bi-arrow-left me-1"></i>Voltar para Estoque SAP
+
+</a>
+
+{% endif %}
+
+{% endblock %}
+
+
+
+{% block extra_js %}
+
+{% if etapa == 'preview' %}
+
+<script>
+
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (element) {
+
+        new bootstrap.Tooltip(element);
+
+    });
+
+</script>
+
+{% endif %}
+
+{% endblock %}
+
+

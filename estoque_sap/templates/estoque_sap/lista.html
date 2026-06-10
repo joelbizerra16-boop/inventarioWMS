@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block title %}Estoque SAP | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Estoque SAP</h1>
+        <p class="text-muted mb-0">Estoque contábil importado do SAP Business One.</p>
+    </div>
+    <a href="{% url 'estoque_sap:importar' %}" class="btn btn-primary">
+        <i class="bi bi-file-earmark-excel me-1"></i>Importar Excel
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-10">
+                <label for="q" class="form-label">Pesquisar</label>
+                <input
+                    type="text"
+                    name="q"
+                    id="q"
+                    class="form-control"
+                    placeholder="Código ou descrição do produto"
+                    value="{{ termo_busca }}"
+                >
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Código Produto</th>
+                        <th>Descrição</th>
+                        <th>Embalagem</th>
+                        <th class="text-end">Brida</th>
+                        <th class="text-end">Cosan</th>
+                        <th class="text-end">Total</th>
+                        <th class="pe-4">Data Importação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for estoque in estoques %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ estoque.produto.codigo_produto }}</td>
+                        <td>{{ estoque.produto.descricao }}</td>
+                        <td class="text-muted">
+                            {% if estoque.produto.embalagem %}
+                            {{ estoque.produto.embalagem }}
+                            {% else %}
+                            Não informado
+                            {% endif %}
+                        </td>
+                        <td class="text-end">{{ estoque.canal_1 }}</td>
+                        <td class="text-end">{{ estoque.canal_110 }}</td>
+                        <td class="text-end fw-semibold">{{ estoque.total }}</td>
+                        <td class="pe-4">{{ estoque.data_importacao|date:"d/m/Y H:i" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">
+                            Nenhum registro de estoque SAP encontrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'includes/paginacao.html' %}
+    </div>
+</div>
+{% endblock %}

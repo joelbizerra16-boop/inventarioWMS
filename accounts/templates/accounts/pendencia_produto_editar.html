@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Pré-Cadastro Produto | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">Editar pré-cadastro — {{ produto.codigo_produto }}</h1>
+    <p class="text-muted mb-0">Revise os dados antes de aprovar ou manter pendente.</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                        <a href="{% url 'accounts:pendencias_operacionais' %}" class="btn btn-outline-secondary">Voltar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white fw-semibold">Auditoria</div>
+            <div class="card-body">
+                {% for item in auditorias %}
+                <div class="small border-bottom pb-2 mb-2">
+                    <div class="fw-semibold">{{ item.get_acao_display }} — {{ item.data_hora|date:"d/m/Y H:i:s" }}</div>
+                    <div>{{ item.usuario.nome }} · {{ item.origem }}</div>
+                    {% if item.observacao %}<div class="text-muted">{{ item.observacao }}</div>{% endif %}
+                </div>
+                {% empty %}
+                <p class="text-muted mb-0">Sem registros de auditoria.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

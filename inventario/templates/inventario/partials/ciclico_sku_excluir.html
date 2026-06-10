@@ -1,0 +1,52 @@
+<div class="modal-header">
+    <div>
+        <h5 class="modal-title">Excluir SKU — {{ sku.codigo_produto }}</h5>
+        <p class="text-muted small mb-0">{{ sku.descricao }}</p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+</div>
+<form method="post" action="{% url 'ciclico_sku_excluir' sku.pk %}">
+    {% csrf_token %}
+    <div class="modal-body">
+        <div class="alert alert-warning small py-2">
+            O SKU será removido do ciclo atual. O histórico permanece registrado para auditoria.
+        </div>
+
+        <div class="row g-2 mb-3 small">
+            <div class="col-6">
+                <span class="text-muted d-block">SKU</span>
+                <strong>{{ sku.codigo_produto }}</strong>
+            </div>
+            <div class="col-6">
+                <span class="text-muted d-block">Embalagem</span>
+                <strong>{{ sku.embalagem|default:"—" }}</strong>
+            </div>
+            <div class="col-12">
+                <span class="text-muted d-block">Descrição</span>
+                <strong>{{ sku.descricao }}</strong>
+            </div>
+            <div class="col-4">
+                <span class="text-muted d-block">SAP</span>
+                <strong>{{ sku.quantidade_sap }}</strong>
+            </div>
+            <div class="col-4">
+                <span class="text-muted d-block">Status</span>
+                <span class="badge text-bg-{{ sku.status_classe }}">{{ sku.status_label }}</span>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label for="motivo_exclusao" class="form-label fw-semibold">Motivo da exclusão</label>
+            <select name="motivo_exclusao" id="motivo_exclusao" class="form-select" required>
+                <option value="">Selecione...</option>
+                {% for motivo in motivos_exclusao %}
+                <option value="{{ motivo }}">{{ motivo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-danger btn-sm">Confirmar exclusão</button>
+    </div>
+</form>

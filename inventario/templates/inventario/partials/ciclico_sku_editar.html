@@ -1,0 +1,130 @@
+<div class="modal-header flex-shrink-0">
+    <div>
+        <h5 class="modal-title">Editar contagem — {{ sku.codigo_produto }}</h5>
+        <p class="text-muted small mb-0">{{ sku.descricao }}</p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+</div>
+<form
+    id="formEditarContagemCiclico"
+    class="d-flex flex-column flex-grow-1 min-h-0"
+    method="post"
+    action="{% url 'ciclico_sku_editar' sku.pk %}"
+    data-sku-id="{{ sku.pk }}"
+>
+    {% csrf_token %}
+    <div class="modal-body flex-grow-1 overflow-auto">
+        <div id="editarContagemErro" class="alert alert-danger d-none py-2 small" role="alert"></div>
+
+        <div class="row g-2 mb-4 small">
+            <div class="col-6">
+                <span class="text-muted d-block">SKU</span>
+                <strong>{{ sku.codigo_produto }}</strong>
+            </div>
+            <div class="col-6">
+                <span class="text-muted d-block">Embalagem</span>
+                <strong>{{ sku.embalagem|default:"—" }}</strong>
+            </div>
+            <div class="col-12">
+                <span class="text-muted d-block">Descrição</span>
+                <strong>{{ sku.descricao }}</strong>
+            </div>
+            <div class="col-3">
+                <span class="text-muted d-block">SAP</span>
+                <strong>{{ sku.quantidade_sap }}</strong>
+            </div>
+            <div class="col-3">
+                <span class="text-muted d-block">Cosan</span>
+                <strong>{{ sku.quantidade_cosan|default:"—" }}</strong>
+            </div>
+            <div class="col-3">
+                <span class="text-muted d-block">Brida</span>
+                <strong>{{ sku.quantidade_brida|default:"—" }}</strong>
+            </div>
+            <div class="col-3">
+                <span class="text-muted d-block">Status</span>
+                <span class="badge text-bg-{{ sku.status_classe }}">{{ sku.status_label }}</span>
+            </div>
+        </div>
+
+        <p class="text-muted small">
+            SAP, Cosan, Brida, data e usuário originais não podem ser alterados.
+        </p>
+
+        <h6 class="fw-semibold">Posições contadas</h6>
+        {% if sku.posicoes %}
+        <div class="table-responsive mb-3">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Posição</th>
+                        <th style="width:8rem">Quantidade</th>
+                        <th>Contagem original</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pos in sku.posicoes %}
+                    {% if pos.quantidade_fisica is not None %}
+                    <tr>
+                        <td>
+                            <select
+                                name="posicao_id_{{ pos.pk }}"
+                                class="form-select form-select-sm"
+                                required
+                            >
+                                {% for posicao in posicoes_ativas %}
+                                <option
+                                    value="{{ posicao.pk }}"
+                                    {% if posicao.pk == pos.posicao_id %}selected{% endif %}
+                                >
+                                    {{ posicao.codigo }} | {{ posicao.posicao }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <input
+                                type="number"
+                                name="quantidade_posicao_{{ pos.pk }}"
+                                class="form-control form-control-sm"
+                                step="0.001"
+                                min="0"
+                                value="{{ pos.quantidade_fisica }}"
+                                required
+                            >
+                        </td>
+                        <td class="small text-muted">
+                            {{ pos.usuario_contagem_nome }}
+                            {% if pos.data_contagem %}<br>{{ pos.data_contagem|date:"d/m/Y H:i" }}{% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted small">Nenhuma posição contada para editar.</p>
+        {% endif %}
+
+        <div class="mb-0">
+            <label for="motivo_edicao" class="form-label fw-semibold">Motivo da alteração</label>
+            <textarea
+                name="motivo_edicao"
+                id="motivo_edicao"
+                class="form-control"
+                rows="3"
+                required
+                placeholder="Ex.: Erro de digitação"
+            ></textarea>
+        </div>
+    </div>
+    <div class="modal-footer modal-footer-acao flex-shrink-0 d-flex flex-column flex-sm-row justify-content-sm-end gap-2">
+        <button type="button" class="btn btn-outline-secondary w-100 w-sm-auto" data-bs-dismiss="modal">
+            Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary w-100 w-sm-auto" id="btnSalvarEdicaoContagem">
+            <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Salvar Alteração
+        </button>
+    </div>
+</form>

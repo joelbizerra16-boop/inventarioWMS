@@ -1,0 +1,43 @@
+# Ambiente
+.env
+.env.*
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+homologacao.sqlite3
+test_db.sqlite3
+*.sqlite3
+staticfiles/
+media/
+
+# Dados locais / homologação descartável
+/Produtos MOBIL*.xlsx
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Testes / cobertura
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Logs locais
+*.log
+logs/

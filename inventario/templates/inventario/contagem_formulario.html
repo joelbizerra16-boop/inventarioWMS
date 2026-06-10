@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} | Inventário #{{ inventario.pk }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">{{ titulo }}</h1>
+    <p class="text-muted mb-0">
+        Inventário #{{ inventario.pk }} — {{ inventario.get_status_display }}
+    </p>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="row g-3">
+                <div class="col-12">
+                    <label for="{{ form.posicao.id_for_label }}" class="form-label">
+                        {{ form.posicao.label }}
+                    </label>
+                    {{ form.posicao }}
+                    {% if form.posicao.errors %}
+                    <div class="text-danger small mt-1">{{ form.posicao.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-6">
+                    <label for="posicao-codigo" class="form-label">Código Alocação</label>
+                    <input
+                        type="text"
+                        id="posicao-codigo"
+                        class="form-control"
+                        readonly
+                        value="{% if form.instance.posicao_id %}{{ form.instance.posicao.codigo }}{% endif %}"
+                    >
+                </div>
+
+                <div class="col-md-6">
+                    <label for="posicao-alocacao" class="form-label">Alocação</label>
+                    <input
+                        type="text"
+                        id="posicao-alocacao"
+                        class="form-control"
+                        readonly
+                        value="{% if form.instance.posicao_id %}{{ form.instance.posicao.posicao }}{% endif %}"
+                    >
+                </div>
+
+                <div class="col-md-6">
+                    <label for="{{ form.produto.id_for_label }}" class="form-label">
+                        {{ form.produto.label }}
+                    </label>
+                    {{ form.produto }}
+                    {% if form.produto.errors %}
+                    <div class="text-danger small mt-1">{{ form.produto.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-6">
+                    <label for="{{ form.quantidade_fisica.id_for_label }}" class="form-label">
+                        {{ form.quantidade_fisica.label }}
+                    </label>
+                    {{ form.quantidade_fisica }}
+                    {% if form.quantidade_fisica.errors %}
+                    <div class="text-danger small mt-1">{{ form.quantidade_fisica.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary">{{ botao }}</button>
+                <a href="{% url 'inventario:contagem_lista' inventario.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ form.posicoes_alocacao|json_script:"posicoes-alocacao-data" }}
+<script>
+    (function () {
+        var posicoes = JSON.parse(
+            document.getElementById('posicoes-alocacao-data').textContent
+        );
+        var select = document.getElementById('{{ form.posicao.id_for_label }}');
+        var codigo = document.getElementById('posicao-codigo');
+        var alocacao = document.getElementById('posicao-alocacao');
+
+        function atualizarPosicao() {
+            var dados = posicoes[select.value] || { codigo: '', alocacao: '' };
+            codigo.value = dados.codigo;
+            alocacao.value = dados.alocacao;
+        }
+
+        select.addEventListener('change', atualizarPosicao);
+        atualizarPosicao();
+    })();
+</script>
+{% endblock %}

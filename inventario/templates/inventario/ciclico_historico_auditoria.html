@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}Auditoria — Ciclo #{{ detalhe.ciclo.pk }}{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Auditoria — Ciclo #{{ detalhe.ciclo.pk }}</h1>
+        <p class="text-muted mb-0">Trilha completa de eventos do inventário cíclico.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'ciclico_historico_detalhe' detalhe.ciclo.pk %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-eye me-1"></i>Visualizar
+        </a>
+        <a href="{% url 'ciclico_historico' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Histórico
+        </a>
+    </div>
+</div>
+
+{% for secao in secoes %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">{{ secao.titulo }}</div>
+    <div class="card-body p-0">
+        {% if secao.registros %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Data/Hora</th>
+                        <th>Evento</th>
+                        <th>SKU</th>
+                        <th>Posição</th>
+                        <th>Usuário</th>
+                        <th class="pe-3">Detalhe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for registro in secao.registros %}
+                    <tr>
+                        <td class="ps-3 small text-nowrap">{{ registro.data_hora|date:"d/m/Y H:i:s" }}</td>
+                        <td>{{ registro.resumo }}</td>
+                        <td class="small">{{ registro.sku }}</td>
+                        <td class="small">{{ registro.posicao }}</td>
+                        <td class="small">{{ registro.usuario }}</td>
+                        <td class="pe-3 small text-muted" style="white-space: pre-line;">{{ registro.detalhe }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0 p-3">Nenhum registro nesta seção.</p>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
