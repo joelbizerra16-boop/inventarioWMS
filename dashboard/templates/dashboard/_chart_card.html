@@ -1,0 +1,23 @@
+<div class="col-{{ cols }}">
+    <div class="dashboard-chart-card">
+        <p class="dashboard-chart-title">{{ grafico.titulo }}</p>
+        <div class="dashboard-chart-box{% if grafico.tipo == 'doughnut' %} dashboard-chart-box--doughnut{% endif %}" data-chart-wrapper="{{ grafico.id }}">
+            <div class="dashboard-chart-loading">
+                <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                <span class="small text-muted ms-2">Carregando…</span>
+            </div>
+            {% if grafico.tipo == 'doughnut' %}
+            <div class="dashboard-doughnut-layout">
+                <div class="dashboard-doughnut-legend" data-doughnut-legend="{{ grafico.id }}" aria-hidden="true"></div>
+                <div class="dashboard-doughnut-canvas-wrap">
+            {% endif %}
+                    <canvas id="chart-{{ grafico.id }}"></canvas>
+            {% if grafico.tipo == 'doughnut' %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="dashboard-chart-empty d-none">Sem dados para exibição</div>
+            <div class="dashboard-chart-error d-none">Erro ao carregar gráfico.</div>
+        </div>
+    </div>
+</div>

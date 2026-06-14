@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">{{ titulo }}</h1>
+    <p class="text-muted mb-0">Preencha os dados do produto.</p>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label for="{{ form.codigo_produto.id_for_label }}" class="form-label">
+                        {{ form.codigo_produto.label }}
+                    </label>
+                    {{ form.codigo_produto }}
+                    {% if form.codigo_produto.errors %}
+                    <div class="text-danger small mt-1">{{ form.codigo_produto.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-8">
+                    <label for="{{ form.descricao.id_for_label }}" class="form-label">
+                        {{ form.descricao.label }}
+                    </label>
+                    {{ form.descricao }}
+                    {% if form.descricao.errors %}
+                    <div class="text-danger small mt-1">{{ form.descricao.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-4">
+                    <label for="{{ form.embalagem.id_for_label }}" class="form-label">
+                        {{ form.embalagem.label }}
+                    </label>
+                    {{ form.embalagem }}
+                    <datalist id="embalagem-opcoes">
+                        {% for valor in form.opcoes_embalagem %}
+                        <option value="{{ valor }}"></option>
+                        {% endfor %}
+                    </datalist>
+                    {% if form.embalagem.errors %}
+                    <div class="text-danger small mt-1">{{ form.embalagem.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-4">
+                    <label for="{{ form.setor.id_for_label }}" class="form-label">
+                        {{ form.setor.label }}
+                    </label>
+                    {{ form.setor }}
+                    <datalist id="setor-opcoes">
+                        {% for valor in form.opcoes_setor %}
+                        <option value="{{ valor }}"></option>
+                        {% endfor %}
+                    </datalist>
+                    {% if form.setor.errors %}
+                    <div class="text-danger small mt-1">{{ form.setor.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-4">
+                    <label for="{{ form.codigo_ean.id_for_label }}" class="form-label">
+                        {{ form.codigo_ean.label }}
+                    </label>
+                    {{ form.codigo_ean }}
+                    {% if form.codigo_ean.errors %}
+                    <div class="text-danger small mt-1">{{ form.codigo_ean.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="col-12">
+                    <div class="form-check">
+                        {{ form.ativo }}
+                        <label class="form-check-label" for="{{ form.ativo.id_for_label }}">
+                            {{ form.ativo.label }}
+                        </label>
+                    </div>
+                    {% if form.ativo.errors %}
+                    <div class="text-danger small mt-1">{{ form.ativo.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary">{{ botao }}</button>
+                <a href="{% url 'produtos:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

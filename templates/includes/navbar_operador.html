@@ -1,0 +1,62 @@
+<nav class="navbar navbar-expand-lg navbar-dark app-topbar">
+    <div class="container-fluid px-4">
+        <div class="dropdown me-2">
+            <button
+                class="btn btn-outline-light d-inline-flex align-items-center justify-content-center"
+                type="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                aria-label="Menu do operador"
+            >
+                <i class="bi bi-list fs-5" aria-hidden="true"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-dark shadow">
+                <li>
+                    <a class="dropdown-item" href="{% url 'pocket:operador_precadastro_produto' %}">
+                        Cadastrar Produto
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'pocket:operador_precadastro_posicao' %}">
+                        Cadastrar Posição
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider dropdown-divider-light"></li>
+                <li>
+                    <form method="post" action="{% url 'accounts:logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="dropdown-item">Sair</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+
+        <span class="navbar-brand mb-0 h1 fw-semibold">
+            Sistema de Inventário
+        </span>
+
+        <div class="d-flex align-items-center gap-3 ms-auto text-white">
+            {% if user.is_authenticated %}
+            <span class="small d-none d-sm-inline">
+                <i class="bi bi-person-circle me-1"></i>
+                {% if user.perfil_operacional %}
+                {{ user.perfil_operacional.nome }}
+                <span class="opacity-75">({{ user.perfil_operacional.get_perfil_display }})</span>
+                {% else %}
+                {{ user.get_username }}
+                {% endif %}
+            </span>
+            <form method="post" action="{% url 'accounts:logout' %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-box-arrow-right me-1"></i>Sair
+                </button>
+            </form>
+            {% endif %}
+            <span class="small">
+                <i class="bi bi-calendar3 me-1"></i>
+                {% now "d/m/Y" %}
+            </span>
+        </div>
+    </div>
+</nav>

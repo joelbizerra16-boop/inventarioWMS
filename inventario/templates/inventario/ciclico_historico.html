@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+
+{% block title %}Histórico Cíclico | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Histórico — Inventário Cíclico</h1>
+        <p class="text-muted mb-0">Todos os ciclos de auditoria cíclica registrados no sistema.</p>
+    </div>
+    <a href="{% url 'ciclico' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-speedometer2 me-1"></i>Dashboard
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-6">
+                <label for="q" class="form-label">Pesquisar</label>
+                <input
+                    type="text"
+                    name="q"
+                    id="q"
+                    class="form-control"
+                    placeholder="Nº do ciclo ou usuário"
+                    value="{{ termo_busca }}"
+                >
+            </div>
+            <div class="col-md-4">
+                <label for="status" class="form-label">Status</label>
+                <select name="status" id="status" class="form-select">
+                    {% for valor, rotulo in status_opcoes %}
+                    <option value="{{ valor }}"{% if status_filtro == valor %} selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Ciclo</th>
+                        <th>Data Criação</th>
+                        <th>Data Encerramento</th>
+                        <th>Usuário Responsável</th>
+                        <th>SKUs Planejados</th>
+                        <th>SKUs Contados</th>
+                        <th>Validados</th>
+                        <th>Divergentes</th>
+                        <th>Acuracidade</th>
+                        <th>Status</th>
+                        <th class="text-center pe-4">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in linhas %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">#{{ linha.pk }}</td>
+                        <td class="small">{{ linha.data_criacao|date:"d/m/Y H:i" }}</td>
+                        <td class="small">
+                            {% if linha.data_encerramento %}
+                            {{ linha.data_encerramento|date:"d/m/Y H:i" }}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>{{ linha.usuario_responsavel }}</td>
+                        <td>{{ linha.skus_planejados }}</td>
+                        <td>{{ linha.skus_contados }}</td>
+                        <td>{{ linha.validados }}</td>
+                        <td>{{ linha.divergentes }}</td>
+                        <td>
+                            {% if linha.acuracidade is not None %}
+                            {{ linha.acuracidade }}%
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>
+                            <span class="badge text-bg-{{ linha.status_badge }}">{{ linha.status_label }}</span>
+                        </td>
+                        <td class="text-center pe-4 grid-acoes-cell">
+                            <div class="grid-acoes">
+                                <a
+                                    href="{% url 'ciclico_historico_detalhe' linha.pk %}"
+                                    class="grid-acao grid-acao-visualizar"
+                                    title="Visualizar"
+                                    aria-label="Visualizar"
+                                >
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a
+                                    href="{% url 'ciclico_consulta' %}?ciclo={{ linha.pk }}"
+                                    class="grid-acao grid-acao-editar"
+                                    title="Dashboard"
+                                    aria-label="Dashboard"
+                                >
+                                    <i class="bi bi-speedometer2"></i>
+                                </a>
+                                <a
+                                    href="{% url 'ciclico_historico_auditoria' linha.pk %}"
+                                    class="grid-acao grid-acao-info"
+                                    title="Auditoria"
+                                    aria-label="Auditoria"
+                                >
+                                    <i class="bi bi-journal-text"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="11" class="text-center text-muted py-5">
+                            Nenhum ciclo encontrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

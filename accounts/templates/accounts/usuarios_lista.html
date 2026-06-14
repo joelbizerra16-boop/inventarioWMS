@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Usuários | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Usuários</h1>
+        <p class="text-muted mb-0">Gerenciamento de usuários operacionais do sistema.</p>
+    </div>
+    <div>
+        <a href="{% url 'accounts:usuarios_criar' %}" class="btn btn-primary">
+            <i class="bi bi-person-plus me-1"></i>Novo Usuário
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Usuários Ativos</p>
+                <p class="h3 fw-semibold mb-0 text-success">{{ resumo.ativos }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Usuários Inativos</p>
+                <p class="h3 fw-semibold mb-0 text-secondary">{{ resumo.inativos }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Administradores</p>
+                <p class="h3 fw-semibold mb-0">{{ resumo.administradores }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Operadores</p>
+                <p class="h3 fw-semibold mb-0">{{ resumo.operadores }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Supervisores</p>
+                <p class="h3 fw-semibold mb-0">{{ resumo.supervisores }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="nome" class="form-label">Nome</label>
+                <input type="text" name="nome" id="nome" class="form-control" value="{{ filtros.nome }}">
+            </div>
+            <div class="col-md-3">
+                <label for="login" class="form-label">Login</label>
+                <input type="text" name="login" id="login" class="form-control" value="{{ filtros.login }}">
+            </div>
+            <div class="col-md-2">
+                <label for="perfil" class="form-label">Perfil</label>
+                <select name="perfil" id="perfil" class="form-select">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in perfil_opcoes %}
+                    <option value="{{ valor }}"{% if filtros.perfil == valor %} selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="status" class="form-label">Status</label>
+                <select name="status" id="status" class="form-select">
+                    {% for valor, rotulo in status_opcoes %}
+                    <option value="{{ valor }}"{% if filtros.status == valor %} selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-funnel me-1"></i>Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Nome</th>
+                        <th>Usuário</th>
+                        <th>Perfil</th>
+                        <th>Status</th>
+                        <th>Último acesso</th>
+                        <th>Data criação</th>
+                        <th class="text-center pe-4">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for usuario in usuarios %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ usuario.nome }}</td>
+                        <td>{{ usuario.login }}</td>
+                        <td>{{ usuario.get_perfil_display }}</td>
+                        <td>
+                            {% if usuario.ativo %}
+                            <span class="badge text-bg-success">Ativo</span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">Inativo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if usuario.user and usuario.user.last_login %}
+                            {{ usuario.user.last_login|date:"d/m/Y H:i" }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td>{{ usuario.data_criacao|date:"d/m/Y H:i" }}</td>
+                        <td class="text-center pe-4 grid-acoes-cell">
+                            <div class="grid-acoes">
+                                <a href="{% url 'accounts:usuarios_detalhe' usuario.pk %}" class="grid-acao grid-acao-visualizar" title="Visualizar" aria-label="Visualizar">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{% url 'accounts:usuarios_editar' usuario.pk %}" class="grid-acao grid-acao-editar" title="Editar" aria-label="Editar">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                                <form method="post" action="{% url 'accounts:usuarios_toggle_status' usuario.pk %}" class="d-inline m-0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    {% if usuario.ativo %}
+                                    <button type="submit" class="grid-acao grid-acao-aviso" title="Desativar" aria-label="Desativar">
+                                        <i class="bi bi-person-dash"></i>
+                                    </button>
+                                    {% else %}
+                                    <button type="submit" class="grid-acao grid-acao-sucesso" title="Ativar" aria-label="Ativar">
+                                        <i class="bi bi-person-check"></i>
+                                    </button>
+                                    {% endif %}
+                                </form>
+                                <a href="{% url 'accounts:usuarios_excluir' usuario.pk %}" class="grid-acao grid-acao-excluir" title="Excluir" aria-label="Excluir">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">Nenhum usuário encontrado.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'includes/paginacao.html' %}
+    </div>
+</div>
+{% endblock %}

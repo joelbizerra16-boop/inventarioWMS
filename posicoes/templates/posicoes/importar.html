@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+
+{% block title %}Importar Posições | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">Importar Posições</h1>
+    <p class="text-muted mb-0">Importação de posições via planilha Excel.</p>
+</div>
+
+{% if etapa == 'upload' %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+        <div class="alert alert-info">
+            <strong>Layout obrigatório:</strong>
+            codigo, posicao
+        </div>
+
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="preview">
+
+            <div class="mb-3">
+                <label for="{{ form.arquivo.id_for_label }}" class="form-label">
+                    {{ form.arquivo.label }}
+                </label>
+                {{ form.arquivo }}
+                {% if form.arquivo.errors %}
+                <div class="text-danger small mt-1">{{ form.arquivo.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-upload me-1"></i>Validar Arquivo
+                </button>
+                <a href="{% url 'posicoes:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if etapa == 'preview' %}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Total de Linhas</p>
+                <p class="h4 fw-semibold mb-0">{{ preview.total_linhas }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Linhas Válidas</p>
+                <p class="h4 fw-semibold text-success mb-0">{{ preview.linhas_validas }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Linhas Inválidas</p>
+                <p class="h4 fw-semibold text-danger mb-0">{{ preview.linhas_invalidas }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Linha</th>
+                        <th>Código</th>
+                        <th>Posição</th>
+                        <th>Status</th>
+                        <th class="pe-4">Erros</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in preview.linhas %}
+                    <tr>
+                        <td class="ps-4">{{ linha.linha }}</td>
+                        <td>{{ linha.codigo|default:"—" }}</td>
+                        <td>{{ linha.posicao|default:"—" }}</td>
+                        <td>
+                            {% if linha.valida %}
+                            <span class="badge text-bg-success">Válida</span>
+                            {% else %}
+                            <span class="badge text-bg-danger">Inválida</span>
+                            {% endif %}
+                        </td>
+                        <td class="pe-4 small text-danger">
+                            {{ linha.erros|join:", "|default:"—" }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex gap-2">
+    {% if preview.linhas_validas > 0 %}
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="confirmar">
+        <button type="submit" class="btn btn-success">
+            <i class="bi bi-check-lg me-1"></i>Confirmar Importação
+        </button>
+    </form>
+    {% else %}
+    <span class="text-muted align-self-center">Nenhuma linha válida para importação.</span>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="cancelar">
+        <button type="submit" class="btn btn-outline-secondary">Cancelar</button>
+    </form>
+</div>
+{% endif %}
+
+{% if etapa == 'resultado' %}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Registros Inseridos</p>
+                <p class="h4 fw-semibold text-success mb-0">{{ resultado.inseridos }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Registros Atualizados</p>
+                <p class="h4 fw-semibold text-primary mb-0">{{ resultado.atualizados }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Registros Rejeitados</p>
+                <p class="h4 fw-semibold text-danger mb-0">{{ resultado.rejeitados }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<a href="{% url 'posicoes:lista' %}" class="btn btn-primary">
+    <i class="bi bi-arrow-left me-1"></i>Voltar para Posições
+</a>
+{% endif %}
+{% endblock %}

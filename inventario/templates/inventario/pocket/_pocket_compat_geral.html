@@ -1,0 +1,13 @@
+{# Elementos ocultos — compatibilidade com dados de sessão e testes, sem poluir a tela #}
+<div class="pocket-sr-only" aria-hidden="true">
+    <span id="posicao-alocacao">—</span>
+    <span id="produto-codigo">—</span>
+    <span id="produto-descricao">—</span>
+    <span id="produto-embalagem">—</span>
+    <span>Descrição Produto</span>
+    {% if historico %}
+    {% for item in historico %}
+    <span>{{ item.posicao }} {{ item.produto }} {{ item.quantidade }}</span>
+    {% endfor %}
+    {% endif %}
+</div>

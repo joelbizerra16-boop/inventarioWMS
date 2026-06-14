@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}Consolidação do Estoque Físico | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">Consolidação do Estoque Físico</h1>
+    <p class="text-muted mb-0">Transforme o inventário aprovado em estoque físico oficial do sistema.</p>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-10">
+                <label for="inventario" class="form-label">Inventário Aprovado</label>
+                <select name="inventario" id="inventario" class="form-select" required>
+                    <option value="">Selecione um inventário</option>
+                    {% for inv in inventarios %}
+                    <option value="{{ inv.pk }}" {% if inventario_id == inv.pk|stringformat:"s" %}selected{% endif %}>
+                        #{{ inv.pk }} — {{ inv.usuario.nome }} — {{ inv.data_criacao|date:"d/m/Y" }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-search me-1"></i>Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if inventario_selecionado and preview %}
+<div class="alert alert-info">
+    Inventário <strong>#{{ inventario_selecionado.pk }}</strong>
+    — {{ inventario_selecionado.get_status_display }}
+    — Aprovado
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Inventário</p>
+                <p class="h4 fw-semibold mb-0">#{{ inventario_selecionado.pk }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Total de Produtos</p>
+                <p class="h4 fw-semibold mb-0">{{ preview.total_produtos }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Total de Posições</p>
+                <p class="h4 fw-semibold mb-0">{{ preview.total_posicoes }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Quantidade Consolidada</p>
+                <p class="h4 fw-semibold text-primary mb-0">{{ preview.quantidade_consolidada }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body text-center">
+                <p class="text-muted small mb-1">Data/Hora da Consolidação</p>
+                <p class="h6 fw-semibold mb-0">
+                    {% if auditoria %}
+                    {{ auditoria.data_hora|date:"d/m/Y H:i:s" }}
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if auditoria %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-0 pt-4 px-4">
+        <h2 class="h6 fw-semibold mb-0">Auditoria da Última Execução</h2>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <p class="text-muted small mb-1">Registros Processados</p>
+                <p class="fw-semibold mb-0">{{ auditoria.registros_processados }}</p>
+            </div>
+            <div class="col-md-4">
+                <p class="text-muted small mb-1">Registros Criados</p>
+                <p class="fw-semibold mb-0">{{ auditoria.registros_criados }}</p>
+            </div>
+            <div class="col-md-4">
+                <p class="text-muted small mb-1">Registros Atualizados</p>
+                <p class="fw-semibold mb-0">{{ auditoria.registros_atualizados }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="inventario" value="{{ inventario_selecionado.pk }}">
+            <button type="submit" class="btn btn-success btn-lg">
+                <i class="bi bi-box-arrow-in-down me-1"></i>Consolidar Estoque Físico
+            </button>
+        </form>
+    </div>
+</div>
+{% elif inventario_id %}
+<div class="alert alert-warning">
+    Selecione um inventário aprovado e finalizado válido para consolidar.
+</div>
+{% else %}
+<div class="alert alert-secondary">
+    Selecione um inventário aprovado e clique em <strong>Consultar</strong>.
+</div>
+{% endif %}
+{% endblock %}

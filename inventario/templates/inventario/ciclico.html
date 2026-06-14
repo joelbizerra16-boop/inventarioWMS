@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}Inventário Cíclico | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Inventário Cíclico</h1>
+        <p class="text-muted mb-0">Auditoria de saldo por SKU — SAP versus físico consolidado.</p>
+    </div>
+    {% if ciclo %}
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'ciclico_executar' %}" class="btn btn-primary">
+            <i class="bi bi-clipboard-check me-1"></i>Executar Ciclo
+        </a>
+        <a href="{% url 'pocket:selecionar' %}" class="btn btn-outline-primary">Pocket</a>
+        <a href="{% url 'ciclico_consulta' %}" class="btn btn-outline-secondary">Consulta Ciclos</a>
+        <a href="{% url 'ciclico_consulta_contagem' %}" class="btn btn-outline-secondary">Consulta de Contagem</a>
+        <a href="{% url 'ciclico_historico' %}" class="btn btn-outline-secondary">Histórico</a>
+        <a href="{% url 'ciclico_exportar' %}" class="btn btn-outline-success">Excel</a>
+    </div>
+    {% endif %}
+</div>
+
+{% if not ciclo %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <h2 class="h6 fw-semibold mb-3">Criar novo ciclo</h2>
+        <p class="text-muted small mb-4">
+            Congela todos os SKUs elegíveis do SAP. Filtros operacionais ficam na tela Executar Ciclo.
+        </p>
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="border rounded p-3">
+                    <div class="text-muted small">SKUs no SAP</div>
+                    <div class="h4 mb-0">{{ info_sap.total_skus }}</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="border rounded p-3">
+                    <div class="text-muted small">Última importação SAP</div>
+                    <div class="h5 mb-0">
+                        {% if info_sap.ultima_importacao %}
+                        {{ info_sap.ultima_importacao|date:"d/m/Y H:i" }}
+                        {% else %}—{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% if pode_escrever %}
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="criar">
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-plus-circle me-1"></i>Criar Ciclo
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+            <div>
+                <h2 class="h5 fw-semibold mb-1">Ciclo Ativo #{{ ciclo.pk }}</h2>
+                <p class="text-muted small mb-0">
+                    Criado em {{ ciclo.data_criacao|date:"d/m/Y H:i" }}
+                    — {{ resumo.total_skus }} SKU(s) congelados
+                </p>
+            </div>
+        </div>
+        <div class="row g-3">
+            <div class="col-6 col-md-4 col-lg-2"><div class="border rounded p-3 text-center"><div class="text-muted small">Congelados</div><div class="h5 mb-0">{{ resumo.total_skus }}</div></div></div>
+            <div class="col-6 col-md-4 col-lg-2"><div class="border rounded p-3 text-center"><div class="text-muted small">Pendentes</div><div class="h5 mb-0 text-secondary">{{ resumo.skus_pendentes }}</div></div></div>
+            <div class="col-6 col-md-4 col-lg-2"><div class="border rounded p-3 text-center"><div class="text-muted small">Contados</div><div class="h5 mb-0 text-success">{{ resumo.skus_contados }}</div></div></div>
+            <div class="col-6 col-md-4 col-lg-2"><div class="border rounded p-3 text-center"><div class="text-muted small">Divergentes</div><div class="h5 mb-0 text-danger">{{ resumo.skus_divergentes }}</div></div></div>
+            <div class="col-6 col-md-4 col-lg-2"><div class="border rounded p-3 text-center"><div class="text-muted small">Validados</div><div class="h5 mb-0 text-primary">{{ resumo.skus_validados }}</div></div></div>
+            <div class="col-6 col-md-4 col-lg-2"><div class="border rounded p-3 text-center"><div class="text-muted small">Executado</div><div class="h5 mb-0">{{ resumo.percentual_executado }}%</div></div></div>
+        </div>
+    </div>
+</div>
+
+<details class="card border-0 shadow-sm mb-4">
+    <summary class="card-body fw-semibold" style="cursor:pointer;">Agrupamentos e indicadores</summary>
+    <div class="card-body border-top pt-0">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <h3 class="h6">Por embalagem</h3>
+                <ul class="list-unstyled small mb-0">
+                    {% for nome, qtd in resumo.por_embalagem.items %}
+                    <li class="d-flex justify-content-between border-bottom py-1"><span>{{ nome }}</span><span>{{ qtd }}</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="col-md-4">
+                <h3 class="h6">Por setor</h3>
+                <ul class="list-unstyled small mb-0">
+                    {% for nome, qtd in resumo.por_setor.items %}
+                    <li class="d-flex justify-content-between border-bottom py-1"><span>{{ nome }}</span><span>{{ qtd }}</span></li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="col-md-4">
+                <h3 class="h6">Por usuário</h3>
+                <ul class="list-unstyled small mb-0">
+                    {% for nome, qtd in resumo.por_usuario.items %}
+                    <li class="d-flex justify-content-between border-bottom py-1"><span>{{ nome }}</span><span>{{ qtd }}</span></li>
+                    {% empty %}
+                    <li class="text-muted">Nenhuma contagem registrada.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="col-md-4">
+                <h3 class="h6">Por origem</h3>
+                <ul class="list-unstyled small mb-0">
+                    {% for nome, qtd in resumo.por_origem.items %}
+                    <li class="d-flex justify-content-between border-bottom py-1"><span>{{ nome }}</span><span>{{ qtd }}</span></li>
+                    {% empty %}
+                    <li class="text-muted">Nenhuma contagem registrada.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="col-md-4">
+                <h3 class="h6">Indicadores SAP × Físico</h3>
+                <ul class="list-unstyled small mb-0">
+                    <li>🟢 Conciliados: {{ resumo.skus_conciliados }}</li>
+                    <li>🟠 Acima SAP: {{ resumo.skus_acima_sap }}</li>
+                    <li>🔴 Abaixo SAP: {{ resumo.skus_abaixo_sap }}</li>
+                    <li>Excluídos: {{ resumo.skus_excluidos }}</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</details>
+
+{% if pode_escrever %}
+<form method="post" class="d-inline" onsubmit="return confirm('Encerrar o ciclo atual? O ciclo permanecerá disponível para auditoria.');">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="encerrar">
+    <button type="submit" class="btn btn-outline-danger btn-sm">Encerrar ciclo</button>
+</form>
+{% endif %}
+{% endif %}
+
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h2 class="h6 fw-semibold mb-1">Histórico de ciclos</h2>
+            <p class="text-muted small mb-0">Consulte todos os ciclos encerrados e em andamento.</p>
+        </div>
+        <a href="{% url 'ciclico_historico' %}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-clock-history me-1"></i>Abrir histórico
+        </a>
+    </div>
+</div>
+{% endblock %}

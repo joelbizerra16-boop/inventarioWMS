@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}Histórico de Inventários e Ciclos | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Histórico de Inventários e Ciclos</h1>
+        <p class="text-muted mb-0">Consulta permanente de inventários gerais e cíclicos finalizados.</p>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Total Inventários</div>
+                <div class="h4 mb-0">{{ indicadores.total_inventarios }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Total Ciclos</div>
+                <div class="h4 mb-0">{{ indicadores.total_ciclos }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Acuracidade Média</div>
+                <div class="h4 mb-0">
+                    {% if indicadores.acuracidade_media is not None %}{{ indicadores.acuracidade_media }}%{% else %}—{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Total Divergências</div>
+                <div class="h4 mb-0 text-danger">{{ indicadores.total_divergencias }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="periodo_inicio" class="form-label">Período — início</label>
+                <input type="date" name="periodo_inicio" id="periodo_inicio" class="form-control" value="{{ filtros.periodo_inicio }}">
+            </div>
+            <div class="col-md-3">
+                <label for="periodo_fim" class="form-label">Período — fim</label>
+                <input type="date" name="periodo_fim" id="periodo_fim" class="form-control" value="{{ filtros.periodo_fim }}">
+            </div>
+            <div class="col-md-2">
+                <label for="status" class="form-label">Status</label>
+                <select name="status" id="status" class="form-select">
+                    {% for valor, rotulo in status_opcoes %}
+                    <option value="{{ valor }}"{% if filtros.status_filtro == valor %} selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="tipo" class="form-label">Tipo</label>
+                <select name="tipo" id="tipo" class="form-select">
+                    {% for valor, rotulo in tipo_opcoes %}
+                    <option value="{{ valor }}"{% if filtros.tipo_filtro == valor %} selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="usuario" class="form-label">Usuário</label>
+                <input type="text" name="usuario" id="usuario" class="form-control" placeholder="Responsável" value="{{ filtros.usuario_filtro }}">
+            </div>
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-search me-1"></i>Pesquisar
+                </button>
+                <a href="{% url 'historico_unificado' %}" class="btn btn-outline-secondary">Limpar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-bottom py-3">
+        <h2 class="h6 mb-0 fw-semibold">Histórico</h2>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">ID</th>
+                        <th>Tipo</th>
+                        <th>Data</th>
+                        <th>Status</th>
+                        <th>Acuracidade</th>
+                        <th>Responsável</th>
+                        <th class="text-center pe-4">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in linhas %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">#{{ linha.pk }}</td>
+                        <td>{{ linha.tipo_label }}</td>
+                        <td class="small">{{ linha.data_referencia|date:"d/m/Y H:i" }}</td>
+                        <td><span class="badge text-bg-{{ linha.status_badge }}">{{ linha.status_label }}</span></td>
+                        <td>{% if linha.acuracidade is not None %}{{ linha.acuracidade }}%{% else %}—{% endif %}</td>
+                        <td>{{ linha.responsavel }}</td>
+                        <td class="text-center pe-4 grid-acoes-cell">
+                            <div class="grid-acoes">
+                                <a href="{% url 'historico_detalhe' linha.tipo linha.pk %}" class="grid-acao grid-acao-visualizar" title="Visualizar" aria-label="Visualizar">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{% url 'historico_exportar' linha.tipo linha.pk %}?formato=excel" class="grid-acao grid-acao-editar" title="Excel" aria-label="Excel">
+                                    <i class="bi bi-file-earmark-spreadsheet"></i>
+                                </a>
+                                <a href="{% url 'historico_exportar' linha.tipo linha.pk %}?formato=pdf" class="grid-acao grid-acao-info" title="PDF" aria-label="PDF">
+                                    <i class="bi bi-file-earmark-pdf"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">Nenhum registro encontrado.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: inventario-web-homolog
+    runtime: python
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: gunicorn core.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.10"
+      - key: DEBUG
+        value: "False"
+      - key: SECURE_SSL_REDIRECT
+        value: "True"
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: DB_USE_PGBOUNCER
+        value: "True"
+      - key: DB_CONN_MAX_AGE
+        value: "0"
+      - key: LOG_LEVEL
+        value: "INFO"

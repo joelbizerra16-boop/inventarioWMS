@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% load l10n %}
+
+{% block title %}Consulta de Contagem | Inventário Cíclico{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+        <h1 class="h4 fw-semibold mb-1">Consulta de Contagem</h1>
+        <p class="text-muted small mb-0">
+            Localize rapidamente qual SKU foi contado — Ciclo #{{ ciclo.pk }}
+            <span class="badge text-bg-{% if ciclo.status_ciclo == 'ATIVO' %}primary{% elif ciclo.status_ciclo == 'ENCERRADO' %}secondary{% else %}dark{% endif %}">
+                {{ ciclo.get_status_ciclo_display }}
+            </span>
+        </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'ciclico' %}" class="btn btn-sm btn-outline-secondary">Dashboard</a>
+        <a href="{% url 'ciclico_executar' %}" class="btn btn-sm btn-outline-primary">Executar Ciclo</a>
+    </div>
+</div>
+
+<form method="get" class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold" for="filtro-ciclo">Ciclo</label>
+                <select name="ciclo" id="filtro-ciclo" class="form-select form-select-sm">
+                    {% for c in ciclos_disponiveis %}
+                    <option value="{{ c.pk }}" {% if c.pk == ciclo.pk %}selected{% endif %}>
+                        #{{ c.pk }} — {{ c.get_status_ciclo_display }} ({{ c.data_criacao|date:"d/m/Y" }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-7">
+                <label class="form-label small fw-semibold" for="filtro-q">SKU, código ou descrição</label>
+                <input
+                    type="search"
+                    name="q"
+                    id="filtro-q"
+                    class="form-control"
+                    value="{{ termo }}"
+                    placeholder="Ex.: 124415 ou FLUIDTECH"
+                    autofocus
+                    autocomplete="off"
+                >
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search me-1"></i>Localizar
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+
+{% if sugestoes %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-bottom py-3">
+        <h2 class="h6 fw-semibold mb-0">SKUs encontrados ({{ sugestoes|length }})</h2>
+    </div>
+    <div class="list-group list-group-flush">
+        {% for pk, codigo, descricao in sugestoes %}
+        <a
+            href="?ciclo={{ ciclo.pk }}&amp;sku_id={{ pk }}"
+            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+        >
+            <span>
+                <strong>{{ codigo }}</strong>
+                <span class="text-muted ms-2">{{ descricao }}</span>
+            </span>
+            <i class="bi bi-chevron-right text-muted"></i>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if termo and not detalhe and not sugestoes %}
+<div class="alert alert-light border text-center py-4 mb-0">
+    <i class="bi bi-inbox text-muted d-block fs-3 mb-2"></i>
+    Nenhum SKU contado encontrado para <strong>{{ termo }}</strong>.
+</div>
+{% endif %}
+
+{% if detalhe %}
+{% with r=detalhe.resumo %}
+<section class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 mb-1">
+            <div class="col-md-6 col-lg-4">
+                <div class="text-muted small">Código</div>
+                <div class="fs-5 fw-semibold">{{ r.codigo_produto }}</div>
+            </div>
+            <div class="col-md-6 col-lg-8">
+                <div class="text-muted small">Descrição</div>
+                <div class="fw-medium">{{ r.descricao }}</div>
+            </div>
+        </div>
+        <div class="row g-2 g-md-3 mt-2">
+            <div class="col-6 col-md-4 col-lg">
+                <div class="border rounded-3 p-3 h-100 text-center">
+                    <div class="text-muted small">SAP</div>
+                    <div class="fs-5 fw-semibold">{{ r.sap|floatformat:0|localize }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg">
+                <div class="border rounded-3 p-3 h-100 text-center">
+                    <div class="text-muted small">Contado</div>
+                    <div class="fs-5 fw-semibold">{{ r.contado|floatformat:0|localize }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg">
+                <div class="border rounded-3 p-3 h-100 text-center">
+                    <div class="text-muted small">Diferença</div>
+                    <div class="fs-5 fw-semibold {% if r.diferenca and r.diferenca != 0 %}text-danger{% endif %}">
+                        {% if r.diferenca is not None %}{{ r.diferenca|floatformat:0|localize }}{% else %}—{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg">
+                <div class="border rounded-3 p-3 h-100 text-center">
+                    <div class="text-muted small">Faltam</div>
+                    <div class="fs-5 fw-semibold">{{ r.faltam|floatformat:0|localize }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg">
+                <div class="border rounded-3 p-3 h-100 text-center">
+                    <div class="text-muted small">Acurácia</div>
+                    <div class="fs-5 fw-semibold">
+                        {% if r.acuracia is not None %}{{ r.acuracia|floatformat:2|localize }}%{% else %}—{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg">
+                <div class="border rounded-3 p-3 h-100 text-center">
+                    <div class="text-muted small">Status</div>
+                    <div class="mt-1">
+                        <span class="badge text-bg-{{ r.status_classe }}">{{ r.status_label }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h2 class="h6 fw-semibold mb-0">Onde foi contado</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">Posição</th>
+                            <th scope="col" class="text-end">Quantidade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linha in detalhe.posicoes %}
+                        <tr>
+                            <td>{{ linha.posicao }}</td>
+                            <td class="text-end fw-medium">{{ linha.quantidade|floatformat:0|localize }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-center text-muted py-4">Nenhuma posição contada.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h2 class="h6 fw-semibold mb-0">Quem contou</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">Operador</th>
+                            <th scope="col" class="text-end">Quantidade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for linha in detalhe.operadores %}
+                        <tr>
+                            <td>{{ linha.operador }}</td>
+                            <td class="text-end fw-medium">{{ linha.quantidade|floatformat:0|localize }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-center text-muted py-4">Nenhum operador registrado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer class="card border-0 shadow-sm bg-light">
+    <div class="card-body py-3">
+        <div class="row g-2 text-center small">
+            <div class="col-6 col-md">
+                <span class="text-muted">SAP</span>
+                <strong class="d-block">{{ r.sap|floatformat:0|localize }}</strong>
+            </div>
+            <div class="col-6 col-md">
+                <span class="text-muted">Contado</span>
+                <strong class="d-block">{{ r.contado|floatformat:0|localize }}</strong>
+            </div>
+            <div class="col-6 col-md">
+                <span class="text-muted">Faltam</span>
+                <strong class="d-block">{{ r.faltam|floatformat:0|localize }}</strong>
+            </div>
+            <div class="col-6 col-md">
+                <span class="text-muted">Diferença</span>
+                <strong class="d-block {% if r.diferenca and r.diferenca != 0 %}text-danger{% endif %}">
+                    {% if r.diferenca is not None %}{{ r.diferenca|floatformat:0|localize }}{% else %}—{% endif %}
+                </strong>
+            </div>
+            <div class="col-6 col-md">
+                <span class="text-muted">Acurácia</span>
+                <strong class="d-block">
+                    {% if r.acuracia is not None %}{{ r.acuracia|floatformat:2|localize }}%{% else %}—{% endif %}
+                </strong>
+            </div>
+            <div class="col-6 col-md">
+                <span class="text-muted">Status</span>
+                <strong class="d-block">
+                    <span class="badge text-bg-{{ r.status_classe }}">{{ r.status_label }}</span>
+                </strong>
+            </div>
+        </div>
+    </div>
+</footer>
+{% endwith %}
+{% elif not termo %}
+<div class="alert alert-light border text-center py-5 mb-0">
+    <i class="bi bi-upc-scan text-muted d-block fs-1 mb-3"></i>
+    <p class="mb-0 text-muted">Informe o SKU, código ou descrição para consultar a contagem.</p>
+</div>
+{% endif %}
+{% endblock %}

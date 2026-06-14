@@ -1,0 +1,241 @@
+<aside
+    id="appSidebar"
+    class="sidebar d-none d-lg-flex flex-column flex-shrink-0 text-white"
+    aria-label="Menu principal"
+>
+    <div class="sidebar-header px-4 py-4 border-bottom border-secondary">
+        <div class="sidebar-brand-text">
+            <span class="fs-5 fw-semibold d-block">Inventário</span>
+            <span class="sidebar-subtitle d-block small text-secondary">Painel de Controle</span>
+        </div>
+    </div>
+
+    <nav class="sidebar-nav flex-grow-1 px-3 py-3" aria-label="Navegação lateral">
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item">
+                <a class="nav-link text-white-50{% if request.resolver_match.url_name == 'home' %} active{% endif %}" href="{% url 'home' %}" title="Dashboard">
+                    <i class="bi bi-house sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Dashboard</span>
+                </a>
+            </li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Cadastros
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'produtos:lista' %}" title="Produtos">
+                    <i class="bi bi-box-seam sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Produtos</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'posicoes:lista' %}" title="Posições">
+                    <i class="bi bi-geo-alt sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Posições</span>
+                </a>
+            </li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Estoque
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'estoque_sap:lista' %}" title="Estoque SAP">
+                    <i class="bi bi-database sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Estoque SAP</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'estoque_fisico:lista' %}" title="Estoque Físico">
+                    <i class="bi bi-boxes sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Estoque Físico</span>
+                </a>
+            </li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Inventário
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'inventario:lista' %}" title="Inventários">
+                    <i class="bi bi-clipboard-check sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Inventários</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'pocket:selecionar' %}" title="Pocket Inventário">
+                    <i class="bi bi-upc-scan sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Pocket</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50{% if request.resolver_match.url_name == 'historico_unificado' or request.resolver_match.url_name == 'historico_detalhe' %} active{% endif %}" href="{% url 'historico_unificado' %}?tipo=GERAL" title="Histórico">
+                    <i class="bi bi-clock-history sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Histórico</span>
+                </a>
+            </li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Inventário Cíclico
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4 sidebar-submenu">
+            <li class="nav-item">
+                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico' %} active{% endif %}" href="{% url 'ciclico' %}" title="Dashboard Cíclico">
+                    <i class="bi bi-speedometer2 sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Dashboard Cíclico</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico_executar' %} active{% endif %}" href="{% url 'ciclico_executar' %}" title="Executar">
+                    <i class="bi bi-play-circle sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Executar</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico_consulta_contagem' %} active{% endif %}" href="{% url 'ciclico_consulta_contagem' %}" title="Consulta de Contagem">
+                    <i class="bi bi-upc-scan sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Contagem</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico_consulta' %} active{% endif %}" href="{% url 'ciclico_consulta' %}" title="Consulta">
+                    <i class="bi bi-search sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Consulta</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico_historico' or request.resolver_match.url_name == 'ciclico_historico_detalhe' or request.resolver_match.url_name == 'ciclico_historico_auditoria' or request.resolver_match.url_name == 'historico_unificado' or request.resolver_match.url_name == 'historico_detalhe' %} active{% endif %}" href="{% url 'historico_unificado' %}?tipo=CICLICO" title="Histórico">
+                    <i class="bi bi-clock-history sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Histórico</span>
+                </a>
+            </li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Análise
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'confronto' %}" title="Confronto">
+                    <i class="bi bi-arrow-left-right sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Confronto</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'aprovacao' %}" title="Aprovação">
+                    <i class="bi bi-check2-square sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Aprovação</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50" href="{% url 'consolidacao' %}" title="Consolidação">
+                    <i class="bi bi-box-arrow-in-down sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Consolidação</span>
+                </a>
+            </li>
+        </ul>
+
+        {% if user.is_superuser or user.perfil_operacional and user.perfil_operacional.perfil == 'ADMINISTRADOR' %}
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Administração
+        </p>
+        <ul class="nav nav-pills flex-column gap-1">
+            <li class="nav-item">
+                <a class="nav-link text-white-50{% if request.resolver_match.url_name == 'usuarios_lista' or request.resolver_match.url_name == 'usuarios_criar' or request.resolver_match.url_name == 'usuarios_editar' or request.resolver_match.url_name == 'usuarios_detalhe' %} active{% endif %}" href="{% url 'accounts:usuarios_lista' %}" title="Usuários">
+                    <i class="bi bi-people sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Usuários</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-white-50{% if request.resolver_match.url_name == 'pendencias_operacionais' or request.resolver_match.url_name == 'pendencia_produto_editar' or request.resolver_match.url_name == 'pendencia_posicao_editar' %} active{% endif %}" href="{% url 'accounts:pendencias_operacionais' %}" title="Pendências Operacionais">
+                    <i class="bi bi-exclamation-circle sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Pendências Operacionais</span>
+                </a>
+            </li>
+        </ul>
+        {% endif %}
+    </nav>
+</aside>
+
+<div
+    class="offcanvas offcanvas-start text-white d-lg-none"
+    tabindex="-1"
+    id="sidebarOffcanvas"
+    aria-labelledby="sidebarOffcanvasLabel"
+>
+    <div class="offcanvas-header border-bottom border-secondary">
+        <h5 class="offcanvas-title" id="sidebarOffcanvasLabel">Inventário</h5>
+        <button
+            type="button"
+            class="btn-close btn-close-white"
+            data-bs-dismiss="offcanvas"
+            aria-label="Fechar"
+        ></button>
+    </div>
+    <div class="offcanvas-body px-3">
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item">
+                <a class="nav-link text-white-50{% if request.resolver_match.url_name == 'home' %} active{% endif %}" href="{% url 'home' %}">Dashboard</a>
+            </li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Cadastros
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'produtos:lista' %}">Produtos</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'posicoes:lista' %}">Posições</a></li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Estoque
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'estoque_sap:lista' %}">Estoque SAP</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'estoque_fisico:lista' %}">Estoque Físico</a></li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Inventário
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'inventario:lista' %}">Inventários</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'pocket:selecionar' %}">Pocket</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'historico_unificado' %}?tipo=GERAL">Histórico</a></li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Inventário Cíclico
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item"><a class="nav-link text-white-50{% if request.resolver_match.url_name == 'ciclico' %} active{% endif %}" href="{% url 'ciclico' %}">Dashboard Cíclico</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'ciclico_executar' %}">Executar</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'ciclico_consulta' %}">Consulta</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'historico_unificado' %}?tipo=CICLICO">Histórico</a></li>
+        </ul>
+
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Análise
+        </p>
+        <ul class="nav nav-pills flex-column gap-1 mb-4">
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'confronto' %}">Confronto</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'aprovacao' %}">Aprovação</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'consolidacao' %}">Consolidação</a></li>
+        </ul>
+
+        {% if user.is_superuser or user.perfil_operacional and user.perfil_operacional.perfil == 'ADMINISTRADOR' %}
+        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
+            Administração
+        </p>
+        <ul class="nav nav-pills flex-column gap-1">
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'accounts:usuarios_lista' %}">Usuários</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'accounts:pendencias_operacionais' %}">Pendências Operacionais</a></li>
+        </ul>
+        {% endif %}
+    </div>
+</div>

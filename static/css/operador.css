@@ -1,0 +1,46 @@
+:root {
+    --app-shell-bg: #1E293B;
+    --app-shell-hover: #334155;
+    --app-shell-text: #FFFFFF;
+    --app-content-bg: #F1F5F9;
+}
+
+body {
+    min-height: 100vh;
+    background-color: var(--app-content-bg);
+}
+
+.operador-app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.operador-app .app-topbar {
+    background-color: var(--app-shell-bg) !important;
+    color: var(--app-shell-text);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.operador-app .app-topbar .navbar-brand,
+.operador-app .app-topbar .small,
+.operador-app .app-topbar .text-white {
+    color: var(--app-shell-text) !important;
+}
+
+.operador-app .app-topbar .btn-outline-light {
+    border-color: rgba(255, 255, 255, 0.7);
+    color: var(--app-shell-text);
+}
+
+.operador-app .app-topbar .btn-outline-light:hover,
+.operador-app .app-topbar .btn-outline-light:focus,
+.operador-app .app-topbar .btn-outline-light:active {
+    background-color: var(--app-shell-hover) !important;
+    border-color: var(--app-shell-text) !important;
+    color: var(--app-shell-text) !important;
+}
+
+.operador-app .page-content {
+    flex: 1;
+}

@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ detalhe.titulo }} | Histórico{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">{{ detalhe.titulo }} — {{ detalhe.status_label|upper }}</h1>
+        <p class="text-muted mb-0">{{ detalhe.tipo_label }} · {{ detalhe.data_referencia|date:"d/m/Y H:i" }}</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'historico_unificado' %}{% if detalhe.tipo == 'CICLICO' %}?tipo=CICLICO{% elif detalhe.tipo == 'GERAL' %}?tipo=GERAL{% endif %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Voltar
+        </a>
+        <a href="{% url 'historico_exportar' detalhe.tipo detalhe.pk %}?formato=excel" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
+        </a>
+        <a href="{% url 'historico_exportar' detalhe.tipo detalhe.pk %}?formato=csv" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-filetype-csv me-1"></i>CSV
+        </a>
+        <a href="{% url 'historico_exportar' detalhe.tipo detalhe.pk %}?formato=pdf" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+        </a>
+        {% if detalhe.tipo == 'CICLICO' %}
+        <a href="{% url 'ciclico_historico_auditoria' detalhe.pk %}" class="btn btn-outline-info btn-sm">
+            <i class="bi bi-journal-text me-1"></i>Auditoria
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-md-3">
+                <div class="text-muted small">Responsável</div>
+                <div class="fw-semibold">{{ detalhe.responsavel }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">Data</div>
+                <div class="fw-semibold">{{ detalhe.data_referencia|date:"d/m/Y H:i" }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">Tipo</div>
+                <div class="fw-semibold">{{ detalhe.tipo_label }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">Status</div>
+                <span class="badge text-bg-{{ detalhe.status_badge }}">{{ detalhe.status_label }}</span>
+            </div>
+        </div>
+        <div class="row g-3">
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <div class="text-muted small">Total de Itens</div>
+                    <div class="h5 mb-0">{{ detalhe.quantidade_itens }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <div class="text-muted small">Conciliados</div>
+                    <div class="h5 mb-0 text-success">{{ detalhe.conciliados }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <div class="text-muted small">Divergentes</div>
+                    <div class="h5 mb-0 text-danger">{{ detalhe.divergentes }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <div class="text-muted small">Acuracidade</div>
+                    <div class="h5 mb-0">{% if detalhe.acuracidade is not None %}{{ detalhe.acuracidade }}%{% else %}—{% endif %}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white border-bottom py-3">
+        <h2 class="h6 mb-0 fw-semibold">Resultados</h2>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Código</th>
+                        <th>Descrição</th>
+                        <th>Embalagem</th>
+                        <th>SAP</th>
+                        <th>Contado</th>
+                        <th>Diferença</th>
+                        <th class="pe-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for produto in detalhe.produtos %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ produto.codigo_produto }}</td>
+                        <td>{{ produto.descricao }}</td>
+                        <td>{{ produto.embalagem }}</td>
+                        <td>{{ produto.sap }}</td>
+                        <td>{{ produto.contado }}</td>
+                        <td>{{ produto.diferenca }}</td>
+                        <td class="pe-4">{{ produto.status }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">Sem produtos registrados.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if produtos_com_posicoes %}
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-bottom py-3">
+        <h2 class="h6 mb-0 fw-semibold">Posições contadas</h2>
+    </div>
+    <div class="card-body">
+        {% for produto in produtos_com_posicoes %}
+        <div class="mb-4{% if not forloop.last %} border-bottom pb-4{% endif %}">
+            <h3 class="h6 fw-semibold mb-2">SKU {{ produto.codigo_produto }} — {{ produto.descricao }}</h3>
+            <ul class="list-unstyled mb-2 ms-2">
+                {% for posicao in produto.posicoes %}
+                <li class="small py-1">
+                    <span class="text-muted">├─</span>
+                    <strong>{{ posicao.alocacao }}</strong> = {{ posicao.quantidade }}
+                </li>
+                {% endfor %}
+            </ul>
+            <div class="small fw-semibold ms-2">Total contado = {{ produto.contado }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

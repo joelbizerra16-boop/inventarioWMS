@@ -1,0 +1,131 @@
+{% extends base_template %}
+{% load static %}
+
+{% block title %}Pocket #{{ inventario.pk }} | Inventário{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="pocket-page pocket-page--wms">
+    {% include 'inventario/pocket/_pocket_toast.html' %}
+
+    <header class="pocket-header">
+        <span class="pocket-header-title">INVENTÁRIO #{{ inventario.pk }}</span>
+    </header>
+
+    <div class="pocket-scan-panel">
+    <form method="post" novalidate id="pocket-contagem-form" class="pocket-scan-form"
+          action="{% url 'pocket:contagem' inventario.pk %}"
+          data-post-url="{{ post_url }}"
+          data-inventario-id="{{ inventario.pk }}">
+        {% csrf_token %}
+        <input type="hidden" name="inventario_id" value="{{ inventario.pk }}">
+
+        {% if form.non_field_errors %}
+        <div class="pocket-form-erro">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <section class="pocket-scan-sec">
+            <div class="pocket-scan-sec-title">Posição</div>
+            <div class="pocket-scan-input-wrap">
+                {{ form.codigo_posicao }}
+            </div>
+            {% if form.codigo_posicao.errors %}
+            <div class="pocket-form-erro">{{ form.codigo_posicao.errors }}</div>
+            {% endif %}
+            <p class="pocket-scan-confirm pocket-scan-confirm--hidden pocket-scan-confirm--inline" id="pocket-posicao-confirm">
+                Posição: <strong id="posicao-alocacao">—</strong>
+            </p>
+        </section>
+
+        <hr class="pocket-scan-divider">
+
+        <section class="pocket-scan-sec">
+            <div class="pocket-scan-sec-title">Produto / EAN</div>
+            <div class="pocket-scan-input-wrap">
+                {{ form.codigo_produto }}
+            </div>
+            {% if form.codigo_produto.errors %}
+            <div class="pocket-form-erro">{{ form.codigo_produto.errors }}</div>
+            {% endif %}
+            <p class="pocket-scan-confirm pocket-scan-confirm--hidden" id="pocket-descricao-confirm">
+                Descrição:<br>
+                <strong id="produto-descricao">—</strong>
+            </p>
+            <span class="pocket-compat-hidden">Descrição Produto</span>
+        </section>
+
+        <hr class="pocket-scan-divider">
+
+        <section class="pocket-scan-sec">
+            <div class="pocket-scan-sec-title">Quantidade</div>
+            <div class="pocket-scan-input-wrap">
+                {{ form.quantidade_fisica }}
+            </div>
+            {% if form.quantidade_fisica.errors %}
+            <div class="pocket-form-erro">{{ form.quantidade_fisica.errors }}</div>
+            {% endif %}
+        </section>
+
+        <button type="submit" class="pocket-btn-salvar" id="pocket-btn-salvar">
+            <i class="bi bi-check2-circle pocket-btn-salvar-icon" aria-hidden="true"></i>
+            Salvar
+        </button>
+    </form>
+    </div>
+
+    <div class="pocket-compat-hidden" aria-hidden="true">
+        <span id="produto-codigo">—</span>
+        <span id="produto-embalagem">—</span>
+        {% if historico %}
+        {% for item in historico %}
+        <span>{{ item.posicao }} {{ item.produto }} {{ item.quantidade }}</span>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+    <details class="pocket-extra">
+        <summary>Mais opções</summary>
+        <div class="pocket-extra-links">
+            <a href="{% url 'pocket:selecionar' %}">Trocar modo</a>
+            <a href="{% url 'inventario:contagem_lista' inventario.pk %}">Contagem web</a>
+            <a href="{% url 'pocket:precadastro_posicao' inventario.pk %}">Pré-cadastro de posição</a>
+            <a href="{% url 'pocket:precadastro_produto' inventario.pk %}">Pré-cadastro de produto</a>
+        </div>
+    </details>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ form.mapa_posicoes|json_script:"pocket-posicoes-data" }}
+{{ form.mapa_produtos|json_script:"pocket-produtos-data" }}
+{{ form.mapa_ean|json_script:"pocket-ean-data" }}
+<script src="{% static 'js/pocket-bipagem.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var form = document.getElementById('pocket-contagem-form');
+    var csrf = form.querySelector('[name=csrfmiddlewaretoken]');
+    PocketBipagem.initGeral({
+        ajax: true,
+        form: form,
+        csrfToken: csrf ? csrf.value : '',
+        posicaoInput: document.getElementById('{{ form.codigo_posicao.id_for_label }}'),
+        produtoInput: document.getElementById('{{ form.codigo_produto.id_for_label }}'),
+        quantidadeInput: document.getElementById('{{ form.quantidade_fisica.id_for_label }}'),
+        posicaoConfirm: document.getElementById('pocket-posicao-confirm'),
+        posicaoLabel: document.getElementById('posicao-alocacao'),
+        descricaoConfirm: document.getElementById('pocket-descricao-confirm'),
+        produtoDescricao: document.getElementById('produto-descricao'),
+        btnSalvar: document.getElementById('pocket-btn-salvar'),
+        postUrl: form ? (form.dataset.postUrl || form.getAttribute('action') || '') : '',
+        inventarioId: form ? (form.dataset.inventarioId || '') : '',
+        mapaPosicoes: JSON.parse(document.getElementById('pocket-posicoes-data').textContent),
+        mapaProdutos: JSON.parse(document.getElementById('pocket-produtos-data').textContent),
+        mapaEan: JSON.parse(document.getElementById('pocket-ean-data').textContent),
+        mestresUrl: '{% url "pocket:dados_mestres" %}',
+    });
+});
+</script>
+{% endblock %}

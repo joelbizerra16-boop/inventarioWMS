@@ -1,0 +1,39 @@
+{% extends base_template %}
+{% load static %}
+
+{% block title %}Pré-Cadastro Posição | Pocket{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="pocket-page">
+    <div class="mb-4">
+        <h1 class="h3 fw-semibold text-dark mb-1">Pré-Cadastro de Posição</h1>
+        <p class="text-muted mb-0">A posição ficará disponível imediatamente para contagem.</p>
+    </div>
+    <div class="card border-0 shadow-sm pocket-card">
+        <div class="card-body p-4">
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" for="{{ form.codigo.id_for_label }}">{{ form.codigo.label }}</label>
+                    {{ form.codigo }}
+                    {% if form.codigo.errors %}<div class="text-danger small">{{ form.codigo.errors }}</div>{% endif %}
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" for="{{ form.posicao.id_for_label }}">{{ form.posicao.label }}</label>
+                    {{ form.posicao }}
+                    {% if form.posicao.errors %}<div class="text-danger small">{{ form.posicao.errors }}</div>{% endif %}
+                </div>
+                <button type="submit" class="btn btn-primary w-100 pocket-btn">Salvar posição</button>
+            </form>
+            <a href="{% url 'pocket:contagem' inventario.pk %}" class="btn btn-outline-secondary w-100 pocket-btn mt-2">Voltar à contagem</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

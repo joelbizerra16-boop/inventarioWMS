@@ -1,0 +1,9 @@
+{% if indicador == 'verde' %}
+<span title="Saldo conciliado (Físico = SAP)" aria-label="Saldo conciliado">🟢</span>
+{% elif indicador == 'laranja' %}
+<span title="Físico maior que SAP" aria-label="Físico maior que SAP">🟠</span>
+{% elif indicador == 'vermelho' %}
+<span title="Físico menor que SAP" aria-label="Físico menor que SAP">🔴</span>
+{% else %}
+<span class="text-muted">—</span>
+{% endif %}

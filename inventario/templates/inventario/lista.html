@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+
+{% block title %}Inventários | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Inventários</h1>
+        <p class="text-muted mb-0">Gerenciamento dos inventários físicos do sistema.</p>
+    </div>
+    <a href="{% url 'inventario:criar' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>Novo Inventário
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-10">
+                <label for="q" class="form-label">Pesquisar</label>
+                <input
+                    type="text"
+                    name="q"
+                    id="q"
+                    class="form-control"
+                    placeholder="ID, usuário ou status"
+                    value="{{ termo_busca }}"
+                >
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">ID</th>
+                        <th>Data Criação</th>
+                        <th>Usuário</th>
+                        <th>Status</th>
+                        <th>Qtd. Itens</th>
+                        <th class="text-center pe-4">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inventario in inventarios %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ inventario.pk }}</td>
+                        <td>{{ inventario.data_criacao|date:"d/m/Y H:i" }}</td>
+                        <td>{{ inventario.usuario.nome }}</td>
+                        <td>
+                            {% if inventario.status == 'ABERTO' %}
+                            <span class="badge text-bg-primary">Aberto</span>
+                            {% elif inventario.status == 'EM_ANDAMENTO' %}
+                            <span class="badge text-bg-warning">Em andamento</span>
+                            {% elif inventario.status == 'FINALIZADO' %}
+                            <span class="badge text-bg-success">Finalizado</span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">{{ inventario.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ inventario.quantidade_itens }}</td>
+                        <td class="text-center pe-4 grid-acoes-cell">
+                            <div class="grid-acoes">
+                                <a
+                                    href="{% url 'inventario:contagem_lista' inventario.pk %}"
+                                    class="grid-acao grid-acao-info"
+                                    title="Contagem"
+                                    aria-label="Contagem"
+                                >
+                                    <i class="bi bi-clipboard-data"></i>
+                                </a>
+                                {% if inventario.status == 'ABERTO' %}
+                                <a
+                                    href="{% url 'inventario:editar' inventario.pk %}"
+                                    class="grid-acao grid-acao-editar"
+                                    title="Editar"
+                                    aria-label="Editar"
+                                >
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                                {% endif %}
+                                {% if inventario.status == 'ABERTO' or inventario.status == 'EM_ANDAMENTO' %}
+                                <a
+                                    href="{% url 'inventario:excluir' inventario.pk %}"
+                                    class="grid-acao grid-acao-excluir"
+                                    title="Excluir"
+                                    aria-label="Excluir"
+                                    onclick="return confirm('Deseja realmente excluir o inventário #{{ inventario.pk }}? Esta ação não pode ser desfeita.');"
+                                >
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                                <a
+                                    href="{% url 'inventario:finalizar' inventario.pk %}"
+                                    class="grid-acao grid-acao-sucesso"
+                                    title="Finalizar"
+                                    aria-label="Finalizar"
+                                >
+                                    <i class="bi bi-check-circle"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-5">
+                            Nenhum inventário encontrado.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'includes/paginacao.html' %}
+    </div>
+</div>
+{% endblock %}

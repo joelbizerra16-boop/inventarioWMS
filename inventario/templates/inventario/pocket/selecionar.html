@@ -1,0 +1,94 @@
+{% extends base_template %}
+{% load static %}
+
+{% block title %}Pocket | Sistema de Inventário{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="pocket-page">
+    <div class="mb-4 text-center text-lg-start">
+        <h1 class="h3 fw-semibold text-dark mb-1">Pocket</h1>
+        <p class="text-muted mb-0">Selecione o modo e inicie a contagem em campo.</p>
+    </div>
+
+    <div class="card border-0 shadow-sm pocket-card mb-4">
+        <div class="card-body p-4">
+            <form method="post" class="d-flex flex-wrap gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="modo" value="inventario">
+                <button type="submit" class="btn {% if modo == 'inventario' %}btn-primary{% else %}btn-outline-primary{% endif %} flex-fill pocket-btn">
+                    Modo Inventário
+                </button>
+            </form>
+            <form method="post" class="d-flex flex-wrap gap-2 mt-2">
+                {% csrf_token %}
+                <input type="hidden" name="modo" value="ciclico">
+                <button type="submit" class="btn {% if modo == 'ciclico' %}btn-primary{% else %}btn-outline-primary{% endif %} flex-fill pocket-btn">
+                    Modo Cíclico
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% if modo == 'inventario' %}
+    {% if inventarios %}
+    <div class="d-grid gap-3">
+        {% for inventario in inventarios %}
+        <a href="{% url 'pocket:contagem' inventario.pk %}" class="btn btn-outline-primary btn-lg pocket-btn pocket-card text-start">
+            <div class="fw-semibold">Inventário #{{ inventario.pk }}</div>
+            <div class="small">{{ inventario.usuario.nome }}</div>
+            <div class="small text-muted">{{ inventario.get_status_display }} — {{ inventario.data_criacao|date:"d/m/Y H:i" }}</div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-warning pocket-card">
+        Nenhum inventário aberto ou em andamento disponível para contagem.
+    </div>
+    {% endif %}
+    {% else %}
+    {% if ciclo %}
+    <div class="card border-0 shadow-sm pocket-card mb-3">
+        <div class="card-body">
+            <div class="fw-semibold">Ciclo #{{ ciclo.pk }}</div>
+            {% if lote_info %}
+            <div class="small text-muted">Lote ativo: {{ lote_info.skus_no_lote }} SKU(s)</div>
+            <a href="{% url 'pocket:contagem_ciclico' %}" class="btn btn-primary w-100 pocket-btn mt-3">
+                Iniciar contagem cíclica
+            </a>
+            {% else %}
+            <div class="alert alert-warning mb-0 mt-2 small">
+                {% if perfil_operador_pocket %}
+                Aguarde a geração do lote pelo supervisor antes de contar.
+                {% else %}
+                Gere um lote na tela <a href="{% url 'ciclico_executar' %}">Executar Ciclo</a> antes de contar.
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning pocket-card">
+        {% if perfil_operador_pocket %}
+        Nenhum ciclo cíclico ativo disponível para contagem.
+        {% else %}
+        Nenhum ciclo cíclico ativo. Crie um ciclo no Inventário Cíclico.
+        {% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if not perfil_operador_pocket %}
+    <div class="mt-4 d-grid gap-2">
+        {% if modo == 'inventario' %}
+        <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary w-100 pocket-btn">Voltar para Inventários</a>
+        {% else %}
+        <a href="{% url 'ciclico_executar' %}" class="btn btn-outline-secondary w-100 pocket-btn">Executar Ciclo</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

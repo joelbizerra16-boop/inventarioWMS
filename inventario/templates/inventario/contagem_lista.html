@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}Contagem | Inventário #{{ inventario.pk }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Contagem Física</h1>
+        <p class="text-muted mb-0">
+            Inventário #{{ inventario.pk }} — {{ inventario.usuario.nome }}
+            — {{ inventario.get_status_display }}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        {% if permite_contagem %}
+        <a href="{% url 'inventario:contagem_criar' inventario.pk %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Nova Contagem
+        </a>
+        {% endif %}
+        <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Voltar
+        </a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-10">
+                <label for="q" class="form-label">Pesquisar</label>
+                <input
+                    type="text"
+                    name="q"
+                    id="q"
+                    class="form-control"
+                    placeholder="Produto, código ou alocação"
+                    value="{{ termo_busca }}"
+                >
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Código Alocação</th>
+                        <th>Alocação</th>
+                        <th>Produto</th>
+                        <th>Quantidade</th>
+                        <th>Usuário</th>
+                        <th>Data/Hora</th>
+                        <th>Origem</th>
+                        {% if permite_contagem %}
+                        <th class="text-center pe-4">Ações</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contagem in contagens %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ contagem.posicao.codigo }}</td>
+                        <td>{{ contagem.posicao.posicao }}</td>
+                        <td>{{ contagem.produto.codigo_produto }} — {{ contagem.produto.descricao }}</td>
+                        <td>{{ contagem.quantidade_fisica }}</td>
+                        <td>{{ contagem.usuario_contagem_nome }}</td>
+                        <td>
+                            {% if contagem.data_contagem %}
+                            {{ contagem.data_contagem|date:"d/m/Y H:i" }}
+                            {% else %}
+                            —
+                            {% endif %}
+                        </td>
+                        <td>{{ contagem.origem_contagem_rotulo }}</td>
+                        {% if permite_contagem %}
+                        <td class="text-center pe-4 grid-acoes-cell">
+                            <div class="grid-acoes">
+                                <a href="{% url 'inventario:contagem_editar' inventario.pk contagem.pk %}" class="grid-acao grid-acao-editar" title="Editar" aria-label="Editar">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                                <a href="{% url 'inventario:contagem_excluir' inventario.pk contagem.pk %}" class="grid-acao grid-acao-excluir" title="Excluir" aria-label="Excluir">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{% if permite_contagem %}8{% else %}7{% endif %}" class="text-center text-muted py-5">
+                            Nenhuma contagem registrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

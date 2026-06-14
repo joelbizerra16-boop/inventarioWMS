@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% load static homologacao_tags %}
+
+{% block title %}Posições | Sistema de Inventário{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/homologacao.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Posições</h1>
+        <p class="text-muted mb-0">Cadastro e manutenção de posições de armazenagem.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'posicoes:importar' %}" class="btn btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i>Importar Excel
+        </a>
+        <a href="{% url 'posicoes:criar' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Nova Posição
+        </a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-10">
+                <label for="q" class="form-label">Pesquisar</label>
+                <input
+                    type="text"
+                    name="q"
+                    id="q"
+                    class="form-control"
+                    placeholder="Código ou posição"
+                    value="{{ termo_busca }}"
+                >
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-search me-1"></i>Buscar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Código</th>
+                        <th>Posição</th>
+                        <th>Homologação</th>
+                        <th>Ativo</th>
+                        <th class="text-center pe-4">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for posicao in posicoes %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ posicao.codigo }}</td>
+                        <td>{{ posicao.posicao }}</td>
+                        <td>{% homologacao_status posicao %}</td>
+                        <td>
+                            {% if posicao.ativo %}
+                            <span class="badge text-bg-success">Ativo</span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">Inativo</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center pe-4 grid-acoes-cell">
+                            <div class="grid-acoes">
+                                <a href="{% url 'posicoes:editar' posicao.pk %}" class="grid-acao grid-acao-editar" title="Editar" aria-label="Editar">
+                                    <i class="bi bi-pencil-square"></i>
+                                </a>
+                                <a href="{% url 'posicoes:excluir' posicao.pk %}" class="grid-acao grid-acao-excluir" title="Excluir" aria-label="Excluir">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-5">
+                            Nenhuma posição encontrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'includes/paginacao.html' %}
+    </div>
+</div>
+{% endblock %}

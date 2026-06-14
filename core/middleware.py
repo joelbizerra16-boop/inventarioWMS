@@ -1,0 +1,84 @@
+import logging
+
+from django.contrib import messages
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import IntegrityError
+from django.db.models.deletion import ProtectedError
+from django.http import Http404, JsonResponse
+from django.shortcuts import redirect
+from django.urls import reverse
+
+from core.services.exclusao import (
+    MENSAGEM_ERRO_INESPERADO,
+    MENSAGEM_NAO_ENCONTRADO,
+    MENSAGEM_PERMISSAO,
+    mensagem_de_excecao_operacional,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class TratamentoExcecaoUsuarioMiddleware:
+    """Converte exceções operacionais em mensagens amigáveis para o usuário."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        return self.get_response(request)
+
+    def process_exception(self, request, exception):
+        if not self._deve_tratar(request, exception):
+            return None
+
+        mensagem = self._mensagem_para_usuario(exception)
+        destino = self._destino_seguro(request)
+
+        if self._requisicao_ajax(request):
+            status = 404 if isinstance(exception, Http404) else 400
+            if isinstance(exception, PermissionDenied):
+                status = 403
+            return JsonResponse({'ok': False, 'message': mensagem}, status=status)
+
+        messages.error(request, mensagem)
+        return redirect(destino)
+
+    def _deve_tratar(self, request, exception) -> bool:
+        if request.path.startswith('/admin/'):
+            return False
+
+        return isinstance(
+            exception,
+            (
+                ProtectedError,
+                IntegrityError,
+                ValidationError,
+                Http404,
+                PermissionDenied,
+            ),
+        )
+
+    def _requisicao_ajax(self, request) -> bool:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return True
+        accept = request.headers.get('Accept', '')
+        return 'application/json' in accept and 'text/html' not in accept
+
+    def _mensagem_para_usuario(self, exception) -> str:
+        if isinstance(exception, Http404):
+            return MENSAGEM_NAO_ENCONTRADO
+        if isinstance(exception, PermissionDenied):
+            return MENSAGEM_PERMISSAO
+
+        if isinstance(exception, (ProtectedError, IntegrityError, ValidationError)):
+            logger.warning('Exceção operacional tratada: %s', exception, exc_info=exception)
+            return mensagem_de_excecao_operacional(exception)
+
+        logger.exception('Erro inesperado na requisição')
+        return MENSAGEM_ERRO_INESPERADO
+
+    def _destino_seguro(self, request) -> str:
+        referer = request.META.get('HTTP_REFERER')
+        if referer and referer.startswith(request.build_absolute_uri('/')[:-1]):
+            return referer
+        return reverse('home')

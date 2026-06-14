@@ -1,0 +1,347 @@
+{% extends 'base.html' %}
+
+{% block title %}Executar Ciclo | Inventário Cíclico{% endblock %}
+
+{% block extra_css %}
+<style>
+    .modal-sku-acao .modal-content {
+        max-height: calc(100vh - 3.5rem);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-sku-acao form.d-flex {
+        min-height: 0;
+    }
+
+    .modal-sku-acao .modal-footer-acao {
+        border-top: 1px solid var(--bs-border-color);
+        background: var(--bs-modal-bg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="alertasExecucaoCiclico" class="mb-3"></div>
+<div class="mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+        <h1 class="h4 fw-semibold mb-0">Executar Ciclo</h1>
+        <p class="text-muted small mb-0">
+            Ciclo #{{ ciclo.pk }} — {{ resumo.skus_pendentes }} pendente(s)
+            {% if lote_info %} — Lote atual: {{ lote_info.skus_no_lote }} SKU(s){% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{% url 'pocket:contagem_ciclico' %}" class="btn btn-sm btn-outline-primary">Pocket</a>
+        <a href="{% url 'ciclico' %}" class="btn btn-sm btn-outline-secondary">Dashboard</a>
+    </div>
+</div>
+
+{% if pode_escrever %}
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <h2 class="h6 fw-semibold mb-3">Gerar lote do dia</h2>
+        <form method="post" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="gerar_lote">
+            <div class="col-lg-4">
+                <label class="form-label fw-semibold">Embalagem</label>
+                <p class="text-muted small mb-2">Vazio = todas. Selecione uma ou mais.</p>
+                <div class="row g-2" style="max-height: 160px; overflow-y: auto;">
+                    {% for embalagem in embalagens_disponiveis %}
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="embalagens" value="{{ embalagem }}" id="exec_emb_{{ forloop.counter }}">
+                            <label class="form-check-label" for="exec_emb_{{ forloop.counter }}">{{ embalagem }}</label>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-12 text-muted small">Nenhuma embalagem cadastrada.</div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-lg-2">
+                <label for="canal" class="form-label fw-semibold">Canal</label>
+                <select name="canal" id="canal" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="cosan">Cosan</option>
+                    <option value="brida">Brida</option>
+                </select>
+            </div>
+            <div class="col-lg-2">
+                <label for="quantidade_skus" class="form-label fw-semibold">Quantidade de SKUs</label>
+                <input type="number" name="quantidade_skus" id="quantidade_skus" class="form-control" min="1" placeholder="Ex.: 20">
+                <div class="form-text">Sug.: {% for m in metas_diarias %}{{ m }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>
+            </div>
+            <div class="col-lg-4">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="respeitar_somente_embalagens" value="1" id="respeitar_emb">
+                    <label class="form-check-label" for="respeitar_emb">Respeitar somente embalagens selecionadas</label>
+                </div>
+                <button type="submit" class="btn btn-primary">Gerar lote do dia</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if lote_ativo %}
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-3">SKU</th>
+                    <th>Descrição</th>
+                    <th>Embalagem</th>
+                    <th>SAP</th>
+                    <th>Cosan</th>
+                    <th>Brida</th>
+                    <th>Físico</th>
+                    <th>Diferença</th>
+                    <th></th>
+                    <th>Status</th>
+                    <th>Usuário</th>
+                    <th>Data</th>
+                    <th class="pe-3 text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sku in skus %}
+                <tr id="sku-row-{{ sku.pk }}" data-sku-id="{{ sku.pk }}">
+                    <td class="ps-3 fw-semibold">{{ sku.codigo_produto }}</td>
+                    <td class="small">{{ sku.descricao|truncatechars:30 }}</td>
+                    <td class="small">{{ sku.embalagem|default:"—" }}</td>
+                    <td>{{ sku.quantidade_sap }}</td>
+                    <td>{{ sku.quantidade_cosan|default:"—" }}</td>
+                    <td>{{ sku.quantidade_brida|default:"—" }}</td>
+                    <td class="sku-col-fisico">{{ sku.quantidade_fisica|default:"—" }}</td>
+                    <td class="sku-col-diferenca">{{ sku.diferenca_cosan|default:"—" }}</td>
+                    <td class="sku-col-indicador">{% include 'inventario/partials/indicador_cosan.html' with indicador=sku.indicador_sap %}</td>
+                    <td class="sku-col-status"><span class="badge text-bg-{{ sku.status_classe }}">{{ sku.status_label }}</span></td>
+                    <td class="sku-col-usuario small">{{ sku.ultimo_usuario|default:"—" }}</td>
+                    <td class="sku-col-data small">{% if sku.ultima_data %}{{ sku.ultima_data|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                    <td class="pe-3 text-center text-nowrap grid-acoes-cell">
+                        <div class="grid-acoes">
+                            <button
+                                type="button"
+                                class="grid-acao grid-acao-visualizar btn-ver-sku"
+                                data-url="{% url 'ciclico_sku_detalhe' sku.pk %}"
+                                title="Visualizar histórico"
+                                aria-label="Visualizar histórico"
+                            >
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            {% if sku.pode_editar %}
+                            <button
+                                type="button"
+                                class="grid-acao grid-acao-editar btn-editar-sku"
+                                data-url="{% url 'ciclico_sku_editar' sku.pk %}"
+                                title="Editar contagem"
+                                aria-label="Editar contagem"
+                            >
+                                <i class="bi bi-pencil-square"></i>
+                            </button>
+                            {% endif %}
+                            {% if sku.pode_excluir %}
+                            <button
+                                type="button"
+                                class="grid-acao grid-acao-excluir btn-excluir-sku"
+                                data-url="{% url 'ciclico_sku_excluir' sku.pk %}"
+                                title="Excluir SKU do ciclo"
+                                aria-label="Excluir SKU do ciclo"
+                            >
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="13" class="text-center text-muted py-4">Nenhum SKU no lote.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% elif not pode_escrever %}
+<p class="text-muted">Aguardando geração do lote pelo gestor.</p>
+{% else %}
+<p class="text-muted small">Configure os filtros acima e clique em <strong>Gerar lote do dia</strong>.</p>
+{% endif %}
+
+<div class="modal fade" id="modalSkuAcao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-sku-acao">
+        <div class="modal-content" id="modalSkuAcaoContent"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let modalSkuAcaoInstancia = null;
+
+const INDICADOR_LABELS = {
+    verde: 'Saldo conciliado (Físico = SAP)',
+    laranja: 'Físico maior que SAP',
+    vermelho: 'Físico menor que SAP',
+};
+
+function obterInstanciaModalSku() {
+    const modalEl = document.getElementById('modalSkuAcao');
+    modalSkuAcaoInstancia = bootstrap.Modal.getOrCreateInstance(modalEl);
+    return modalSkuAcaoInstancia;
+}
+
+function exibirAlertaExecucao(mensagem, tipo = 'success') {
+    const container = document.getElementById('alertasExecucaoCiclico');
+    if (!container) {
+        return;
+    }
+    container.innerHTML = `
+        <div class="alert alert-${tipo} alert-dismissible fade show py-2 small" role="alert">
+            ${mensagem}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+    `;
+}
+
+function atualizarIndicadorCelula(celula, sku) {
+    if (!celula) {
+        return;
+    }
+    if (!sku.indicador_sap) {
+        celula.innerHTML = '<span class="text-muted">—</span>';
+        return;
+    }
+    const rotulo = sku.indicador_tooltip || INDICADOR_LABELS[sku.indicador_sap] || '';
+    celula.innerHTML = `<span title="${rotulo}" aria-label="${rotulo}">${sku.indicador_emoji}</span>`;
+}
+
+function atualizarLinhaSku(sku) {
+    const linha = document.querySelector(`tr[data-sku-id="${sku.pk}"]`);
+    if (!linha) {
+        return;
+    }
+
+    const celula = (seletor) => linha.querySelector(seletor);
+    const fisico = celula('.sku-col-fisico');
+    const diferenca = celula('.sku-col-diferenca');
+    const status = celula('.sku-col-status');
+    const usuario = celula('.sku-col-usuario');
+    const data = celula('.sku-col-data');
+
+    if (fisico) fisico.textContent = sku.quantidade_fisica;
+    if (diferenca) diferenca.textContent = sku.diferenca_cosan;
+    atualizarIndicadorCelula(celula('.sku-col-indicador'), sku);
+    if (status) {
+        status.innerHTML = `<span class="badge text-bg-${sku.status_classe}">${sku.status_label}</span>`;
+    }
+    if (usuario) usuario.textContent = sku.ultimo_usuario;
+    if (data) data.textContent = sku.ultima_data;
+}
+
+function validarFormularioEdicao(form) {
+    const motivo = form.querySelector('[name="motivo_edicao"]');
+    if (!motivo || !motivo.value.trim()) {
+        return 'Informe o motivo da alteração.';
+    }
+
+    const quantidades = form.querySelectorAll('input[name^="quantidade_posicao_"]');
+    for (const campo of quantidades) {
+        const valor = campo.value.trim().replace(',', '.');
+        if (valor === '' || Number.isNaN(Number(valor)) || Number(valor) < 0) {
+            return 'Quantidade inválida. Informe um valor maior ou igual a zero.';
+        }
+    }
+
+    return '';
+}
+
+function inicializarFormularioEdicao() {
+    const form = document.getElementById('formEditarContagemCiclico');
+    if (!form || form.dataset.inicializado === '1') {
+        return;
+    }
+    form.dataset.inicializado = '1';
+
+    form.addEventListener('submit', async (evento) => {
+        evento.preventDefault();
+
+        const erroValidacao = validarFormularioEdicao(form);
+        const alertaErro = document.getElementById('editarContagemErro');
+        if (erroValidacao) {
+            if (alertaErro) {
+                alertaErro.textContent = erroValidacao;
+                alertaErro.classList.remove('d-none');
+            }
+            return;
+        }
+        if (alertaErro) {
+            alertaErro.classList.add('d-none');
+        }
+
+        const botaoSalvar = document.getElementById('btnSalvarEdicaoContagem');
+        if (botaoSalvar) {
+            botaoSalvar.disabled = true;
+        }
+
+        try {
+            const resposta = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new FormData(form),
+            });
+            let dados = {};
+            try {
+                dados = await resposta.json();
+            } catch (erroJson) {
+                throw new Error('Não foi possível salvar a alteração.');
+            }
+
+            if (!resposta.ok || !dados.ok) {
+                throw new Error(dados.message || 'Não foi possível salvar a alteração.');
+            }
+
+            atualizarLinhaSku(dados.sku);
+            obterInstanciaModalSku().hide();
+            exibirAlertaExecucao(dados.message, 'success');
+        } catch (erro) {
+            if (alertaErro) {
+                alertaErro.textContent = erro.message;
+                alertaErro.classList.remove('d-none');
+            }
+        } finally {
+            if (botaoSalvar) {
+                botaoSalvar.disabled = false;
+            }
+        }
+    });
+}
+
+async function abrirModalSku(botao) {
+    const resposta = await fetch(botao.dataset.url);
+    if (!resposta.ok) {
+        window.location.reload();
+        return;
+    }
+    document.getElementById('modalSkuAcaoContent').innerHTML = await resposta.text();
+    obterInstanciaModalSku().show();
+    inicializarFormularioEdicao();
+}
+
+document.querySelectorAll('.btn-ver-sku').forEach((botao) => {
+    botao.addEventListener('click', () => abrirModalSku(botao));
+});
+
+document.querySelectorAll('.btn-editar-sku').forEach((botao) => {
+    botao.addEventListener('click', () => abrirModalSku(botao));
+});
+
+document.querySelectorAll('.btn-excluir-sku').forEach((botao) => {
+    botao.addEventListener('click', () => abrirModalSku(botao));
+});
+</script>
+{% endblock %}

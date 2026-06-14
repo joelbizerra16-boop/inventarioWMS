@@ -1,0 +1,1102 @@
+{% extends base_template %}
+
+{% load static %}
+
+
+
+{% block title %}Pocket Cíclico | Inventário{% endblock %}
+
+
+
+{% block extra_css %}
+
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+
+{% endblock %}
+
+
+
+{% block content %}
+
+<div class="pocket-page pocket-page--wms">
+
+    {% include 'inventario/pocket/_pocket_toast.html' %}
+
+
+
+    <header class="pocket-header">
+
+        <span class="pocket-header-title">CÍCLICO #{{ ciclo.pk }}</span>
+
+    </header>
+
+
+
+    <div id="pocket-lote-concluido" class="pocket-form-erro{% if painel.fila or painel.divergencias %} d-none{% endif %}">
+
+        Lote diário concluído.
+
+    </div>
+
+
+
+    <div class="modal fade" id="modal-ciclo-concluido" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog modal-dialog-centered">
+
+            <div class="modal-content">
+
+                <div class="modal-header border-0 pb-0">
+
+                    <h2 class="modal-title h5 fw-semibold">Ciclo finalizado com sucesso</h2>
+
+                </div>
+
+                <div class="modal-body">
+
+                    <dl class="pocket-modal-resumo mb-0" id="modal-ciclo-concluido-dados"></dl>
+
+                </div>
+
+                <div class="modal-footer border-0 pt-0 flex-column gap-2">
+
+                    <button type="button" class="btn btn-primary w-100" id="pocket-btn-continuar-inicio">
+
+                        Continuar
+
+                    </button>
+
+                    <button type="button" class="btn btn-outline-secondary w-100 d-none" id="pocket-btn-encerrar-ciclo">
+
+                        Encerrar ciclo
+
+                    </button>
+
+                    <a href="{% url 'ciclico' %}" class="btn btn-outline-secondary w-100 d-none" id="pocket-link-painel-ciclo">Painel do ciclo</a>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    {% if painel.fila %}
+
+    <div class="pocket-scan-panel">
+
+    <form method="post" novalidate id="pocket-contagem-form" class="pocket-scan-form">
+
+        {% csrf_token %}
+
+        <input type="hidden" name="acao" value="contagem">
+
+
+
+        {% if form.non_field_errors %}
+
+        <div class="pocket-form-erro">{{ form.non_field_errors }}</div>
+
+        {% endif %}
+
+
+
+        <div class="pocket-ciclo-indicadores" id="pocket-ciclo-indicadores" aria-live="polite">
+
+            <div class="pocket-ciclo-indicador">
+
+                <span class="pocket-ciclo-indicador-label">Pendentes</span>
+
+                <strong class="pocket-ciclo-indicador-valor" id="pocket-ind-pendentes">{{ painel.resumo.pendentes }}</strong>
+
+            </div>
+
+            <div class="pocket-ciclo-indicador">
+
+                <span class="pocket-ciclo-indicador-label">Contados</span>
+
+                <strong class="pocket-ciclo-indicador-valor" id="pocket-ind-contados">{{ painel.resumo.contados }}</strong>
+
+            </div>
+
+            <div class="pocket-ciclo-indicador">
+
+                <span class="pocket-ciclo-indicador-label">Total do lote</span>
+
+                <strong class="pocket-ciclo-indicador-valor" id="pocket-ind-total">{{ painel.resumo.total_lote }}</strong>
+
+            </div>
+
+        </div>
+
+
+
+        <section class="pocket-sku-lote-card" id="pocket-sku-lote-card">
+
+            <div class="pocket-scan-sec-title">SKU do lote</div>
+
+            <div class="pocket-sku-lote-select{% if painel.fila|length <= 1 %} d-none{% endif %}">
+
+                {{ form.sku_id }}
+
+            </div>
+
+            {% if form.sku_id.errors %}
+
+            <div class="pocket-form-erro">{{ form.sku_id.errors }}</div>
+
+            {% endif %}
+
+            <div class="pocket-sku-lote-codigo" id="pocket-sku-card-codigo">—</div>
+
+            <div class="pocket-sku-lote-descricao" id="pocket-sku-card-descricao">—</div>
+
+            <div class="pocket-sku-lote-embalagem">
+
+                <span class="pocket-sku-lote-embalagem-label">Embalagem:</span>
+
+                <span id="pocket-sku-card-embalagem">—</span>
+
+            </div>
+
+        </section>
+
+
+
+        <div class="pocket-resumo-operacional" id="pocket-resumo-operacional" aria-live="polite">
+
+            <div class="pocket-resumo-operacional-col">
+
+                <span class="pocket-resumo-operacional-label">SAP</span>
+
+                <strong class="pocket-resumo-operacional-valor" id="pocket-res-sap">0</strong>
+
+            </div>
+
+            <div class="pocket-resumo-operacional-col">
+
+                <span class="pocket-resumo-operacional-label">Contado</span>
+
+                <strong class="pocket-resumo-operacional-valor" id="pocket-res-contado">0</strong>
+
+            </div>
+
+            <div class="pocket-resumo-operacional-col">
+
+                <span class="pocket-resumo-operacional-label">Faltam</span>
+
+                <strong class="pocket-resumo-operacional-valor" id="pocket-res-faltam">0</strong>
+
+            </div>
+
+            <div class="pocket-resumo-operacional-col pocket-resumo-operacional-col--status">
+
+                <span class="pocket-resumo-operacional-label">Status</span>
+
+                <span class="pocket-status-badge pocket-status-badge--em-contagem" id="pocket-res-status">Em contagem</span>
+
+            </div>
+
+        </div>
+
+
+
+        <section class="pocket-scan-sec">
+
+            <div class="pocket-scan-sec-title">Posição</div>
+
+            <div class="pocket-scan-input-wrap">
+
+                {{ form.codigo_posicao }}
+
+            </div>
+
+            {% if form.codigo_posicao.errors %}
+
+            <div class="pocket-form-erro">{{ form.codigo_posicao.errors }}</div>
+
+            {% endif %}
+
+        </section>
+
+
+
+        <hr class="pocket-scan-divider">
+
+
+
+        <section class="pocket-scan-sec">
+
+            <div class="pocket-scan-sec-title">Produto / EAN</div>
+
+            <div class="pocket-scan-input-wrap">
+
+                {{ form.codigo_produto_lido }}
+
+            </div>
+
+            {% if form.codigo_produto_lido.errors %}
+
+            <div class="pocket-form-erro">{{ form.codigo_produto_lido.errors }}</div>
+
+            {% endif %}
+
+        </section>
+
+
+
+        <hr class="pocket-scan-divider">
+
+
+
+        <section class="pocket-scan-sec">
+
+            <div class="pocket-scan-sec-title">Quantidade</div>
+
+            <div class="pocket-scan-input-wrap">
+
+                {{ form.quantidade_fisica }}
+
+            </div>
+
+            {% if form.quantidade_fisica.errors %}
+
+            <div class="pocket-form-erro">{{ form.quantidade_fisica.errors }}</div>
+
+            {% endif %}
+
+        </section>
+
+
+
+        <button type="submit" class="pocket-btn-salvar" id="pocket-btn-salvar">
+
+            <i class="bi bi-check2-circle pocket-btn-salvar-icon" aria-hidden="true"></i>
+
+            Salvar
+
+        </button>
+
+        <button type="button" class="pocket-btn-finalizar-sku" id="pocket-btn-finalizar-sku" disabled>
+
+            <i class="bi bi-flag-fill pocket-btn-salvar-icon" aria-hidden="true"></i>
+
+            Finalizar SKU
+
+        </button>
+
+    </form>
+
+    </div>
+
+    {% endif %}
+
+
+
+    <details class="pocket-extra">
+
+        <summary>Mais opções</summary>
+
+        <div class="pocket-kpi-grid" role="group" aria-label="Resumo do lote">
+
+            <span id="pocket-kpi-total-lote">{{ painel.resumo.total_lote }}</span>
+
+            <span id="pocket-kpi-contados">{{ painel.resumo.contados }}</span>
+
+            <span id="pocket-kpi-pendentes">{{ painel.resumo.pendentes }}</span>
+
+            <span id="pocket-kpi-divergentes">{{ painel.resumo.divergentes }}</span>
+
+            <span id="pocket-kpi-executado">{{ painel.resumo.percentual_executado }}%</span>
+
+            <span id="pocket-kpi-validados">{{ painel.resumo.validados }}</span>
+
+        </div>
+
+        {% if painel.divergencias %}
+
+        <div class="pocket-extra-div">
+
+            <span>Divergências pendentes</span>
+
+            {% for item in painel.divergencias %}
+
+            <div class="d-flex justify-content-between align-items-center py-2 border-bottom small">
+
+                <span>{{ item.codigo_produto }} (dif. {{ item.diferenca }})</span>
+
+                <span>
+
+                    <form method="post" class="d-inline">
+
+                        {% csrf_token %}
+
+                        <input type="hidden" name="acao" value="recontar">
+
+                        <input type="hidden" name="sku_id" value="{{ item.pk }}">
+
+                        <button type="submit" class="btn btn-sm btn-outline-warning">Recontar</button>
+
+                    </form>
+
+                    {% if pode_supervisionar %}
+
+                    <form method="post" class="d-inline">
+
+                        {% csrf_token %}
+
+                        <input type="hidden" name="acao" value="aceitar_divergencia">
+
+                        <input type="hidden" name="sku_id" value="{{ item.pk }}">
+
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Aceitar</button>
+
+                    </form>
+
+                    {% endif %}
+
+                </span>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+        {% endif %}
+
+        <div class="pocket-extra-links">
+
+            <a href="{% url 'pocket:selecionar' %}">Trocar modo</a>
+
+            <a href="{% url 'ciclico_executar' %}">Executar ciclo</a>
+
+            <a href="{% url 'pocket:precadastro_posicao_ciclico' %}">Pré-cadastro de posição</a>
+
+        </div>
+
+    </details>
+
+</div>
+
+{% endblock %}
+
+
+
+{% block extra_js %}
+
+{% if painel.fila %}
+
+{{ form.mapa_posicoes|json_script:"pocket-posicoes-data" }}
+
+{{ form.mapa_produtos|json_script:"pocket-produtos-data" }}
+
+{{ form.mapa_ean|json_script:"pocket-ean-data" }}
+
+{{ painel.skus_json|json_script:"pocket-skus-lote-data" }}
+
+<script src="{% static 'js/pocket-bipagem.js' %}"></script>
+
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+
+    var mapaPosicoes = JSON.parse(document.getElementById('pocket-posicoes-data').textContent);
+
+    var skusLote = JSON.parse(document.getElementById('pocket-skus-lote-data').textContent);
+
+    var skuSelect = document.getElementById('pocket-sku-lote');
+
+    var form = document.getElementById('pocket-contagem-form');
+
+    var csrf = form.querySelector('[name=csrfmiddlewaretoken]');
+
+    var produtoInput = document.getElementById('pocket-produto-ciclico');
+
+
+
+    var mapaSkus = {};
+
+    skusLote.forEach(function (item) {
+
+        mapaSkus[String(item.pk)] = item;
+
+    });
+
+
+
+    function formatarNumero(valor) {
+
+        var n = Number(valor);
+
+        return Number.isNaN(n) ? '0' : String(n);
+
+    }
+
+
+
+    function formatarSkuLinha(sku) {
+
+        if (!sku) return '—';
+
+        var desc = sku.descricao || '';
+
+        return desc ? (sku.codigo_produto + ' - ' + desc) : sku.codigo_produto;
+
+    }
+
+
+
+    function formatarAcuracidade(valor) {
+
+        var n = Number(String(valor).replace(',', '.'));
+
+        if (Number.isNaN(n)) return '—';
+
+        return n.toFixed(2).replace('.', ',') + '%';
+
+    }
+
+
+
+    function pesoOrdemFila(sku) {
+
+        if (sku.status_contagem === 'PENDENTE') {
+
+            return Number(sku.contado || 0) > 0 ? 1 : 0;
+
+        }
+
+        if (sku.status_contagem === 'RECONTAGEM') return 2;
+
+        return 3;
+
+    }
+
+
+
+    function ordenarSkus(skus) {
+
+        return (skus || []).slice().sort(function (a, b) {
+
+            var pa = pesoOrdemFila(a);
+
+            var pb = pesoOrdemFila(b);
+
+            if (pa !== pb) return pa - pb;
+
+            return String(a.codigo_produto).localeCompare(String(b.codigo_produto));
+
+        });
+
+    }
+
+
+
+    function aplicarBadgeStatus(el, sku) {
+
+        if (!el || !sku) return;
+
+        var classe = sku.status_operacional_classe || 'pendente';
+
+        var label = sku.status_operacional || 'PENDENTE';
+
+        el.className = 'pocket-status-badge pocket-status-badge--' + classe;
+
+        el.textContent = label;
+
+    }
+
+
+
+    function aplicarResumoOperacional(sku) {
+
+        if (!sku) return;
+
+        document.getElementById('pocket-res-sap').textContent = formatarNumero(sku.sap);
+
+        document.getElementById('pocket-res-contado').textContent = formatarNumero(sku.contado);
+
+        document.getElementById('pocket-res-faltam').textContent = formatarNumero(sku.faltam);
+
+        aplicarBadgeStatus(document.getElementById('pocket-res-status'), sku);
+
+        atualizarBotaoFinalizar(sku);
+
+    }
+
+
+
+    function skuEmContagem(sku) {
+
+        if (!sku) return false;
+
+        var st = sku.status_contagem || '';
+
+        return st === 'PENDENTE' || st === 'RECONTAGEM';
+
+    }
+
+
+
+    function atualizarBotaoFinalizar(sku) {
+
+        var btn = document.getElementById('pocket-btn-finalizar-sku');
+
+        if (!btn) return;
+
+        var contado = Number(sku.contado || 0);
+
+        btn.disabled = !(skuEmContagem(sku) && contado > 0);
+
+    }
+
+
+
+    function atualizarIndicadoresCiclo(resumo) {
+
+        if (!resumo) return;
+
+        var map = {
+
+            'pocket-ind-pendentes': resumo.pendentes,
+
+            'pocket-ind-contados': resumo.contados,
+
+            'pocket-ind-total': resumo.total_lote,
+
+        };
+
+        Object.keys(map).forEach(function (id) {
+
+            var el = document.getElementById(id);
+
+            if (el) el.textContent = map[id];
+
+        });
+
+    }
+
+
+
+    function atualizarResumo(resumo) {
+
+        if (!resumo) return;
+
+        atualizarIndicadoresCiclo(resumo);
+
+        var map = {
+
+            'pocket-kpi-total-lote': resumo.total_lote,
+
+            'pocket-kpi-contados': resumo.contados,
+
+            'pocket-kpi-validados': resumo.validados,
+
+            'pocket-kpi-pendentes': resumo.pendentes,
+
+            'pocket-kpi-divergentes': resumo.divergentes,
+
+        };
+
+        Object.keys(map).forEach(function (id) {
+
+            var el = document.getElementById(id);
+
+            if (el) el.textContent = map[id];
+
+        });
+
+        var exec = document.getElementById('pocket-kpi-executado');
+
+        if (exec) exec.textContent = resumo.percentual_executado + '%';
+
+        var alerta = document.getElementById('pocket-lote-concluido');
+
+        if (alerta) alerta.classList.toggle('d-none', !resumo.lote_concluido);
+
+        if (resumo.lote_concluido && form) {
+
+            form.querySelectorAll('input, select, button').forEach(function (el) { el.disabled = true; });
+
+        }
+
+        if (resumo.lote_concluido) {
+
+            exibirLoteFinalizado(resumo);
+
+        }
+
+    }
+
+
+
+    function montarHtmlFinalizacao(dados) {
+
+        if (!dados) return '';
+
+        var planejados = dados.itens_planejados != null ? dados.itens_planejados : dados.total_skus;
+
+        var contados = dados.itens_contados != null ? dados.itens_contados : dados.total_contado;
+
+        if (contados == null && dados.conciliados != null) {
+
+            contados = Number(dados.conciliados || 0) + Number(dados.divergentes || 0);
+
+        }
+
+        return [
+
+            '<div><dt>Itens planejados</dt><dd>' + planejados + '</dd></div>',
+
+            '<div><dt>Itens contados</dt><dd>' + (contados != null ? contados : '—') + '</dd></div>',
+
+            '<div><dt>Acuracidade</dt><dd>' + formatarAcuracidade(dados.acuracidade) + '</dd></div>',
+
+            '<div><dt>Data/Hora</dt><dd>' + (dados.data_hora || '—') + '</dd></div>',
+
+        ].join('');
+
+    }
+
+
+
+    function exibirLoteFinalizado(resumo) {
+
+        var dados = resumo && resumo.finalizacao ? resumo.finalizacao : null;
+
+        if (!dados) return;
+
+        var lista = document.getElementById('modal-ciclo-concluido-dados');
+
+        if (lista) lista.innerHTML = montarHtmlFinalizacao(dados);
+
+        var modalEl = document.getElementById('modal-ciclo-concluido');
+
+        if (modalEl && window.bootstrap) {
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+        }
+
+    }
+
+
+
+    function exibirCicloConcluido(dados) {
+
+        if (!dados) return;
+
+        var lista = document.getElementById('modal-ciclo-concluido-dados');
+
+        if (lista) lista.innerHTML = montarHtmlFinalizacao(dados);
+
+        var btnEncerrar = document.getElementById('pocket-btn-encerrar-ciclo');
+
+        if (btnEncerrar) btnEncerrar.classList.add('d-none');
+
+        var modalEl = document.getElementById('modal-ciclo-concluido');
+
+        if (modalEl && window.bootstrap) {
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+        }
+
+    }
+
+
+
+    function sincronizarFila(skus, proximoId) {
+
+        mapaSkus = {};
+
+        if (!skuSelect) return;
+
+        var ordenados = ordenarSkus(skus);
+
+        skuSelect.innerHTML = '';
+
+        ordenados.forEach(function (item) {
+
+            mapaSkus[String(item.pk)] = item;
+
+            var op = document.createElement('option');
+
+            op.value = String(item.pk);
+
+            op.textContent = formatarSkuLinha(item);
+
+            skuSelect.appendChild(op);
+
+        });
+
+        if (!ordenados.length) {
+
+            form.classList.add('d-none');
+
+            document.getElementById('pocket-lote-concluido').classList.remove('d-none');
+
+            return;
+
+        }
+
+        var alvo = proximoId ? String(proximoId) : String(ordenados[0].pk);
+
+        skuSelect.value = alvo;
+
+        atualizarSkuDisplay(mapaSkus[alvo]);
+
+        resetCamposEntradaCiclico();
+
+    }
+
+
+
+    function atualizarSkuCard(sku) {
+
+        if (!sku) return;
+
+        document.getElementById('pocket-sku-card-codigo').textContent = sku.codigo_produto || '—';
+
+        document.getElementById('pocket-sku-card-descricao').textContent = sku.descricao || '—';
+
+        document.getElementById('pocket-sku-card-embalagem').textContent = sku.embalagem || '—';
+
+    }
+
+
+
+    function resetCamposEntradaCiclico() {
+
+        if (produtoInput) produtoInput.value = '';
+
+        if (window.PocketBipagem && window.PocketBipagem.resetEstadoCiclico) {
+
+            window.PocketBipagem.resetEstadoCiclico();
+
+        }
+
+    }
+
+
+
+    function atualizarSkuDisplay(sku) {
+
+        if (!sku) return;
+
+        aplicarResumoOperacional(sku);
+
+        atualizarSkuCard(sku);
+
+    }
+
+
+
+    function exibirProdutoAtual() {
+
+        var sku = mapaSkus[skuSelect.value];
+
+        if (!sku) return;
+
+        atualizarSkuCard(sku);
+
+    }
+
+
+
+    var btnEncerrar = document.getElementById('pocket-btn-encerrar-ciclo');
+
+    var btnContinuar = document.getElementById('pocket-btn-continuar-inicio');
+
+    var urlInicioPocket = '{% url "pocket:selecionar" %}';
+
+
+
+    if (btnContinuar) {
+
+        btnContinuar.addEventListener('click', function () {
+
+            global.location.href = urlInicioPocket;
+
+        });
+
+    }
+
+
+
+    if (btnEncerrar) {
+
+        btnEncerrar.addEventListener('click', function () {
+
+            btnEncerrar.disabled = true;
+
+            var body = new FormData();
+
+            body.append('acao', 'encerrar_ciclo');
+
+            body.append('csrfmiddlewaretoken', csrf ? csrf.value : '');
+
+            fetch(global.location.href, {
+
+                method: 'POST',
+
+                body: body,
+
+                headers: {
+
+                    'X-Requested-With': 'XMLHttpRequest',
+
+                    'X-CSRFToken': csrf ? csrf.value : '',
+
+                },
+
+            })
+
+                .then(function (res) { return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; }); })
+
+                .then(function (resultado) {
+
+                    if (!resultado.ok) {
+
+                        btnEncerrar.disabled = false;
+
+                        if (window.PocketBipagem) PocketBipagem.toast(resultado.payload.message || 'Erro ao encerrar.', 'erro');
+
+                        return;
+
+                    }
+
+                    if (window.PocketBipagem) PocketBipagem.toast(resultado.payload.message || 'Ciclo encerrado.', 'ok');
+
+                    global.location.href = resultado.payload.redirect_url || '{% url "ciclico" %}';
+
+                })
+
+                .catch(function () {
+
+                    btnEncerrar.disabled = false;
+
+                    if (window.PocketBipagem) PocketBipagem.toast('Sem conexão', 'erro');
+
+                });
+
+        });
+
+    }
+
+
+
+    var btnFinalizar = document.getElementById('pocket-btn-finalizar-sku');
+
+    if (btnFinalizar) {
+
+        btnFinalizar.addEventListener('click', function () {
+
+            if (!skuSelect || !skuSelect.value) return;
+
+            btnFinalizar.disabled = true;
+
+            var body = new FormData();
+
+            body.append('acao', 'finalizar_sku');
+
+            body.append('sku_id', skuSelect.value);
+
+            body.append('csrfmiddlewaretoken', csrf ? csrf.value : '');
+
+            fetch(global.location.href, {
+
+                method: 'POST',
+
+                body: body,
+
+                headers: {
+
+                    'X-Requested-With': 'XMLHttpRequest',
+
+                    'X-CSRFToken': csrf ? csrf.value : '',
+
+                },
+
+            })
+
+                .then(function (res) { return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; }); })
+
+                .then(function (resultado) {
+
+                    if (!resultado.ok) {
+
+                        if (mapaSkus[skuSelect.value]) atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
+
+                        if (window.PocketBipagem) PocketBipagem.toast(resultado.payload.message || 'Erro ao finalizar.', 'erro');
+
+                        return;
+
+                    }
+
+                    var tipo = resultado.payload.tipo_mensagem === 'warning' ? 'aviso' : 'ok';
+
+                    if (window.PocketBipagem) PocketBipagem.toast(resultado.payload.message || 'SKU finalizado.', tipo);
+
+                    processarRespostaOperacional(resultado.payload);
+
+                    resetCamposEntradaCiclico();
+
+                })
+
+                .catch(function () {
+
+                    if (mapaSkus[skuSelect.value]) atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
+
+                    if (window.PocketBipagem) PocketBipagem.toast('Sem conexão', 'erro');
+
+                });
+
+        });
+
+    }
+
+
+
+    function processarRespostaOperacional(dados) {
+
+        var skuId = skuSelect.value;
+
+        if (dados.sku_atual && mapaSkus[skuId]) {
+
+            Object.assign(mapaSkus[skuId], dados.sku_atual);
+
+            aplicarResumoOperacional(mapaSkus[skuId]);
+
+        } else if (mapaSkus[skuId] && dados.indicadores) {
+
+            Object.assign(mapaSkus[skuId], dados.indicadores);
+
+            if (dados.status_contagem) {
+
+                mapaSkus[skuId].status_contagem = dados.status_contagem;
+
+            }
+
+            aplicarResumoOperacional(mapaSkus[skuId]);
+
+        }
+
+        atualizarResumo(dados.resumo);
+
+        if (dados.resumo && dados.resumo.ciclo_concluido) {
+
+            exibirCicloConcluido(dados.resumo.ciclo_encerrado);
+
+            if (window.PocketBipagem) {
+
+                PocketBipagem.toast('Ciclo concluído com sucesso.', 'ok');
+
+            }
+
+            global.setTimeout(function () {
+
+                global.location.href = '{% url "pocket:selecionar" %}';
+
+            }, 1800);
+
+            return;
+
+        }
+
+        if (dados.sku_removido_fila || dados.sku_finalizado) {
+
+            sincronizarFila(dados.skus_lote, dados.proximo_sku_id);
+
+            if (dados.resumo && dados.resumo.lote_concluido) {
+
+                if (window.PocketBipagem) {
+
+                    PocketBipagem.toast('Ciclo concluído com sucesso.', 'ok');
+
+                }
+
+                global.setTimeout(function () {
+
+                    global.location.href = '{% url "pocket:selecionar" %}';
+
+                }, 1800);
+
+            }
+
+        } else if (mapaSkus[skuId]) {
+
+            atualizarSkuDisplay(mapaSkus[skuId]);
+
+        }
+
+    }
+
+
+
+    PocketBipagem.initCiclico({
+
+        form: form,
+
+        csrfToken: csrf ? csrf.value : '',
+
+        posicaoInput: document.getElementById('{{ form.codigo_posicao.id_for_label }}'),
+
+        produtoInput: document.getElementById('pocket-produto-ciclico'),
+
+        quantidadeInput: document.getElementById('{{ form.quantidade_fisica.id_for_label }}'),
+
+        skuSelect: skuSelect,
+
+        btnSalvar: document.getElementById('pocket-btn-salvar'),
+
+        btnFinalizar: document.getElementById('pocket-btn-finalizar-sku'),
+
+        mapaPosicoes: mapaPosicoes,
+
+        mestresUrl: '{% url "pocket:dados_mestres" %}',
+
+        mapaProdutos: JSON.parse(document.getElementById('pocket-produtos-data').textContent),
+
+        mapaEan: JSON.parse(document.getElementById('pocket-ean-data').textContent),
+
+        mapaSkus: mapaSkus,
+
+        callbacks: {
+
+            atualizarSku: atualizarSkuDisplay,
+
+            exibirProdutoAtual: exibirProdutoAtual,
+
+            onLimparConfirmacao: resetCamposEntradaCiclico,
+
+            onSucesso: function (dados) {
+
+                processarRespostaOperacional(dados);
+
+            },
+
+        },
+
+    });
+
+
+
+    if (skuSelect && mapaSkus[skuSelect.value]) {
+
+        atualizarSkuDisplay(mapaSkus[skuSelect.value]);
+
+    }
+
+});
+
+</script>
+
+{% endif %}
+
+{% endblock %}
+

@@ -1,0 +1,26 @@
+<div class="pocket-op-card">
+    <div class="pocket-op-card-row">
+        <span class="pocket-op-modo">Modo: <strong>{{ operacional.modo_label }}</strong></span>
+        <span class="pocket-op-online" id="pocket-online" aria-live="polite">
+            <span class="pocket-op-online-dot"></span> Online
+        </span>
+    </div>
+    <div class="pocket-op-title-row">
+        <span class="pocket-op-ref">{{ operacional.referencia_label }}</span>
+        <span class="pocket-op-badge pocket-op-badge--{{ operacional.status_badge }}">{{ operacional.status_label }}</span>
+    </div>
+    <div class="pocket-op-metrics">
+        <div class="pocket-op-metric">
+            <span class="pocket-op-metric-val" id="pocket-metric-total">{{ metricas.total_posicoes }}</span>
+            <span class="pocket-op-metric-lbl">Posições</span>
+        </div>
+        <div class="pocket-op-metric">
+            <span class="pocket-op-metric-val pocket-op-metric-val--ok" id="pocket-metric-contadas">{{ metricas.contadas }}</span>
+            <span class="pocket-op-metric-lbl">Contadas</span>
+        </div>
+        <div class="pocket-op-metric">
+            <span class="pocket-op-metric-val pocket-op-metric-val--warn" id="pocket-metric-pendentes">{{ metricas.pendentes }}</span>
+            <span class="pocket-op-metric-lbl">Pendentes</span>
+        </div>
+    </div>
+</div>

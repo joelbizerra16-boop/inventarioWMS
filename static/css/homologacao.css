@@ -1,0 +1,23 @@
+.homologacao-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.homologacao-dot--pendente {
+    background-color: #F97316;
+}
+
+.homologacao-dot--homologado {
+    background-color: #16A34A;
+}
+
+.homologacao-dot--rejeitado {
+    background-color: #DC2626;
+}
+
+.homologacao-status {
+    color: #334155;
+}

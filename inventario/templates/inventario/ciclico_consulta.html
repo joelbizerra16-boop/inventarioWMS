@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+
+{% block title %}Consulta | Inventário Cíclico{% endblock %}
+
+{% block content %}
+<div class="mb-3 d-flex flex-wrap justify-content-between align-items-start gap-2">
+    <div>
+        <h1 class="h4 fw-semibold mb-1">Consulta de Ciclos</h1>
+        <p class="text-muted small mb-0">
+            Ciclo #{{ ciclo.pk }}
+            <span class="badge text-bg-{% if ciclo.status_ciclo == 'ATIVO' %}primary{% elif ciclo.status_ciclo == 'ENCERRADO' %}secondary{% else %}dark{% endif %}">
+                {{ ciclo.get_status_ciclo_display }}
+            </span>
+            — {{ resumo.total_skus }} SKUs
+            {% if somente_leitura %}
+            <span class="text-warning ms-1">(somente consulta)</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'ciclico_relatorio' %}?ciclo={{ ciclo.pk }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-sm btn-danger">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Relatório Executivo PDF
+        </a>
+        <a href="{% url 'ciclico_exportar' %}?ciclo={{ ciclo.pk }}{% if query_string %}&{{ query_string }}{% endif %}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-file-earmark-excel me-1"></i>Excel Consulta
+        </a>
+        <a href="{% url 'ciclico' %}" class="btn btn-sm btn-outline-secondary">Dashboard</a>
+    </div>
+</div>
+
+<form method="get" class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small">Ciclo</label>
+                <select name="ciclo" class="form-select form-select-sm">
+                    {% for c in ciclos_disponiveis %}
+                    <option value="{{ c.pk }}" {% if c.pk == ciclo.pk %}selected{% endif %}>
+                        #{{ c.pk }} — {{ c.get_status_ciclo_display }} ({{ c.data_criacao|date:"d/m/Y" }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Status do ciclo</label>
+                <select name="status_ciclo" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in status_ciclo_opcoes %}
+                    <option value="{{ valor }}" {% if filtros.status_ciclo == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Data inicial</label>
+                <input type="date" name="data_inicial" class="form-control form-control-sm" value="{{ filtros.data_inicial }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Data final</label>
+                <input type="date" name="data_final" class="form-control form-control-sm" value="{{ filtros.data_final }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">SKU</label>
+                <input type="text" name="sku" class="form-control form-control-sm" value="{{ filtros.sku }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Descrição</label>
+                <input type="text" name="descricao" class="form-control form-control-sm" value="{{ filtros.descricao }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Embalagem</label>
+                <select name="embalagem" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    {% for emb in embalagens_disponiveis %}
+                    <option value="{{ emb }}" {% if filtros.embalagem == emb %}selected{% endif %}>{{ emb }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small">Canal</label>
+                <select name="canal" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="cosan" {% if filtros.canal == 'cosan' %}selected{% endif %}>Cosan</option>
+                    <option value="brida" {% if filtros.canal == 'brida' %}selected{% endif %}>Brida</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Status SKU</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in status_opcoes %}
+                    <option value="{{ valor }}" {% if filtros.status == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Usuário</label>
+                <input type="text" name="usuario" class="form-control form-control-sm" value="{{ filtros.usuario }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Origem</label>
+                <select name="origem" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    {% for valor, rotulo in origem_opcoes %}
+                    <option value="{{ valor }}" {% if filtros.origem == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Data contagem</label>
+                <input type="date" name="data" class="form-control form-control-sm" value="{{ filtros.data }}">
+            </div>
+            <div class="col-md-4">
+                <div class="d-flex flex-wrap gap-3 pt-1">
+                    <div class="form-check form-check-inline mb-0">
+                        <input class="form-check-input" type="checkbox" name="somente_divergentes" value="1" id="flt-div" {% if filtros.somente_divergentes %}checked{% endif %}>
+                        <label class="form-check-label small" for="flt-div">Somente divergentes</label>
+                    </div>
+                    <div class="form-check form-check-inline mb-0">
+                        <input class="form-check-input" type="checkbox" name="somente_recontagens" value="1" id="flt-rec" {% if filtros.somente_recontagens %}checked{% endif %}>
+                        <label class="form-check-label small" for="flt-rec">Somente recontagens</label>
+                    </div>
+                    <div class="form-check form-check-inline mb-0">
+                        <input class="form-check-input" type="checkbox" name="somente_validados" value="1" id="flt-val" {% if filtros.somente_validados %}checked{% endif %}>
+                        <label class="form-check-label small" for="flt-val">Somente validados</label>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-primary btn-sm w-100">Filtrar</button>
+            </div>
+        </div>
+    </div>
+</form>
+
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-3">SKU</th>
+                    <th>Descrição</th>
+                    <th>SAP</th>
+                    <th>Físico</th>
+                    <th>Dif.</th>
+                    <th></th>
+                    <th>Status</th>
+                    <th>Origem</th>
+                    <th>Usuários</th>
+                    <th>Última</th>
+                    <th class="pe-3 text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for g in grupos %}
+                <tr>
+                    <td class="ps-3 fw-semibold">{{ g.codigo_produto }}</td>
+                    <td class="small">{{ g.descricao|truncatechars:40 }}</td>
+                    <td>{{ g.sap_total }}</td>
+                    <td>{{ g.fisico_total|default:"—" }}</td>
+                    <td>{{ g.diferenca_cosan|default:"—" }}</td>
+                    <td>{% include 'inventario/partials/indicador_cosan.html' with indicador=g.indicador_sap %}</td>
+                    <td><span class="badge text-bg-{{ g.status_classe }}">{{ g.status_label }}</span></td>
+                    <td class="small">{{ g.ultima_origem_label|default:"—" }}</td>
+                    <td class="small">{% if g.usuarios %}{{ g.usuarios|join:", " }}{% else %}—{% endif %}</td>
+                    <td class="small">{% if g.ultima_contagem %}{{ g.ultima_contagem|date:"d/m H:i" }}{% else %}—{% endif %}</td>
+                    <td class="pe-3 text-center grid-acoes-cell">
+                        <div class="grid-acoes">
+                            <button class="grid-acao grid-acao-visualizar" type="button" data-bs-toggle="collapse" data-bs-target="#det-{{ g.pk }}" title="Detalhes / histórico" aria-label="Detalhes / histórico">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                <tr class="collapse" id="det-{{ g.pk }}">
+                    <td colspan="11" class="p-0">
+                        <div class="bg-light p-3 mx-3 mb-3 rounded small">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <strong>Dados congelados</strong>
+                                    <ul class="list-unstyled mb-0 mt-1">
+                                        <li>SAP: {{ g.sap_total }}</li>
+                                        <li>Cosan: {{ g.cosan_total|default:"—" }}</li>
+                                        <li>Brida: {{ g.brida_total|default:"—" }}</li>
+                                        <li>Embalagem: {{ g.embalagem|default:"—" }}</li>
+                                    </ul>
+                                </div>
+                                <div class="col-md-8">
+                                    <strong>Linha do tempo</strong>
+                                    <div class="table-responsive mt-1">
+                                        <table class="table table-sm bg-white mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Data/Hora</th>
+                                                    <th>Tipo</th>
+                                                    <th>Qtd</th>
+                                                    <th>Posição</th>
+                                                    <th>Usuário</th>
+                                                    <th>Motivo</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for h in g.historico %}
+                                                <tr>
+                                                    <td>{{ h.data_hora|date:"d/m/Y H:i" }}</td>
+                                                    <td>{{ h.tipo_label }}</td>
+                                                    <td>{{ h.quantidade_fisica }}</td>
+                                                    <td>{{ h.posicao|default:"—" }}</td>
+                                                    <td>{{ h.usuario }}</td>
+                                                    <td>{{ h.motivo|default:"—" }}</td>
+                                                </tr>
+                                                {% empty %}
+                                                <tr><td colspan="6" class="text-muted">Sem histórico registrado.</td></tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <strong>Posições contadas</strong>
+                            <table class="table table-sm bg-white mt-1 mb-0">
+                                <tr><th>Posição</th><th>Qtd</th><th>Usuário</th><th>Data</th></tr>
+                                {% for p in g.posicoes %}
+                                <tr>
+                                    <td>{{ p.alocacao|default:p.codigo_posicao }}</td>
+                                    <td>{{ p.quantidade_fisica|default:"—" }}</td>
+                                    <td>{{ p.usuario_contagem_nome }}</td>
+                                    <td>{% if p.data_contagem %}{{ p.data_contagem|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="4" class="text-muted">Nenhuma posição contada.</td></tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="11" class="text-center text-muted py-4">Nenhum resultado para os filtros selecionados.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

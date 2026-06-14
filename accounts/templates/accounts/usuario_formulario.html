@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titulo }} | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="h3 fw-semibold text-dark mb-1">{{ titulo }}</h1>
+    <p class="text-muted mb-0">Preencha os dados do usuário operacional.</p>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="{{ form.nome.id_for_label }}" class="form-label">Nome</label>
+                    {{ form.nome }}
+                    {% if form.nome.errors %}<div class="text-danger small">{{ form.nome.errors|join:', ' }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.login.id_for_label }}" class="form-label">Login</label>
+                    {{ form.login }}
+                    {% if form.login.errors %}<div class="text-danger small">{{ form.login.errors|join:', ' }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.setor.id_for_label }}" class="form-label">Setor</label>
+                    {{ form.setor }}
+                    {% if form.setor.errors %}<div class="text-danger small">{{ form.setor.errors|join:', ' }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.perfil.id_for_label }}" class="form-label">Perfil</label>
+                    {{ form.perfil }}
+                    {% if form.perfil.errors %}<div class="text-danger small">{{ form.perfil.errors|join:', ' }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.senha.id_for_label }}" class="form-label">Senha</label>
+                    {{ form.senha }}
+                    {% if object %}<div class="form-text">Deixe em branco para manter a senha atual.</div>{% endif %}
+                    {% if form.senha.errors %}<div class="text-danger small">{{ form.senha.errors|join:', ' }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="{{ form.confirmar_senha.id_for_label }}" class="form-label">Confirmar senha</label>
+                    {{ form.confirmar_senha }}
+                    {% if form.confirmar_senha.errors %}<div class="text-danger small">{{ form.confirmar_senha.errors|join:', ' }}</div>{% endif %}
+                </div>
+                <div class="col-12">
+                    <div class="form-check">
+                        {{ form.ativo }}
+                        <label class="form-check-label" for="{{ form.ativo.id_for_label }}">Usuário ativo</label>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary">{{ botao }}</button>
+                <a href="{% url 'accounts:usuarios_lista' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

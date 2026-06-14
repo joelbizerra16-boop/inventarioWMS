@@ -1,0 +1,97 @@
+.grid-acoes-cell {
+    white-space: nowrap;
+}
+
+.grid-acoes {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+}
+
+.grid-acao,
+button.grid-acao {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.375rem;
+    background: transparent;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+button.grid-acao:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.grid-acao:hover,
+.grid-acao:focus-visible {
+    text-decoration: none;
+}
+
+.grid-acao-editar {
+    color: #2563EB;
+}
+
+.grid-acao-editar:hover,
+.grid-acao-editar:focus-visible {
+    color: #1D4ED8;
+    background-color: rgba(37, 99, 235, 0.12);
+}
+
+.grid-acao-excluir {
+    color: #DC2626;
+}
+
+.grid-acao-excluir:hover,
+.grid-acao-excluir:focus-visible {
+    color: #B91C1C;
+    background-color: rgba(220, 38, 38, 0.12);
+}
+
+.grid-acao-visualizar {
+    color: #64748B;
+}
+
+.grid-acao-visualizar:hover,
+.grid-acao-visualizar:focus-visible {
+    color: #334155;
+    background-color: rgba(100, 116, 139, 0.12);
+}
+
+.grid-acao-info {
+    color: #0891B2;
+}
+
+.grid-acao-info:hover,
+.grid-acao-info:focus-visible {
+    color: #0E7490;
+    background-color: rgba(8, 145, 178, 0.12);
+}
+
+.grid-acao-sucesso {
+    color: #16A34A;
+}
+
+.grid-acao-sucesso:hover,
+.grid-acao-sucesso:focus-visible {
+    color: #15803D;
+    background-color: rgba(22, 163, 74, 0.12);
+}
+
+.grid-acao-aviso {
+    color: #D97706;
+}
+
+.grid-acao-aviso:hover,
+.grid-acao-aviso:focus-visible {
+    color: #B45309;
+    background-color: rgba(217, 119, 6, 0.12);
+}
