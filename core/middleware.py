@@ -8,6 +8,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 
+from accounts.services.perfil import usuario_e_operador_pocket
 from core.services.exclusao import (
     MENSAGEM_ERRO_INESPERADO,
     MENSAGEM_NAO_ENCONTRADO,
@@ -78,6 +79,8 @@ class TratamentoExcecaoUsuarioMiddleware:
         return MENSAGEM_ERRO_INESPERADO
 
     def _destino_seguro(self, request) -> str:
+        if request.user.is_authenticated and usuario_e_operador_pocket(request.user):
+            return reverse('pocket:selecionar')
         referer = request.META.get('HTTP_REFERER')
         if referer and referer.startswith(request.build_absolute_uri('/')[:-1]):
             return referer
