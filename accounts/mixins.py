@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.mixins import LoginRequiredMixin as DjangoLoginRequiredMixin
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
@@ -21,6 +22,7 @@ class AcessoOperacionalMixin(LoginRequiredMixin):
         if not request.user.is_authenticated:
             return self.handle_no_permission()
         if not usuario_pode_acessar(request.user):
+            logout(request)
             messages.error(request, 'Usuário sem perfil operacional vinculado.')
             return redirect('accounts:login')
         return super(DjangoLoginRequiredMixin, self).dispatch(request, *args, **kwargs)

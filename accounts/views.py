@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth import login, logout
 from django.contrib.auth.views import LoginView, LogoutView
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
@@ -10,6 +11,7 @@ from accounts.mixins import PaginacaoContextMixin, PaginacaoMixin, RequerAdminis
 from accounts.models import Usuario
 from core.logging_auditoria import ip_do_request, registrar_evento
 from core.mixins import ExclusaoSeguraMixin
+from accounts.services.perfil import usuario_pode_acessar
 from accounts.services.usuarios import (
     UsuarioServiceError,
     alternar_status_usuario,
@@ -23,12 +25,31 @@ from accounts.services.usuarios import (
 
 class OperacionalLoginView(LoginView):
     template_name = 'accounts/login.html'
-    redirect_authenticated_user = True
+    redirect_authenticated_user = False
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            if usuario_pode_acessar(request.user):
+                return redirect(self.get_success_url())
+            logout(request)
+            messages.error(request, 'Usuário sem perfil operacional vinculado.')
+        return super(LoginView, self).dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        response = super().form_valid(form)
-        registrar_evento('login', usuario=self.request.user, ip=ip_do_request(self.request))
-        return response
+        user = form.get_user()
+        login(self.request, user)
+        if not usuario_pode_acessar(user):
+            logout(self.request)
+            messages.error(self.request, 'Usuário sem perfil operacional vinculado.')
+            registrar_evento(
+                'login_falhou',
+                usuario=form.cleaned_data.get('username', ''),
+                ip=ip_do_request(self.request),
+            )
+            return redirect('accounts:login')
+
+        registrar_evento('login', usuario=user, ip=ip_do_request(self.request))
+        return redirect(self.get_success_url())
 
     def form_invalid(self, form):
         registrar_evento(
