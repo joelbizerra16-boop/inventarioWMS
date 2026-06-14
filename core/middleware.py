@@ -1,10 +1,11 @@
 import logging
+from urllib.parse import urlparse
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError
 from django.db.models.deletion import ProtectedError
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponseServerError, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 
@@ -42,6 +43,9 @@ class TratamentoExcecaoUsuarioMiddleware:
             return JsonResponse({'ok': False, 'message': mensagem}, status=status)
 
         messages.error(request, mensagem)
+        destino_path = urlparse(destino).path if '://' in destino else destino
+        if (destino_path or '/').rstrip('/') == (request.path or '/').rstrip('/'):
+            return HttpResponseServerError('Erro interno. Contate o suporte.')
         return redirect(destino)
 
     def _deve_tratar(self, request, exception) -> bool:
@@ -83,5 +87,7 @@ class TratamentoExcecaoUsuarioMiddleware:
             return reverse('pocket:selecionar')
         referer = request.META.get('HTTP_REFERER')
         if referer and referer.startswith(request.build_absolute_uri('/')[:-1]):
-            return referer
+            referer_path = urlparse(referer).path or '/'
+            if referer_path.rstrip('/') != request.path.rstrip('/'):
+                return referer
         return reverse('home')

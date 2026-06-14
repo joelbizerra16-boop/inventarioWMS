@@ -1,11 +1,8 @@
 from dataclasses import asdict
 
-from django.shortcuts import redirect
-from django.urls import reverse
 from django.views.generic import TemplateView
 
 from accounts.mixins import AcessoOperacionalMixin
-from accounts.services.perfil import usuario_e_operador_pocket
 from dashboard.services.dashboard import obter_indicadores_dashboard
 
 
@@ -17,11 +14,6 @@ def _serializar_grafico(grafico) -> dict:
 
 class HomeView(AcessoOperacionalMixin, TemplateView):
     template_name = 'dashboard/home.html'
-
-    def dispatch(self, request, *args, **kwargs):
-        if request.user.is_authenticated and usuario_e_operador_pocket(request.user):
-            return redirect(reverse('pocket:selecionar'))
-        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
