@@ -3,6 +3,7 @@ from django.urls import path
 from inventario.pocket_precadastro_views import (
     OperadorPrecadastroPosicaoView,
     OperadorPrecadastroProdutoView,
+    PocketValidarCodigoPosicaoView,
     PocketCiclicoPrecadastroPosicaoView,
     PocketPrecadastroPosicaoView,
     PocketPrecadastroProdutoView,
@@ -19,6 +20,7 @@ app_name = 'pocket'
 urlpatterns = [
     path('', PocketSelecionarView.as_view(), name='selecionar'),
     path('dados-mestres/', PocketMestresSyncView.as_view(), name='dados_mestres'),
+    path('validar-codigo-posicao/', PocketValidarCodigoPosicaoView.as_view(), name='validar_codigo_posicao'),
     path('operador/precadastro/produto/', OperadorPrecadastroProdutoView.as_view(), name='operador_precadastro_produto'),
     path('operador/precadastro/posicao/', OperadorPrecadastroPosicaoView.as_view(), name='operador_precadastro_posicao'),
     path('ciclico/', PocketContagemCiclicoView.as_view(), name='contagem_ciclico'),

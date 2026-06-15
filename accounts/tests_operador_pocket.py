@@ -82,3 +82,25 @@ class OperadorPocketAcessoTestCase(ClienteAutenticadoMixin, TestCase):
         self.client.force_login(inventario_user)
         response = self.client.get(reverse('pocket:operador_precadastro_produto'))
         self.assertRedirects(response, reverse('pocket:selecionar'))
+
+    def test_validacao_codigo_posicao_retorna_existe_true_quando_ja_cadastrado(self):
+        Posicao.objects.create(codigo='A-01-02-03', posicao='Posição A-01-02-03', ativo=True)
+
+        response = self.client.get(
+            reverse('pocket:validar_codigo_posicao'),
+            {'codigo': 'A-01-02-03'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(response.content, {'existe': True})
+
+    def test_validacao_codigo_posicao_retorna_existe_false_quando_nao_cadastrado(self):
+        response = self.client.get(
+            reverse('pocket:validar_codigo_posicao'),
+            {'codigo': 'NOVO-999'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(response.content, {'existe': False})

@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from django.views import View
@@ -13,6 +14,7 @@ from django.urls import reverse
 from posicoes.forms import PrecadastroPosicaoForm, PrecadastroPosicaoOperadorForm
 from produtos.forms import PrecadastroProdutoForm, PrecadastroProdutoOperadorForm
 from inventario.models import Inventario
+from posicoes.models import Posicao
 from posicoes.services.homologacao import HomologacaoPosicaoError, criar_precadastro_posicao
 from produtos.services.homologacao import HomologacaoError, criar_precadastro_produto
 
@@ -41,6 +43,7 @@ def _render_precadastro_posicao(
         'voltar_rotulo': voltar_rotulo,
         'fluxo_continuo_sucesso': sucesso,
         'mensagem_fluxo': 'Posição salva.' if sucesso else '',
+        'validar_codigo_url': reverse('pocket:validar_codigo_posicao'),
     }
     if inventario is not None:
         contexto['inventario'] = inventario
@@ -53,6 +56,15 @@ class RequerOperadorPocketMixin(AcessoOperacionalMixin):
             messages.error(request, 'Acesso restrito ao operador Pocket.')
             return redirect('pocket:selecionar')
         return super().dispatch(request, *args, **kwargs)
+
+
+class PocketValidarCodigoPosicaoView(AcessoOperacionalMixin, View):
+    """Valida em tempo real se o código de posição já existe."""
+
+    def get(self, request):
+        codigo = (request.GET.get('codigo') or '').strip().upper()
+        existe = Posicao.objects.filter(codigo=codigo).exists() if codigo else False
+        return JsonResponse({'existe': existe})
 
 
 class OperadorPrecadastroProdutoView(RequerOperadorPocketMixin, View):

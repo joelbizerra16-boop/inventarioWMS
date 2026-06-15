@@ -12,6 +12,7 @@
                 id="pocket-precadastro-posicao-form"
                 data-sucesso="{% if fluxo_continuo_sucesso %}1{% else %}0{% endif %}"
                 data-mensagem="{{ mensagem_fluxo|default:'Posição salva.' }}"
+                data-validar-codigo-url="{{ validar_codigo_url }}"
             >
                 {% csrf_token %}
                 {% if form.non_field_errors %}
