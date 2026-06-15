@@ -9,6 +9,7 @@
     var ultimoCodigoValidado = '';
     var ultimaValidacaoEhNovo = false;
     var validacaoController = null;
+    var validacaoEmAndamento = false;
 
     function focarCampo(el) {
         if (!el || el.disabled || el.readOnly) return;
@@ -56,8 +57,11 @@
     }
 
     function validarCodigoAjax(url, codigo) {
-        if (!url || !codigo) {
+        if (!codigo) {
             return Promise.resolve({ existe: false });
+        }
+        if (!url) {
+            return Promise.reject(new Error('Endpoint de validação não configurado.'));
         }
         if (validacaoController) {
             validacaoController.abort();
@@ -129,18 +133,25 @@
             }
         }
 
-        codigo.addEventListener('input', function () {
-            resetarValidacaoSeCodigoMudou();
-        });
-
-        codigo.addEventListener('keydown', function (evento) {
-            if (evento.key !== 'Enter') return;
-            evento.preventDefault();
-            var valorCodigo = codigoNormalizado(codigo.value);
-            if (!valorCodigo) {
+        function validarCodigoImediatamente() {
+            if (validacaoEmAndamento) {
                 return;
             }
 
+            var valorCodigo = codigoNormalizado(codigo.value);
+            if (!valorCodigo) {
+                ultimaValidacaoEhNovo = false;
+                setPosicaoHabilitada(posicao, false);
+                focarCampo(codigo);
+                return;
+            }
+
+            if (ultimaValidacaoEhNovo && valorCodigo === ultimoCodigoValidado) {
+                liberarFluxoCodigoNovo(codigo, posicao);
+                return;
+            }
+
+            validacaoEmAndamento = true;
             validarCodigoAjax(validarCodigoUrl, valorCodigo)
                 .then(function (data) {
                     if (codigoNormalizado(codigo.value) !== valorCodigo) {
@@ -156,9 +167,35 @@
                     if (error && error.name === 'AbortError') {
                         return;
                     }
+                    ultimaValidacaoEhNovo = false;
+                    setPosicaoHabilitada(posicao, false);
                     mostrarToast('Não foi possível validar o código agora.', 'erro');
                     focarCampo(codigo);
+                })
+                .finally(function () {
+                    validacaoEmAndamento = false;
                 });
+        }
+
+        codigo.addEventListener('input', function () {
+            resetarValidacaoSeCodigoMudou();
+        });
+
+        codigo.addEventListener('keydown', function (evento) {
+            var tecla = evento.key || '';
+            if (tecla !== 'Enter' && tecla !== 'Tab') return;
+            evento.preventDefault();
+            validarCodigoImediatamente();
+        });
+
+        codigo.addEventListener('blur', function () {
+            if (!codigoNormalizado(codigo.value)) {
+                return;
+            }
+            if (ultimaValidacaoEhNovo && codigoNormalizado(codigo.value) === ultimoCodigoValidado) {
+                return;
+            }
+            validarCodigoImediatamente();
         });
 
         posicao.addEventListener('keydown', function (evento) {
