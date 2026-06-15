@@ -781,11 +781,13 @@ def obter_resposta_contagem_pocket(
     usuario,
     *,
     ciclo_encerrado: CicloInventario | None = None,
+    sku: CicloInventarioSku | None = None,
 ) -> dict:
 
     painel = obter_painel_pocket_ciclico(session)
 
-    sku = CicloInventarioSku.objects.get(pk=sku_id)
+    if sku is None:
+        sku = CicloInventarioSku.objects.select_related('produto').get(pk=sku_id)
 
     ciclo_payload = (
         serializar_ciclo_encerrado_pocket(ciclo_encerrado)
@@ -875,7 +877,7 @@ def registrar_contagem_pocket_ciclico_por_sku(
 
     request=None,
 
-) -> tuple[SkuCicloDetalhe, CicloInventario | None]:
+) -> tuple[CicloInventarioSku, CicloInventario | None]:
 
     sku = _obter_sku_lote(session, sku_id)
 
@@ -961,7 +963,7 @@ def registrar_contagem_pocket_ciclico_por_sku(
 
     try:
 
-        dto = registrar_contagem_pocket_ciclico(
+        _ = registrar_contagem_pocket_ciclico(
 
             session,
 
@@ -1005,7 +1007,7 @@ def registrar_contagem_pocket_ciclico_por_sku(
 
     sku.refresh_from_db()
 
-    return _sku_para_dto(sku, incluir_posicoes=True), ciclo_encerrado
+    return sku, ciclo_encerrado
 
 
 

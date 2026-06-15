@@ -644,8 +644,7 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         )
         mensagem = 'SKU finalizado com sucesso.'
         tipo_mensagem = 'success'
-        sku = CicloInventarioSku.objects.get(pk=sku_id)
-        if sku.status_contagem == 'DIVERGENTE':
+        if resposta['status_contagem'] == 'DIVERGENTE':
             tipo_mensagem = 'warning'
             mensagem = 'SKU finalizado com divergência.'
 
@@ -740,7 +739,7 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         sku_id = form.cleaned_data['sku_id']
 
         try:
-            dto, ciclo_encerrado = registrar_contagem_pocket_ciclico_por_sku(
+            sku, ciclo_encerrado = registrar_contagem_pocket_ciclico_por_sku(
                 request.session,
                 sku_id,
                 posicao,
@@ -775,7 +774,6 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             form.add_error(None, str(exc))
             return render(request, self.template_name, contexto)
 
-        sku = CicloInventarioSku.objects.select_related('produto').get(pk=dto.pk)
         registrar_historico_pocket_ciclico(
             request.session,
             posicao,
@@ -783,25 +781,25 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             quantidade,
         )
 
-        if dto.status_contagem == 'VALIDADO':
+        if sku.status_contagem == 'VALIDADO':
             limpar_pocket_sessao_contagem(request.session)
             mensagem = (
                 f'Contagem validada: {posicao.codigo} / {sku.codigo_produto} '
-                f'= {dto.quantidade_fisica} (+{quantidade})'
+                f'= {sku.quantidade_fisica} (+{quantidade})'
             )
             tipo_mensagem = 'success'
-        elif dto.status_contagem == 'DIVERGENTE':
+        elif sku.status_contagem == 'DIVERGENTE':
             request.session[SESSION_POCKET_MANTER_CONTAGEM] = True
             mensagem = (
                 f'Contagem registrada com divergência: {posicao.codigo} / '
-                f'{sku.codigo_produto} = {dto.quantidade_fisica} (+{quantidade})'
+                f'{sku.codigo_produto} = {sku.quantidade_fisica} (+{quantidade})'
             )
             tipo_mensagem = 'warning'
         else:
             request.session[SESSION_POCKET_MANTER_CONTAGEM] = True
             mensagem = (
                 f'Contagem cíclica: {posicao.codigo} / {sku.codigo_produto} '
-                f'= {dto.quantidade_fisica} (+{quantidade})'
+                f'= {sku.quantidade_fisica} (+{quantidade})'
             )
             tipo_mensagem = 'success'
 
@@ -811,6 +809,7 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
                 sku_id,
                 request.user,
                 ciclo_encerrado=ciclo_encerrado,
+                sku=sku,
             )
             if resposta.get('sku_removido_fila'):
                 limpar_pocket_sessao_contagem(request.session)
