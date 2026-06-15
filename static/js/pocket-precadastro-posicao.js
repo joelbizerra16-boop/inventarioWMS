@@ -87,7 +87,7 @@
         ultimaValidacaoEhNovo = false;
         setPosicaoHabilitada(posicao, false);
         codigo.value = '';
-        mostrarToast('Código já cadastrado.', 'erro');
+        mostrarToast('POSIÇÃO JÁ CADASTRADA', 'erro');
         focarCampo(codigo);
     }
 
