@@ -150,16 +150,18 @@
 
             {% endif %}
 
-            <div class="pocket-sku-lote-codigo" id="pocket-sku-card-codigo">—</div>
+            <div class="pocket-sku-lote-detalhe{% if painel.fila|length > 1 %} d-none{% endif %}">
+                <div class="pocket-sku-lote-codigo" id="pocket-sku-card-codigo">—</div>
 
-            <div class="pocket-sku-lote-descricao" id="pocket-sku-card-descricao">—</div>
+                <div class="pocket-sku-lote-descricao" id="pocket-sku-card-descricao">—</div>
 
-            <div class="pocket-sku-lote-embalagem">
+                <div class="pocket-sku-lote-embalagem">
 
-                <span class="pocket-sku-lote-embalagem-label">Embalagem:</span>
+                    <span class="pocket-sku-lote-embalagem-label">Embalagem:</span>
 
-                <span id="pocket-sku-card-embalagem">—</span>
+                    <span id="pocket-sku-card-embalagem">—</span>
 
+                </div>
             </div>
 
         </section>

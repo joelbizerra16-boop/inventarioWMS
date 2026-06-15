@@ -131,6 +131,21 @@
         });
     }
 
+    function registrarFinalLeitura(campo, callback) {
+        if (!campo) return;
+        campo.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Enter' || evento.key === 'Tab') {
+                evento.preventDefault();
+                callback();
+            }
+        });
+        campo.addEventListener('blur', function () {
+            if (campo.value && campo.value.trim()) {
+                callback();
+            }
+        });
+    }
+
     function initAudioTouch() {
         global.document.body.addEventListener('touchstart', function desbloquear() {
             obterAudioContext();
@@ -945,6 +960,10 @@
                 focarCampo(posicaoInput);
                 return;
             }
+            if (config.produtoValidado) {
+                focarCampo(quantidadeInput);
+                return;
+            }
             validarProdutoLote(false, function (prodOk) {
                 if (!prodOk) {
                     focarCampo(produtoInput);
@@ -1025,18 +1044,17 @@
             });
         }
 
-        registrarEnter(posicaoInput, avancarPosicao);
-        registrarEnter(produtoInput, avancarProduto);
+        registrarFinalLeitura(posicaoInput, avancarPosicao);
+        registrarFinalLeitura(produtoInput, avancarProduto);
         registrarEnter(quantidadeInput, enviarContagem);
-        var posicaoInputDebounceTimer = null;
         if (posicaoInput) {
             posicaoInput.addEventListener('input', function () {
                 var codigo = posicaoInput.value.trim();
-                if (posicaoInputDebounceTimer) {
-                    global.clearTimeout(posicaoInputDebounceTimer);
-                    posicaoInputDebounceTimer = null;
-                }
                 if (!codigo) {
+                    if (config.posicaoComLock) {
+                        liberarLockPosicaoSilencioso(config, config.posicaoComLock);
+                        config.posicaoComLock = '';
+                    }
                     config.posicaoValidada = false;
                     resetEstadoCampos();
                     if (callbacks.onLimparConfirmacao) {
@@ -1044,28 +1062,22 @@
                     }
                     return;
                 }
-                if (posicaoJaConfirmadaComLock(codigo)) {
-                    return;
-                }
-                posicaoInputDebounceTimer = global.setTimeout(function () {
-                    posicaoInputDebounceTimer = null;
-                    var codigoAtual = posicaoInput.value.trim();
-                    if (!codigoAtual || posicaoJaConfirmadaComLock(codigoAtual)) {
-                        return;
+                if (config.posicaoComLock && config.posicaoComLock !== codigo) {
+                    liberarLockPosicaoSilencioso(config, config.posicaoComLock);
+                    config.posicaoComLock = '';
+                    config.posicaoValidada = false;
+                    resetEstadoCampos();
+                    if (callbacks.onLimparConfirmacao) {
+                        callbacks.onLimparConfirmacao();
                     }
-                    confirmarPosicaoComLock(codigoAtual);
-                }, 150);
+                }
             });
         }
         if (produtoInput) {
             produtoInput.addEventListener('input', function () {
                 config.produtoValidado = false;
                 habilitarQuantidade(false);
-                if (!produtoInput.value.trim()) {
-                    marcarErro(produtoInput, false);
-                } else if (config.posicaoValidada) {
-                    validarProdutoLote(true);
-                }
+                marcarErro(produtoInput, false);
             });
         }
         if (form) {
