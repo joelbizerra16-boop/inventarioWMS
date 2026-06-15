@@ -80,7 +80,7 @@ def adquirir_lock_posicao_pocket_ciclico(request, sku_id: int, codigo_posicao: s
     if tarefa:
         iniciar_tarefa(tarefa)
 
-    return adquirir_lock(
+    lock = adquirir_lock(
         tipo_inventario=InventarioLock.TipoInventario.CICLICO,
         ciclo=sku.ciclo,
         ciclo_item=item,
@@ -91,6 +91,7 @@ def adquirir_lock_posicao_pocket_ciclico(request, sku_id: int, codigo_posicao: s
         session_key=obter_session_key(request.session),
         ip=ip_do_request(request),
     )
+    return lock, posicao
 
 
 def liberar_lock_posicao_pocket_ciclico(request, ciclo, codigo_posicao: str) -> bool:

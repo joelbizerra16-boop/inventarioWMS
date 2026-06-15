@@ -568,7 +568,7 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             return JsonResponse({'ok': False, 'message': 'SKU inválido.'}, status=400)
 
         try:
-            adquirir_lock_posicao_pocket_ciclico(request, int(sku_raw), codigo)
+            _, posicao = adquirir_lock_posicao_pocket_ciclico(request, int(sku_raw), codigo)
         except LockError as exc:
             return JsonResponse({'ok': False, 'message': str(exc)}, status=409)
         except TarefaError as exc:
@@ -576,7 +576,12 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         except PocketLockOperacionalError as exc:
             return JsonResponse({'ok': False, 'message': str(exc)}, status=400)
 
-        return JsonResponse({'ok': True, 'message': 'Posição válida'})
+        return JsonResponse({
+            'ok': True,
+            'message': 'Posição válida',
+            'posicao_codigo': posicao.codigo,
+            'posicao_alocacao': posicao.posicao,
+        })
 
     def post(self, request):
         ciclo = obter_ciclo_atual(request.session)

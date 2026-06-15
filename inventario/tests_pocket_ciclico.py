@@ -96,6 +96,14 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
             'sku_id': str(sku_id),
         }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
+    def _lock_posicao_pocket_ajax(self, codigo_posicao, sku_id=None):
+        sku_id = sku_id or self.sku.pk
+        return self.client.post(reverse('pocket:contagem_ciclico'), {
+            'acao': 'lock_posicao',
+            'sku_id': str(sku_id),
+            'codigo_posicao': codigo_posicao,
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
     def test_pocket_exibe_fila_sku_do_lote(self):
         response = self.client.get(reverse('pocket:contagem_ciclico'))
         self.assertEqual(response.status_code, 200)
@@ -105,6 +113,14 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         self.assertContains(response, 'pocket-res-sap')
         self.assertNotContains(response, 'Código Produto / EAN')
         self.assertNotContains(response, 'Dispositivo')
+
+    def test_lock_posicao_ciclico_retorna_alocacao(self):
+        response = self._lock_posicao_pocket_ajax('PKT01')
+        self.assertEqual(response.status_code, 200)
+        dados = response.json()
+        self.assertTrue(dados['ok'])
+        self.assertEqual(dados['posicao_codigo'], 'PKT01')
+        self.assertEqual(dados['posicao_alocacao'], self.posicao_a.posicao)
 
     def test_operador_visualiza_lote_gerado_por_supervisor(self):
         operador_user, _ = criar_usuario_teste(

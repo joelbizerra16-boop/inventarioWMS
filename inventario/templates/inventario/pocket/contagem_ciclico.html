@@ -216,6 +216,12 @@
 
             </div>
 
+            <p class="pocket-scan-confirm pocket-scan-confirm--hidden pocket-scan-confirm--inline" id="pocket-posicao-confirm-ciclico">
+
+                <strong id="pocket-posicao-alocacao-ciclico">—</strong>
+
+            </p>
+
             {% if form.codigo_posicao.errors %}
 
             <div class="pocket-form-erro">{{ form.codigo_posicao.errors }}</div>
@@ -776,6 +782,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (produtoInput) produtoInput.value = '';
 
+        limparPosicaoConfirmada();
+
         if (window.PocketBipagem && window.PocketBipagem.resetEstadoCiclico) {
 
             window.PocketBipagem.resetEstadoCiclico();
@@ -793,6 +801,48 @@ document.addEventListener('DOMContentLoaded', function () {
         aplicarResumoOperacional(sku);
 
         atualizarSkuCard(sku);
+
+    }
+
+
+
+    function exibirPosicaoConfirmada(codigo, alocacao) {
+
+        var wrap = document.getElementById('pocket-posicao-confirm-ciclico');
+
+        var label = document.getElementById('pocket-posicao-alocacao-ciclico');
+
+        if (!wrap || !label) return;
+
+        var codigoLimpo = String(codigo || '').trim();
+
+        var alocacaoLimpa = String(alocacao || '').trim();
+
+        if (!codigoLimpo) {
+
+            limparPosicaoConfirmada();
+
+            return;
+
+        }
+
+        label.textContent = alocacaoLimpa ? (codigoLimpo + ' | ' + alocacaoLimpa) : codigoLimpo;
+
+        wrap.classList.remove('pocket-scan-confirm--hidden');
+
+    }
+
+
+
+    function limparPosicaoConfirmada() {
+
+        var wrap = document.getElementById('pocket-posicao-confirm-ciclico');
+
+        var label = document.getElementById('pocket-posicao-alocacao-ciclico');
+
+        if (label) label.textContent = '—';
+
+        if (wrap) wrap.classList.add('pocket-scan-confirm--hidden');
 
     }
 
@@ -1055,6 +1105,8 @@ document.addEventListener('DOMContentLoaded', function () {
             atualizarSku: atualizarSkuDisplay,
 
             exibirProdutoAtual: exibirProdutoAtual,
+
+            onPosicaoConfirmada: exibirPosicaoConfirmada,
 
             onLimparConfirmacao: resetCamposEntradaCiclico,
 

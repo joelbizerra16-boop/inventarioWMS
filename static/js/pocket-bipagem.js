@@ -372,10 +372,10 @@
                 });
             })
             .then(function (resultado) {
-                callback(resultado.ok, resultado.body.message || '');
+                callback(resultado.ok, resultado.body.message || '', resultado.body || {});
             })
             .catch(function () {
-                callback(false, 'Sem conexão');
+                callback(false, 'Sem conexão', {});
             });
     }
 
@@ -907,7 +907,7 @@
                 if (atualizado) {
                     toast('Dados atualizados automaticamente.', 'ok');
                 }
-                reservarLockPosicao(config, codigo, function (lockOk, msg) {
+                reservarLockPosicao(config, codigo, function (lockOk, msg, payload) {
                     config._lockPosicaoEmAndamento = '';
                     if (!lockOk) {
                         config.posicaoValidada = false;
@@ -924,6 +924,9 @@
                         }
                         focarCampo(posicaoInput);
                         return;
+                    }
+                    if (callbacks.onPosicaoConfirmada) {
+                        callbacks.onPosicaoConfirmada(payload.posicao_codigo || codigo, payload.posicao_alocacao || '');
                     }
                     config.posicaoComLock = codigo;
                     config.posicaoValidada = true;
