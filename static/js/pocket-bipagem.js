@@ -332,6 +332,7 @@
         if (!config || !config.csrfToken || !codigoPosicao) return;
         var fd = new FormData();
         fd.append('acao', 'liberar_posicao');
+        fd.append('pocket_ajax', '1');
         fd.append('codigo_posicao', codigoPosicao);
         fd.append('csrfmiddlewaretoken', config.csrfToken);
         if (config.skuSelect && config.skuSelect.value) {
@@ -350,6 +351,7 @@
     function reservarLockPosicao(config, codigoPosicao, callback) {
         var fd = new FormData();
         fd.append('acao', 'lock_posicao');
+        fd.append('pocket_ajax', '1');
         fd.append('codigo_posicao', codigoPosicao);
         fd.append('csrfmiddlewaretoken', config.csrfToken);
         if (config.inventarioId) {
@@ -998,9 +1000,13 @@
                 if (produtoInput) produtoInput.disabled = false;
                 if (quantidadeInput) quantidadeInput.disabled = false;
 
+                var bodyContagem = new FormData(form);
+                if (!bodyContagem.get('pocket_ajax')) {
+                    bodyContagem.append('pocket_ajax', '1');
+                }
                 fetch(global.location.href, {
                     method: 'POST',
-                    body: new FormData(form),
+                    body: bodyContagem,
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
                         'X-CSRFToken': csrfToken || '',

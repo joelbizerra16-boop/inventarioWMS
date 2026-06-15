@@ -94,6 +94,8 @@
 
         <input type="hidden" name="acao" value="contagem">
 
+        <input type="hidden" name="pocket_ajax" value="1">
+
 
 
         {% if form.non_field_errors %}
@@ -872,6 +874,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             body.append('acao', 'encerrar_ciclo');
 
+            body.append('pocket_ajax', '1');
+
             body.append('csrfmiddlewaretoken', csrf ? csrf.value : '');
 
             fetch(global.location.href, {
@@ -939,6 +943,8 @@ document.addEventListener('DOMContentLoaded', function () {
             body.append('acao', 'finalizar_sku');
 
             body.append('sku_id', skuSelect.value);
+
+            body.append('pocket_ajax', '1');
 
             body.append('csrfmiddlewaretoken', csrf ? csrf.value : '');
 

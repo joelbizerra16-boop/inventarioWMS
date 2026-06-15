@@ -508,7 +508,12 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
 
     @staticmethod
     def _requisicao_ajax(request) -> bool:
-        return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return True
+        # Coletores RF (WebView Android) podem omitir cabeçalhos customizados no fetch.
+        if request.POST.get('pocket_ajax') == '1':
+            return True
+        return False
 
     @staticmethod
     def _resposta_json_erro(form=None, mensagem=''):
