@@ -25,6 +25,28 @@ def _usuario_operacional(request):
     return request.user.perfil_operacional
 
 
+def _render_precadastro_posicao(
+    request,
+    template_name: str,
+    form,
+    *,
+    voltar_url: str = '',
+    voltar_rotulo: str = 'Voltar',
+    inventario=None,
+    sucesso: bool = False,
+):
+    contexto = {
+        'form': form,
+        'voltar_url': voltar_url,
+        'voltar_rotulo': voltar_rotulo,
+        'fluxo_continuo_sucesso': sucesso,
+        'mensagem_fluxo': 'Posição salva.' if sucesso else '',
+    }
+    if inventario is not None:
+        contexto['inventario'] = inventario
+    return render(request, template_name, contexto)
+
+
 class RequerOperadorPocketMixin(AcessoOperacionalMixin):
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and not usuario_e_operador_pocket(request.user):
@@ -74,23 +96,27 @@ class OperadorPrecadastroProdutoView(RequerOperadorPocketMixin, View):
 
 class OperadorPrecadastroPosicaoView(RequerOperadorPocketMixin, View):
     template_name = 'inventario/pocket/precadastro_posicao_ciclico.html'
+    voltar_url_name = 'pocket:selecionar'
+    voltar_rotulo = 'Voltar ao Pocket'
 
     def get(self, request):
         codigo = request.GET.get('codigo', '').strip().upper()
-        return render(request, self.template_name, {
-            'form': PrecadastroPosicaoOperadorForm(initial={'codigo': codigo}),
-            'voltar_url': reverse('pocket:selecionar'),
-            'voltar_rotulo': 'Voltar ao Pocket',
-        })
+        return _render_precadastro_posicao(
+            request,
+            self.template_name,
+            PrecadastroPosicaoOperadorForm(initial={'codigo': codigo}),
+            voltar_url=reverse(self.voltar_url_name),
+            voltar_rotulo=self.voltar_rotulo,
+        )
 
     def post(self, request):
         form = PrecadastroPosicaoOperadorForm(request.POST)
+        contexto_voltar = {
+            'voltar_url': reverse(self.voltar_url_name),
+            'voltar_rotulo': self.voltar_rotulo,
+        }
         if not form.is_valid():
-            return render(request, self.template_name, {
-                'form': form,
-                'voltar_url': reverse('pocket:selecionar'),
-                'voltar_rotulo': 'Voltar ao Pocket',
-            })
+            return _render_precadastro_posicao(request, self.template_name, form, **contexto_voltar)
         try:
             criar_precadastro_posicao(
                 codigo_completo=form.cleaned_data['codigo'],
@@ -101,13 +127,14 @@ class OperadorPrecadastroPosicaoView(RequerOperadorPocketMixin, View):
             )
         except HomologacaoPosicaoError as exc:
             form.add_error(None, str(exc))
-            return render(request, self.template_name, {
-                'form': form,
-                'voltar_url': reverse('pocket:selecionar'),
-                'voltar_rotulo': 'Voltar ao Pocket',
-            })
-        messages.success(request, 'Pré-cadastro de posição realizado.')
-        return redirect('pocket:selecionar')
+            return _render_precadastro_posicao(request, self.template_name, form, **contexto_voltar)
+        return _render_precadastro_posicao(
+            request,
+            self.template_name,
+            PrecadastroPosicaoOperadorForm(),
+            sucesso=True,
+            **contexto_voltar,
+        )
 
 
 class PocketPrecadastroProdutoView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, View):
@@ -162,19 +189,23 @@ class PocketPrecadastroPosicaoView(RequerNaoOperadorMixin, RequerEscritaInventar
     def get(self, request, inventario_id):
         inventario = get_object_or_404(Inventario, pk=inventario_id)
         codigo = request.GET.get('codigo', '').strip().upper()
-        return render(request, self.template_name, {
-            'inventario': inventario,
-            'form': PrecadastroPosicaoForm(initial={'codigo': codigo}),
-        })
+        return _render_precadastro_posicao(
+            request,
+            self.template_name,
+            PrecadastroPosicaoForm(initial={'codigo': codigo}),
+            inventario=inventario,
+        )
 
     def post(self, request, inventario_id):
         inventario = get_object_or_404(Inventario, pk=inventario_id)
         form = PrecadastroPosicaoForm(request.POST)
         if not form.is_valid():
-            return render(request, self.template_name, {
-                'inventario': inventario,
-                'form': form,
-            })
+            return _render_precadastro_posicao(
+                request,
+                self.template_name,
+                form,
+                inventario=inventario,
+            )
         try:
             criar_precadastro_posicao(
                 codigo_completo=form.cleaned_data['codigo'],
@@ -185,33 +216,44 @@ class PocketPrecadastroPosicaoView(RequerNaoOperadorMixin, RequerEscritaInventar
             )
         except HomologacaoPosicaoError as exc:
             form.add_error(None, str(exc))
-            return render(request, self.template_name, {
-                'inventario': inventario,
-                'form': form,
-            })
-        messages.success(request, 'Pré-cadastro de posição realizado. Continue a contagem.')
-        return redirect('pocket:contagem', inventario_id=inventario.pk)
+            return _render_precadastro_posicao(
+                request,
+                self.template_name,
+                form,
+                inventario=inventario,
+            )
+        return _render_precadastro_posicao(
+            request,
+            self.template_name,
+            PrecadastroPosicaoForm(),
+            inventario=inventario,
+            sucesso=True,
+        )
 
 
 class PocketCiclicoPrecadastroPosicaoView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, View):
     template_name = 'inventario/pocket/precadastro_posicao_ciclico.html'
+    voltar_url_name = 'pocket:contagem_ciclico'
+    voltar_rotulo = 'Voltar à contagem'
 
     def get(self, request):
         codigo = request.GET.get('codigo', '').strip().upper()
-        return render(request, self.template_name, {
-            'form': PrecadastroPosicaoForm(initial={'codigo': codigo}),
-            'voltar_url': reverse('pocket:contagem_ciclico'),
-            'voltar_rotulo': 'Voltar à contagem',
-        })
+        return _render_precadastro_posicao(
+            request,
+            self.template_name,
+            PrecadastroPosicaoForm(initial={'codigo': codigo}),
+            voltar_url=reverse(self.voltar_url_name),
+            voltar_rotulo=self.voltar_rotulo,
+        )
 
     def post(self, request):
         form = PrecadastroPosicaoForm(request.POST)
         contexto_voltar = {
-            'voltar_url': reverse('pocket:contagem_ciclico'),
-            'voltar_rotulo': 'Voltar à contagem',
+            'voltar_url': reverse(self.voltar_url_name),
+            'voltar_rotulo': self.voltar_rotulo,
         }
         if not form.is_valid():
-            return render(request, self.template_name, {'form': form, **contexto_voltar})
+            return _render_precadastro_posicao(request, self.template_name, form, **contexto_voltar)
         try:
             criar_precadastro_posicao(
                 codigo_completo=form.cleaned_data['codigo'],
@@ -222,6 +264,11 @@ class PocketCiclicoPrecadastroPosicaoView(RequerNaoOperadorMixin, RequerEscritaI
             )
         except HomologacaoPosicaoError as exc:
             form.add_error(None, str(exc))
-            return render(request, self.template_name, {'form': form, **contexto_voltar})
-        messages.success(request, 'Pré-cadastro de posição realizado. Continue a contagem.')
-        return redirect('pocket:contagem_ciclico')
+            return _render_precadastro_posicao(request, self.template_name, form, **contexto_voltar)
+        return _render_precadastro_posicao(
+            request,
+            self.template_name,
+            PrecadastroPosicaoForm(),
+            sucesso=True,
+            **contexto_voltar,
+        )

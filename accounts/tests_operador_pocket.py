@@ -65,8 +65,10 @@ class OperadorPocketAcessoTestCase(ClienteAutenticadoMixin, TestCase):
         response = self.client.post(reverse('pocket:operador_precadastro_posicao'), {
             'codigo': 'A-01-02-03',
             'posicao': 'Posição A-01-02-03',
-        }, follow=True)
+        })
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'pocket-precadastro-posicao-form')
+        self.assertContains(response, 'data-sucesso="1"')
         posicao = Posicao.objects.get(codigo='A-01-02-03')
         self.assertEqual(posicao.posicao, 'Posição A-01-02-03')
         self.assertEqual(posicao.status_homologacao, StatusHomologacao.HOMOLOGADO)

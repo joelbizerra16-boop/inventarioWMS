@@ -19,12 +19,20 @@ class PrecadastroPosicaoOperadorForm(forms.Form):
     codigo = forms.CharField(
         label='Código',
         max_length=50,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'text',
+        }),
     )
     posicao = forms.CharField(
         label='Posição',
         max_length=100,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'text',
+        }),
     )
 
 
@@ -32,12 +40,20 @@ class PrecadastroPosicaoForm(forms.Form):
     codigo = forms.CharField(
         label='Código',
         max_length=50,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'text',
+        }),
     )
     posicao = forms.CharField(
         label='Posição',
         max_length=100,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'text',
+        }),
     )
 
 
