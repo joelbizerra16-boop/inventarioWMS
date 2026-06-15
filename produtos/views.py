@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import redirect, render
@@ -17,10 +19,14 @@ from produtos.forms import ProdutoForm, ProdutoImportacaoForm
 from produtos.models import Produto
 from produtos.services.importacao_produtos import (
     ImportacaoProdutosError,
+    LinhaImportacao,
+    ResultadoPreview,
     importar_dados,
     processar_arquivo,
     serializar_linhas_validas,
 )
+
+logger = logging.getLogger(__name__)
 
 SESSION_PREVIEW_KEY = 'importacao_produtos_preview'
 SESSION_REJEITADOS_KEY = 'importacao_produtos_rejeitados'
@@ -105,7 +111,12 @@ class ProdutoImportarView(RequerEscritaCadastroMixin, View):
     template_name = 'produtos/importar.html'
 
     def get(self, request):
-        self._limpar_sessao(request)
+        preview = self._preview_da_sessao(request)
+        if preview is not None:
+            return render(request, self.template_name, {
+                'etapa': 'preview',
+                'preview': preview,
+            })
         return render(request, self.template_name, {
             'etapa': 'upload',
             'form': ProdutoImportacaoForm(),
@@ -137,7 +148,33 @@ class ProdutoImportarView(RequerEscritaCadastroMixin, View):
                 return 'Arquivo não é XLSX.'
         return str(erros_arquivo[0])
 
+    def _preview_da_sessao(self, request) -> ResultadoPreview | None:
+        linhas_validas = request.session.get(SESSION_PREVIEW_KEY)
+        if not linhas_validas:
+            return None
+
+        rejeitados = request.session.get(SESSION_REJEITADOS_KEY, 0)
+        linhas = [
+            LinhaImportacao(
+                linha=indice + 1,
+                codigo_produto=dados['codigo_produto'],
+                descricao=dados['descricao'],
+                embalagem=dados['embalagem'],
+                setor=dados['setor'],
+                codigo_ean=dados.get('codigo_ean', ''),
+                valida=True,
+            )
+            for indice, dados in enumerate(linhas_validas)
+        ]
+        return ResultadoPreview(
+            total_linhas=len(linhas) + rejeitados,
+            linhas_validas=len(linhas),
+            linhas_invalidas=rejeitados,
+            linhas=linhas,
+        )
+
     def _processar_upload(self, request):
+        self._limpar_sessao(request)
         form = ProdutoImportacaoForm(request.POST, request.FILES)
 
         if not form.is_valid():
@@ -163,8 +200,11 @@ class ProdutoImportarView(RequerEscritaCadastroMixin, View):
                 'form': ProdutoImportacaoForm(),
             })
 
-        request.session[SESSION_PREVIEW_KEY] = serializar_linhas_validas(preview)
+        linhas_sessao = serializar_linhas_validas(preview)
+        request.session[SESSION_PREVIEW_KEY] = linhas_sessao
         request.session[SESSION_REJEITADOS_KEY] = preview.linhas_invalidas
+        request.session.modified = True
+        logger.info('IMPORTACAO PREVIEW registros=%s', len(linhas_sessao))
 
         return render(request, self.template_name, {
             'etapa': 'preview',
@@ -175,11 +215,18 @@ class ProdutoImportarView(RequerEscritaCadastroMixin, View):
         linhas_validas = request.session.get(SESSION_PREVIEW_KEY)
         rejeitados = request.session.get(SESSION_REJEITADOS_KEY, 0)
 
+        logger.info('IMPORTACAO CONFIRMAR registros=%s', len(linhas_validas or []))
+
         if not linhas_validas:
             messages.error(request, 'Nenhum registro encontrado.')
             return redirect('produtos:importar')
 
         resultado = importar_dados(linhas_validas, rejeitados=rejeitados)
+        logger.info(
+            'IMPORTACAO RESULTADO inseridos=%s atualizados=%s',
+            resultado.inseridos,
+            resultado.atualizados,
+        )
         self._limpar_sessao(request)
         registrar_evento(
             'importacao_produtos',

@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 
 from django.db.models import Q
@@ -57,6 +59,8 @@ SESSION_COLUNAS_DETECTADAS_KEY = 'importacao_estoque_sap_colunas_detectadas'
 SESSION_COLUNAS_NORMALIZADAS_KEY = 'importacao_estoque_sap_colunas_normalizadas'
 
 SESSION_ARQUIVO_KEY = 'importacao_estoque_sap_arquivo'
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -120,7 +124,9 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
 
     def get(self, request):
 
-        self._limpar_sessao(request)
+        if request.session.get(SESSION_LINHAS_KEY):
+
+            return self._render_preview(request)
 
         return render(request, self.template_name, {
 
@@ -171,6 +177,8 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
 
 
     def _processar_upload(self, request):
+
+        self._limpar_sessao(request)
 
         form = EstoqueSAPImportacaoForm(request.POST, request.FILES)
 
@@ -235,6 +243,8 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
         request.session[SESSION_ARQUIVO_KEY] = arquivo.name
 
         request.session.modified = True
+
+        logger.info('IMPORTACAO PREVIEW registros=%s', len(request.session[SESSION_LINHAS_KEY]))
 
 
 
@@ -351,6 +361,8 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
 
         arquivo_origem = request.session.get(SESSION_ARQUIVO_KEY, '')
 
+        logger.info('IMPORTACAO CONFIRMAR registros=%s', len(linhas or []))
+
 
 
         if not linhas:
@@ -380,6 +392,16 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
             arquivo_origem=arquivo_origem,
 
             rejeitados=rejeitados,
+
+        )
+
+        logger.info(
+
+            'IMPORTACAO RESULTADO inseridos=%s atualizados=%s',
+
+            resultado.inseridos,
+
+            resultado.atualizados,
 
         )
 
