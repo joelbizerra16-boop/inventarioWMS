@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
 
@@ -6,8 +5,8 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
+        ('accounts', '0004_alter_usuario_perfil_labels'),
         ('inventario', '0019_ciclo_lote_execucao'),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
@@ -24,7 +23,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name='inventarios_finalizados',
-                to=settings.AUTH_USER_MODEL,
+                to='accounts.usuario',
                 verbose_name='usuário de finalização',
             ),
         ),

@@ -165,6 +165,7 @@ class PocketContagemCiclicoForm(forms.Form):
     codigo_produto_lido = forms.CharField(
         label='Produto ou EAN',
         max_length=50,
+        required=False,
         widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input pocket-input--readonly',
             'id': 'pocket-produto-ciclico',
@@ -202,13 +203,13 @@ class PocketContagemCiclicoForm(forms.Form):
         codigo_lido = (cleaned_data.get('codigo_produto_lido') or '').strip()
         if sku_id is None:
             return cleaned_data
-        if not codigo_lido:
-            self.add_error('codigo_produto_lido', 'Informe o produto ou EAN.')
-            return cleaned_data
         sku = CicloInventarioSku.objects.select_related('produto').filter(pk=sku_id).first()
         if sku is None:
             self.add_error('sku_id', 'SKU inválido.')
             return cleaned_data
+        if not codigo_lido:
+            codigo_lido = sku.codigo_produto
+            cleaned_data['codigo_produto_lido'] = codigo_lido
         try:
             validar_codigo_produto_lote_ciclico(sku, codigo_lido)
         except CiclicoError as exc:

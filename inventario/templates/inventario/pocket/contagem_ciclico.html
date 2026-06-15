@@ -60,11 +60,11 @@
 
                 <div class="modal-footer border-0 pt-0 flex-column gap-2">
 
-                    <button type="button" class="btn btn-primary w-100" id="pocket-btn-continuar-inicio">
+                    <a href="{% url 'pocket:selecionar' %}" class="btn btn-primary w-100" id="pocket-btn-continuar-inicio" role="button">
 
                         Continuar
 
-                    </button>
+                    </a>
 
                     <button type="button" class="btn btn-outline-secondary w-100 d-none" id="pocket-btn-encerrar-ciclo">
 
@@ -809,24 +809,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     var btnEncerrar = document.getElementById('pocket-btn-encerrar-ciclo');
-
-    var btnContinuar = document.getElementById('pocket-btn-continuar-inicio');
-
-    var urlInicioPocket = '{% url "pocket:selecionar" %}';
-
-
-
-    if (btnContinuar) {
-
-        btnContinuar.addEventListener('click', function () {
-
-            global.location.href = urlInicioPocket;
-
-        });
-
-    }
-
-
 
     if (btnEncerrar) {
 

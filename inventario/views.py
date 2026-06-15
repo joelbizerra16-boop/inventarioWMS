@@ -1,7 +1,7 @@
 from django.contrib import messages
 from decimal import Decimal, InvalidOperation
 from django.db.models import Count, Q
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseNotFound, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import formats, timezone
@@ -18,6 +18,7 @@ from accounts.mixins import (
 from core.logging_auditoria import registrar_evento
 from core.mixins import ExclusaoSeguraMixin
 from accounts.services.perfil import (
+    obter_usuario_operacional,
     usuario_pode_escrever_cadastros,
     usuario_pode_escrever_inventario,
 )
@@ -94,6 +95,7 @@ from inventario.services.ciclico_historico import (
     obter_auditoria_historico_ciclo,
     obter_detalhe_historico_ciclo,
 )
+from inventario.services.ciclico_exportacao import exportar_ciclo_excel
 from posicoes.models import Posicao
 
 
@@ -243,7 +245,7 @@ class InventarioFinalizarView(RequerNaoOperadorMixin, RequerEscritaInventarioMix
         inventario.save(update_fields=['status'])
 
         from inventario.services.inventario_snapshot import congelar_snapshot_inventario
-        congelar_snapshot_inventario(inventario, request.user)
+        congelar_snapshot_inventario(inventario, obter_usuario_operacional(request.user))
 
         try:
             resultado = publicar_estoque_fisico(inventario)
@@ -503,11 +505,12 @@ class AprovacaoView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, View):
         status_aprovacao_label = None
 
         if inventario_id.isdigit():
-            inventario_selecionado = get_object_or_404(
-                Inventario,
+            inventario_selecionado = Inventario.objects.filter(
                 pk=int(inventario_id),
                 status=Inventario.Status.FINALIZADO,
-            )
+            ).first()
+            if inventario_selecionado is None:
+                return HttpResponseNotFound()
             resultado = consultar_aprovacao(
                 inventario_id=inventario_selecionado.pk,
                 termo_busca=termo_busca,

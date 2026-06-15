@@ -38,11 +38,15 @@ from inventario.services.ciclico import (
 
     _obter_skus_lote_sessao,
 
+    _posicao_generica_sem_contagem,
+
     _sku_esta_no_lote_ativo,
 
     _sku_para_dto,
 
     calcular_resumo_ciclo,
+
+    CODIGO_POSICAO_GENERICO,
 
     encerrar_ciclo_automatico,
 
@@ -166,15 +170,34 @@ def calcular_indicadores_pocket_operacional(sku: CicloInventarioSku) -> dict[str
     return payload
 
 
-def _deve_finalizar_sku_pocket_apos_contagem(sku: CicloInventarioSku) -> bool:
-    """Auto-finaliza apenas quando o saldo bipado atinge o SAP (conciliação)."""
+def _posicoes_planejadas_sku_contagem(sku: CicloInventarioSku) -> list:
+    return [
+        item for item in sku.posicoes.all()
+        if item.codigo_posicao != CODIGO_POSICAO_GENERICO
+        and not _posicao_generica_sem_contagem(item)
+    ]
+
+
+def _deve_finalizar_sku_pocket_apos_contagem(
+    sku: CicloInventarioSku,
+    request=None,
+) -> bool:
+    """Auto-finaliza quando o saldo atinge o SAP ou, sem confirmação de produto no POST,
+    quando todas as posições planejadas foram contadas."""
     if sku.status_contagem in StatusItemCiclico.FINALIZADOS:
         return False
     if sku.status_contagem == StatusItemCiclico.DIVERGENTE:
         return False
     fisico = _decimal_pocket(sku.quantidade_fisica)
     sap = _decimal_pocket(sku.quantidade_sap)
-    return fisico == sap
+    if fisico == sap:
+        return True
+    if request is not None and (request.POST.get('codigo_produto_lido') or '').strip():
+        return False
+    posicoes = _posicoes_planejadas_sku_contagem(sku)
+    if not posicoes:
+        return False
+    return all(item.quantidade_fisica is not None for item in posicoes)
 
 
 def _tentar_finalizacao_automatica_pocket(
@@ -182,9 +205,10 @@ def _tentar_finalizacao_automatica_pocket(
     sku: CicloInventarioSku,
     status_anterior: str,
     usuario,
+    request=None,
 ) -> CicloInventario | None:
     sku.refresh_from_db()
-    if not _deve_finalizar_sku_pocket_apos_contagem(sku):
+    if not _deve_finalizar_sku_pocket_apos_contagem(sku, request=request):
         return None
     finalizar_contagem_sku_pocket(sku, usuario)
     sku.refresh_from_db()
@@ -972,6 +996,7 @@ def registrar_contagem_pocket_ciclico_por_sku(
         sku,
         status_anterior,
         usuario,
+        request=request,
     )
 
     sku.refresh_from_db()
