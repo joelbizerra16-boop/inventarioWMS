@@ -14,6 +14,7 @@ from django.utils import timezone
 
 
 
+from core.services.perf_diagnostico import medir_etapa
 from inventario.models import CicloAuditoriaHistorico, CicloInventario, CicloInventarioSku
 from inventario.models_operacional import InventarioLock
 from inventario.services.locks import LockError, adquirir_lock, liberar_lock, obter_dispositivo, obter_session_key
@@ -171,11 +172,12 @@ def calcular_indicadores_pocket_operacional(sku: CicloInventarioSku) -> dict[str
 
 
 def _posicoes_planejadas_sku_contagem(sku: CicloInventarioSku) -> list:
-    return [
-        item for item in sku.posicoes.all()
-        if item.codigo_posicao != CODIGO_POSICAO_GENERICO
-        and not _posicao_generica_sem_contagem(item)
-    ]
+    with medir_etapa('pocket._posicoes_planejadas_sku_contagem'):
+        return [
+            item for item in sku.posicoes.all()
+            if item.codigo_posicao != CODIGO_POSICAO_GENERICO
+            and not _posicao_generica_sem_contagem(item)
+        ]
 
 
 def _deve_finalizar_sku_pocket_apos_contagem(
@@ -184,20 +186,21 @@ def _deve_finalizar_sku_pocket_apos_contagem(
 ) -> bool:
     """Auto-finaliza quando o saldo atinge o SAP ou, sem confirmação de produto no POST,
     quando todas as posições planejadas foram contadas."""
-    if sku.status_contagem in StatusItemCiclico.FINALIZADOS:
-        return False
-    if sku.status_contagem == StatusItemCiclico.DIVERGENTE:
-        return False
-    fisico = _decimal_pocket(sku.quantidade_fisica)
-    sap = _decimal_pocket(sku.quantidade_sap)
-    if fisico == sap:
-        return True
-    if request is not None and (request.POST.get('codigo_produto_lido') or '').strip():
-        return False
-    posicoes = _posicoes_planejadas_sku_contagem(sku)
-    if not posicoes:
-        return False
-    return all(item.quantidade_fisica is not None for item in posicoes)
+    with medir_etapa('pocket._deve_finalizar_sku_pocket_apos_contagem'):
+        if sku.status_contagem in StatusItemCiclico.FINALIZADOS:
+            return False
+        if sku.status_contagem == StatusItemCiclico.DIVERGENTE:
+            return False
+        fisico = _decimal_pocket(sku.quantidade_fisica)
+        sap = _decimal_pocket(sku.quantidade_sap)
+        if fisico == sap:
+            return True
+        if request is not None and (request.POST.get('codigo_produto_lido') or '').strip():
+            return False
+        posicoes = _posicoes_planejadas_sku_contagem(sku)
+        if not posicoes:
+            return False
+        return all(item.quantidade_fisica is not None for item in posicoes)
 
 
 def _tentar_finalizacao_automatica_pocket(
@@ -207,12 +210,13 @@ def _tentar_finalizacao_automatica_pocket(
     usuario,
     request=None,
 ) -> CicloInventario | None:
-    sku.refresh_from_db()
-    if not _deve_finalizar_sku_pocket_apos_contagem(sku, request=request):
-        return None
-    finalizar_contagem_sku_pocket(sku, usuario)
-    sku.refresh_from_db()
-    return _processar_pos_contagem_pocket(session, sku, status_anterior, usuario)
+    with medir_etapa('pocket._tentar_finalizacao_automatica_pocket'):
+        sku.refresh_from_db()
+        if not _deve_finalizar_sku_pocket_apos_contagem(sku, request=request):
+            return None
+        finalizar_contagem_sku_pocket(sku, usuario)
+        sku.refresh_from_db()
+        return _processar_pos_contagem_pocket(session, sku, status_anterior, usuario)
 
 
 def calcular_indicadores_pocket_contagem(

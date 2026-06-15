@@ -1,4 +1,6 @@
 import logging
+import json
+import time
 
 from django.contrib import messages
 from django.db.models import Q
@@ -14,6 +16,7 @@ from accounts.mixins import (
     RequerEscritaCadastroMixin,
 )
 from core.logging_auditoria import registrar_evento
+from core.services.perf_diagnostico import medir_etapa
 from core.mixins import ExclusaoSeguraMixin
 from produtos.forms import ProdutoForm, ProdutoImportacaoForm
 from produtos.models import Produto
@@ -111,29 +114,55 @@ class ProdutoImportarView(RequerEscritaCadastroMixin, View):
     template_name = 'produtos/importar.html'
 
     def get(self, request):
-        preview = self._preview_da_sessao(request)
+        inicio = time.perf_counter()
+        with medir_etapa('produtos.importar.get.preview_da_sessao'):
+            preview = self._preview_da_sessao(request)
         if preview is not None:
-            return render(request, self.template_name, {
-                'etapa': 'preview',
-                'preview': preview,
+            with medir_etapa('produtos.importar.get.render_preview'):
+                resposta = render(request, self.template_name, {
+                    'etapa': 'preview',
+                    'preview': preview,
+                })
+            logger.info(
+                'IMPORTACAO_PRODUTOS_GET_PREVIEW html_bytes=%s linhas=%s',
+                len(resposta.content),
+                len(getattr(preview, 'linhas', [])),
+            )
+            fim = time.perf_counter()
+            logger.info('VIEW=%s TEMPO=%.2fs', 'ProdutoImportarView.get', fim - inicio)
+            return resposta
+
+        with medir_etapa('produtos.importar.get.render_upload'):
+            resposta = render(request, self.template_name, {
+                'etapa': 'upload',
+                'form': ProdutoImportacaoForm(),
             })
-        return render(request, self.template_name, {
-            'etapa': 'upload',
-            'form': ProdutoImportacaoForm(),
-        })
+        fim = time.perf_counter()
+        logger.info('VIEW=%s TEMPO=%.2fs', 'ProdutoImportarView.get', fim - inicio)
+        return resposta
 
     def post(self, request):
+        inicio = time.perf_counter()
         acao = request.POST.get('acao')
 
         if acao == 'cancelar':
             self._limpar_sessao(request)
             messages.info(request, 'Importação cancelada.')
-            return redirect('produtos:lista')
+            resposta = redirect('produtos:lista')
+            fim = time.perf_counter()
+            logger.info('VIEW=%s TEMPO=%.2fs', 'ProdutoImportarView.post', fim - inicio)
+            return resposta
 
         if acao == 'confirmar':
-            return self._confirmar_importacao(request)
+            resposta = self._confirmar_importacao(request)
+            fim = time.perf_counter()
+            logger.info('VIEW=%s TEMPO=%.2fs', 'ProdutoImportarView.post', fim - inicio)
+            return resposta
 
-        return self._processar_upload(request)
+        resposta = self._processar_upload(request)
+        fim = time.perf_counter()
+        logger.info('VIEW=%s TEMPO=%.2fs', 'ProdutoImportarView.post', fim - inicio)
+        return resposta
 
     def _mensagem_erro_formulario(self, form: ProdutoImportacaoForm) -> str:
         erros_arquivo = form.errors.get('arquivo')
@@ -152,6 +181,13 @@ class ProdutoImportarView(RequerEscritaCadastroMixin, View):
         linhas_validas = request.session.get(SESSION_PREVIEW_KEY)
         if not linhas_validas:
             return None
+
+        tamanho_sessao = len(json.dumps(linhas_validas, ensure_ascii=False).encode('utf-8'))
+        logger.info(
+            'IMPORTACAO_PRODUTOS_SESSAO linhas=%s sessao_bytes=%s',
+            len(linhas_validas),
+            tamanho_sessao,
+        )
 
         rejeitados = request.session.get(SESSION_REJEITADOS_KEY, 0)
         linhas = [
@@ -185,7 +221,8 @@ class ProdutoImportarView(RequerEscritaCadastroMixin, View):
             })
 
         try:
-            preview = processar_arquivo(form.cleaned_data['arquivo'])
+            with medir_etapa('produtos.importar.post.processar_arquivo'):
+                preview = processar_arquivo(form.cleaned_data['arquivo'])
         except ImportacaoProdutosError as exc:
             messages.error(request, exc.mensagem)
             return render(request, self.template_name, {
@@ -200,16 +237,25 @@ class ProdutoImportarView(RequerEscritaCadastroMixin, View):
                 'form': ProdutoImportacaoForm(),
             })
 
-        linhas_sessao = serializar_linhas_validas(preview)
+        with medir_etapa('produtos.importar.post.serializar_linhas_validas'):
+            linhas_sessao = serializar_linhas_validas(preview)
         request.session[SESSION_PREVIEW_KEY] = linhas_sessao
         request.session[SESSION_REJEITADOS_KEY] = preview.linhas_invalidas
         request.session.modified = True
+        logger.info(
+            'IMPORTACAO_PRODUTOS_PREVIEW sessao_bytes=%s rejeitados=%s',
+            len(json.dumps(linhas_sessao, ensure_ascii=False).encode('utf-8')),
+            preview.linhas_invalidas,
+        )
         logger.info('IMPORTACAO PREVIEW registros=%s', len(linhas_sessao))
 
-        return render(request, self.template_name, {
-            'etapa': 'preview',
-            'preview': preview,
-        })
+        with medir_etapa('produtos.importar.post.render_preview'):
+            resposta = render(request, self.template_name, {
+                'etapa': 'preview',
+                'preview': preview,
+            })
+        logger.info('IMPORTACAO_PRODUTOS_PREVIEW html_bytes=%s', len(resposta.content))
+        return resposta
 
     def _confirmar_importacao(self, request):
         linhas_validas = request.session.get(SESSION_PREVIEW_KEY)

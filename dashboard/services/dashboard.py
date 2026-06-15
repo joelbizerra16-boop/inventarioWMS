@@ -6,6 +6,7 @@ from django.db.models import Count
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 
+from core.services.perf_diagnostico import medir_etapa
 from estoque_fisico.models import EstoqueFisico
 from estoque_sap.models import EstoqueSAP
 from inventario.models import CicloInventario, Inventario, InventarioItem
@@ -230,7 +231,8 @@ def _montar_graficos_ciclico() -> tuple[list[GraficoDashboard], int, Decimal | N
             ),
         ], 0, None
 
-    resumo = calcular_resumo_ciclo(ciclo)
+    with medir_etapa('dashboard._montar_graficos_ciclico.calcular_resumo_ciclo'):
+        resumo = calcular_resumo_ciclo(ciclo)
 
     status_ciclos_qs = (
         CicloInventario.objects.values('status_ciclo')
@@ -331,37 +333,40 @@ def _montar_graficos_ciclico() -> tuple[list[GraficoDashboard], int, Decimal | N
 
 
 def obter_indicadores_dashboard() -> IndicadoresDashboard:
-    total_produtos = Produto.objects.count()
-    total_posicoes = Posicao.objects.count()
+    with medir_etapa('dashboard.obter_indicadores_dashboard.contadores_basicos'):
+        total_produtos = Produto.objects.count()
+        total_posicoes = Posicao.objects.count()
+        produtos_estoque_sap = (
+            EstoqueSAP.objects.values('produto_id').distinct().count()
+        )
+        produtos_estoque_fisico = (
+            EstoqueFisico.objects.values('produto_id').distinct().count()
+        )
+        inventarios_abertos = Inventario.objects.filter(
+            status=Inventario.Status.ABERTO,
+        ).count()
+        inventarios_em_andamento = Inventario.objects.filter(
+            status=Inventario.Status.EM_ANDAMENTO,
+        ).count()
+        inventarios_finalizados = Inventario.objects.filter(
+            status=Inventario.Status.FINALIZADO,
+        ).count()
 
-    produtos_estoque_sap = (
-        EstoqueSAP.objects.values('produto_id').distinct().count()
-    )
-    produtos_estoque_fisico = (
-        EstoqueFisico.objects.values('produto_id').distinct().count()
-    )
+    with medir_etapa('dashboard.obter_indicadores_dashboard.confronto_ultimo_inventario'):
+        produtos_corretos, produtos_divergentes, acuracidade = (
+            _obter_confronto_ultimo_inventario_finalizado()
+        )
+    with medir_etapa('dashboard.obter_indicadores_dashboard.obter_resumo_ciclico'):
+        ciclico = obter_indicadores_ciclico_dashboard()
+    with medir_etapa('dashboard.obter_indicadores_dashboard.obter_resumo_ciclico_graficos'):
+        graficos_ciclico, ciclico_divergentes, ciclico_acuracidade = _montar_graficos_ciclico()
 
-    inventarios_abertos = Inventario.objects.filter(
-        status=Inventario.Status.ABERTO,
-    ).count()
-    inventarios_em_andamento = Inventario.objects.filter(
-        status=Inventario.Status.EM_ANDAMENTO,
-    ).count()
-    inventarios_finalizados = Inventario.objects.filter(
-        status=Inventario.Status.FINALIZADO,
-    ).count()
-
-    produtos_corretos, produtos_divergentes, acuracidade = (
-        _obter_confronto_ultimo_inventario_finalizado()
-    )
-    ciclico = obter_indicadores_ciclico_dashboard()
-    graficos_ciclico, ciclico_divergentes, ciclico_acuracidade = _montar_graficos_ciclico()
-
-    graficos_geral = _montar_graficos_geral(
-        inventarios_abertos,
-        inventarios_em_andamento,
-        inventarios_finalizados,
-    )
+    with medir_etapa('dashboard.obter_indicadores_dashboard.graficos_geral'):
+        graficos_geral = _montar_graficos_geral(
+            inventarios_abertos,
+            inventarios_em_andamento,
+            inventarios_finalizados,
+        )
 
     return IndicadoresDashboard(
         total_produtos=total_produtos,

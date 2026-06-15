@@ -1,15 +1,19 @@
 import logging
+import time
 from urllib.parse import urlparse
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError
+from django.db import connection
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponseServerError, JsonResponse
 from django.shortcuts import redirect
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from accounts.services.perfil import usuario_e_operador_pocket
+from core.services.perf_diagnostico import log_resumo_view
 from core.services.exclusao import (
     MENSAGEM_ERRO_INESPERADO,
     MENSAGEM_NAO_ENCONTRADO,
@@ -18,6 +22,32 @@ from core.services.exclusao import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class DiagnosticoPerformanceMiddleware:
+    """Medição temporária de performance por requisição HTTP."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        inicio = time.perf_counter()
+        force_debug_anterior = connection.force_debug_cursor
+        connection.force_debug_cursor = True
+        with CaptureQueriesContext(connection) as contexto_queries:
+            response = self.get_response(request)
+        connection.force_debug_cursor = force_debug_anterior
+
+        nome_view = getattr(getattr(request, 'resolver_match', None), 'view_name', None)
+        nome_view = nome_view or request.path
+        fim = time.perf_counter()
+
+        log_resumo_view(
+            nome_view=nome_view,
+            captured_queries=list(contexto_queries.captured_queries),
+            duracao_segundos=fim - inicio,
+        )
+        return response
 
 
 class TratamentoExcecaoUsuarioMiddleware:

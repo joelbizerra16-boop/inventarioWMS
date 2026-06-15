@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 
 from accounts.models import Usuario
+from core.services.perf_diagnostico import medir_etapa
 from posicoes.models import Posicao
 from produtos.models import Produto
 
@@ -388,19 +389,26 @@ class CicloInventarioSku(models.Model):
     def __str__(self):
         return self.codigo_produto
 
+    def _posicoes_para_resumo(self):
+        posicoes_prefetch = getattr(self, '_prefetched_objects_cache', {}).get('posicoes')
+        if posicoes_prefetch is not None:
+            return posicoes_prefetch
+        return self.posicoes.select_related(
+            'usuario_contagem',
+            'usuario_contagem__perfil_operacional',
+        )
+
     @property
     def usuarios_contagem_nomes(self) -> list[str]:
         nomes = []
         vistos = set()
-        for posicao in self.posicoes.select_related(
-            'usuario_contagem',
-            'usuario_contagem__perfil_operacional',
-        ):
-            nome = posicao.usuario_contagem_nome
-            if nome != 'Não informado' and nome not in vistos:
-                vistos.add(nome)
-                nomes.append(nome)
-        return nomes
+        with medir_etapa('inventario.CicloInventarioSku.usuarios_contagem_nomes'):
+            for posicao in self._posicoes_para_resumo():
+                nome = posicao.usuario_contagem_nome
+                if nome != 'Não informado' and nome not in vistos:
+                    vistos.add(nome)
+                    nomes.append(nome)
+            return nomes
 
 
 class CicloInventarioItem(models.Model):

@@ -73,6 +73,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+if os.environ.get('PERF_DIAGNOSTICO', 'False').lower() in ('true', '1', 'yes'):
+    MIDDLEWARE.insert(0, 'core.middleware.DiagnosticoPerformanceMiddleware')
+
 ROOT_URLCONF = 'core.urls'
 
 TEMPLATES = [
@@ -220,6 +223,11 @@ LOGGING = {
             'propagate': False,
         },
         'importacao_produtos': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'perf.diagnostico': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,

@@ -3,9 +3,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from core.logging_auditoria import registrar_evento
+from core.services.perf_diagnostico import medir_etapa
 
 from estoque_fisico.models import EstoqueFisico
 from estoque_sap.models import EstoqueSAP
@@ -459,7 +461,9 @@ def _obter_ultima_contagem_sku_info(
 ) -> tuple[str, str, str, datetime | None, str]:
     melhor_data = None
     melhor_item = None
-    for posicao in sku.posicoes.all():
+    posicoes_prefetch = getattr(sku, '_prefetched_objects_cache', {}).get('posicoes')
+    posicoes = posicoes_prefetch if posicoes_prefetch is not None else sku.posicoes.all()
+    for posicao in posicoes:
         if posicao.data_contagem is None:
             continue
         if melhor_data is None or posicao.data_contagem > melhor_data:
@@ -1670,33 +1674,34 @@ def obter_ciclo_atual(session=None) -> CicloInfo | None:
 
 
 def calcular_resumo_skus(skus: list[CicloInventarioSku]) -> CicloResumo:
-    ativos = [sku for sku in skus if sku.status_contagem != StatusItemCiclico.EXCLUIDO]
-    total_skus = len(ativos)
-    pendentes = sum(1 for sku in ativos if sku.status_contagem == StatusItemCiclico.PENDENTE)
-    divergentes = sum(
-        1 for sku in ativos
-        if sku.status_contagem in (
-            StatusItemCiclico.DIVERGENTE,
-            StatusItemCiclico.RECONTAGEM,
+    with medir_etapa('ciclico.calcular_resumo_skus.contadores'):
+        ativos = [sku for sku in skus if sku.status_contagem != StatusItemCiclico.EXCLUIDO]
+        total_skus = len(ativos)
+        pendentes = sum(1 for sku in ativos if sku.status_contagem == StatusItemCiclico.PENDENTE)
+        divergentes = sum(
+            1 for sku in ativos
+            if sku.status_contagem in (
+                StatusItemCiclico.DIVERGENTE,
+                StatusItemCiclico.RECONTAGEM,
+            )
         )
-    )
-    validados = sum(
-        1 for sku in ativos
-        if sku.status_contagem in (
-            StatusItemCiclico.VALIDADO,
-            StatusItemCiclico.VALIDADO_DIVERGENCIA,
+        validados = sum(
+            1 for sku in ativos
+            if sku.status_contagem in (
+                StatusItemCiclico.VALIDADO,
+                StatusItemCiclico.VALIDADO_DIVERGENCIA,
+            )
         )
-    )
-    excluidos = sum(
-        1 for sku in skus if sku.status_contagem == StatusItemCiclico.EXCLUIDO
-    )
-    contados = sum(
-        1 for sku in ativos
-        if sku.status_contagem not in (
-            StatusItemCiclico.PENDENTE,
-            StatusItemCiclico.EXCLUIDO,
+        excluidos = sum(
+            1 for sku in skus if sku.status_contagem == StatusItemCiclico.EXCLUIDO
         )
-    )
+        contados = sum(
+            1 for sku in ativos
+            if sku.status_contagem not in (
+                StatusItemCiclico.PENDENTE,
+                StatusItemCiclico.EXCLUIDO,
+            )
+        )
 
     if total_skus == 0:
         percentual = Decimal('0')
@@ -1712,36 +1717,37 @@ def calcular_resumo_skus(skus: list[CicloInventarioSku]) -> CicloResumo:
     por_origem: dict[str, int] = {}
     por_canal_cosan = por_canal_brida = 0
 
-    for sku in ativos:
-        embalagem = sku.embalagem or 'Sem embalagem'
-        por_embalagem[embalagem] = por_embalagem.get(embalagem, 0) + 1
-        setor = sku.setor or 'Sem setor'
-        por_setor[setor] = por_setor.get(setor, 0) + 1
-        cosan, brida = _obter_canais_sku(sku)
-        if cosan and cosan > 0:
-            por_canal_cosan += 1
-        if brida and brida > 0:
-            por_canal_brida += 1
+    with medir_etapa('ciclico.calcular_resumo_skus.loop_skus'):
+        for sku in ativos:
+            embalagem = sku.embalagem or 'Sem embalagem'
+            por_embalagem[embalagem] = por_embalagem.get(embalagem, 0) + 1
+            setor = sku.setor or 'Sem setor'
+            por_setor[setor] = por_setor.get(setor, 0) + 1
+            cosan, brida = _obter_canais_sku(sku)
+            if cosan and cosan > 0:
+                por_canal_cosan += 1
+            if brida and brida > 0:
+                por_canal_brida += 1
 
-        for nome in sku.usuarios_contagem_nomes:
-            if nome != 'Não informado':
-                por_usuario[nome] = por_usuario.get(nome, 0) + 1
-        _, origem_label, _, _, _ = _obter_ultima_contagem_sku_info(sku)
-        if origem_label:
-            por_origem[origem_label] = por_origem.get(origem_label, 0) + 1
+            for nome in sku.usuarios_contagem_nomes:
+                if nome != 'Não informado':
+                    por_usuario[nome] = por_usuario.get(nome, 0) + 1
+            _, origem_label, _, _, _ = _obter_ultima_contagem_sku_info(sku)
+            if origem_label:
+                por_origem[origem_label] = por_origem.get(origem_label, 0) + 1
 
-        if sku.quantidade_fisica is None:
-            continue
-        _, indicador, _ = _calcular_indicador_confronto(
-            sku.quantidade_fisica,
-            sku.quantidade_sap,
-        )
-        if indicador == IndicadorConfronto.VERDE:
-            conciliados += 1
-        elif indicador == IndicadorConfronto.LARANJA:
-            acima += 1
-        elif indicador == IndicadorConfronto.VERMELHO:
-            abaixo += 1
+            if sku.quantidade_fisica is None:
+                continue
+            _, indicador, _ = _calcular_indicador_confronto(
+                sku.quantidade_fisica,
+                sku.quantidade_sap,
+            )
+            if indicador == IndicadorConfronto.VERDE:
+                conciliados += 1
+            elif indicador == IndicadorConfronto.LARANJA:
+                acima += 1
+            elif indicador == IndicadorConfronto.VERMELHO:
+                abaixo += 1
 
     return CicloResumo(
         total_skus=total_skus,
@@ -1769,15 +1775,27 @@ def calcular_resumo_skus(skus: list[CicloInventarioSku]) -> CicloResumo:
 
 
 def calcular_resumo_ciclo(ciclo: CicloInventario) -> CicloResumo:
-    skus = list(CicloInventarioSku.objects.filter(ciclo=ciclo))
-    return calcular_resumo_skus(skus)
+    with medir_etapa('ciclico.calcular_resumo_ciclo.buscar_skus'):
+        posicoes_qs = CicloInventarioItem.objects.select_related(
+            'usuario_contagem',
+            'usuario_contagem__perfil_operacional',
+        )
+        skus = list(
+            CicloInventarioSku.objects.filter(ciclo=ciclo).prefetch_related(
+                Prefetch('posicoes', queryset=posicoes_qs),
+            ),
+        )
+    with medir_etapa('ciclico.calcular_resumo_ciclo.calcular_resumo_skus'):
+        return calcular_resumo_skus(skus)
 
 
 def obter_resumo_ciclico(ciclo_id: int | None = None) -> CicloResumo:
-    ciclo = obter_ciclo_consulta(ciclo_id)
+    with medir_etapa('ciclico.obter_resumo_ciclico.obter_ciclo_consulta'):
+        ciclo = obter_ciclo_consulta(ciclo_id)
     if ciclo is None:
         return CicloResumo(0, 0, 0, 0, 0, 0, Decimal('0'))
-    return calcular_resumo_ciclo(ciclo)
+    with medir_etapa('ciclico.obter_resumo_ciclico.calcular_resumo_ciclo'):
+        return calcular_resumo_ciclo(ciclo)
 
 
 def obter_indicadores_ciclico_dashboard() -> IndicadoresCiclicoDashboard:
