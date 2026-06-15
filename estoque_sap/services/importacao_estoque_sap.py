@@ -16,6 +16,8 @@ from core.services.importacao_excel import (
 from estoque_sap.models import EstoqueSAP
 from produtos.models import Produto
 
+BATCH_SIZE_IMPORTACAO = 500
+
 COLUNAS_OBRIGATORIAS = [
     'codigo_produto',
     'descricao',
@@ -445,33 +447,68 @@ def importar_dados(
     arquivo_origem: str,
     rejeitados: int = 0,
 ) -> ResultadoImportacao:
+    if not linhas_validas:
+        return ResultadoImportacao(inseridos=0, atualizados=0, rejeitados=rejeitados)
+
+    agora = timezone.now()
     inseridos = 0
     atualizados = 0
-    agora = timezone.now()
     produto_ids: list[int] = []
 
-    for dados in linhas_validas:
-        produto = Produto.objects.get(codigo_produto=dados['codigo_produto'])
-        produto_ids.append(produto.pk)
+    codigos_unicos = {dados['codigo_produto'] for dados in linhas_validas}
+    produtos_por_codigo = {
+        produto.codigo_produto: produto
+        for produto in Produto.objects.filter(codigo_produto__in=codigos_unicos)
+    }
+    estoques_existentes = {
+        estoque.produto_id: estoque
+        for estoque in EstoqueSAP.objects.filter(
+            produto_id__in=[produto.pk for produto in produtos_por_codigo.values()],
+        )
+    }
 
-        defaults = {
+    campos_atualizacao = ['arquivo_origem', 'data_importacao', 'total', *CAMPOS_CANAIS]
+    criar: list[EstoqueSAP] = []
+    criados_no_lote: dict[int, EstoqueSAP] = {}
+    atualizar: dict[int, EstoqueSAP] = {}
+
+    for dados in linhas_validas:
+        produto = produtos_por_codigo.get(dados['codigo_produto'])
+        if produto is None:
+            continue
+
+        produto_ids.append(produto.pk)
+        valores = {
             'arquivo_origem': arquivo_origem,
             'data_importacao': agora,
             'total': Decimal(dados['total']),
         }
-
         for campo in CAMPOS_CANAIS:
-            defaults[campo] = Decimal(dados[campo])
+            valores[campo] = Decimal(dados[campo])
 
-        estoque, criado = EstoqueSAP.objects.update_or_create(
-            produto=produto,
-            defaults=defaults,
-        )
+        estoque = estoques_existentes.get(produto.pk) or criados_no_lote.get(produto.pk)
 
-        if criado:
+        if estoque is None:
+            estoque = EstoqueSAP(produto=produto, **valores)
+            criar.append(estoque)
+            criados_no_lote[produto.pk] = estoque
             inseridos += 1
-        else:
-            atualizados += 1
+            continue
+
+        for campo, valor in valores.items():
+            setattr(estoque, campo, valor)
+        if produto.pk in estoques_existentes:
+            atualizar[produto.pk] = estoque
+        atualizados += 1
+
+    if criar:
+        EstoqueSAP.objects.bulk_create(criar, batch_size=BATCH_SIZE_IMPORTACAO)
+    if atualizar:
+        EstoqueSAP.objects.bulk_update(
+            list(atualizar.values()),
+            campos_atualizacao,
+            batch_size=BATCH_SIZE_IMPORTACAO,
+        )
 
     from inventario.services.ciclico import sincronizar_sap_ciclo_ativo
 

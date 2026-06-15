@@ -6,10 +6,13 @@ from pathlib import Path
 
 import pandas as pd
 from django.db import transaction
+from django.utils import timezone
 
 from produtos.models import Produto
 
 logger = logging.getLogger(__name__)
+
+BATCH_SIZE_IMPORTACAO = 500
 
 COLUNAS_OBRIGATORIAS = [
     'codigo_produto',
@@ -358,34 +361,60 @@ def serializar_linhas_validas(preview: ResultadoPreview) -> list[dict]:
 
 @transaction.atomic
 def importar_dados(linhas_validas: list[dict], rejeitados: int = 0) -> ResultadoImportacao:
+    if not linhas_validas:
+        return ResultadoImportacao(inseridos=0, atualizados=0, rejeitados=rejeitados)
+
+    agora = timezone.now()
     inseridos = 0
     atualizados = 0
 
+    codigos_unicos = {dados['codigo_produto'] for dados in linhas_validas}
+    existentes = {
+        produto.codigo_produto: produto
+        for produto in Produto.objects.filter(codigo_produto__in=codigos_unicos)
+    }
+
+    criar: list[Produto] = []
+    criados_no_lote: dict[str, Produto] = {}
+    atualizar: dict[str, Produto] = {}
+
     for dados in linhas_validas:
+        codigo = dados['codigo_produto']
         codigo_ean = _normalizar_valor_ean(dados.get('codigo_ean')) or None
-        produto, criado = Produto.objects.update_or_create(
-            codigo_produto=dados['codigo_produto'],
-            defaults={
-                'descricao': dados['descricao'],
-                'embalagem': dados['embalagem'],
-                'setor': dados['setor'],
-                'codigo_ean': codigo_ean,
-            },
-        )
-        produto.refresh_from_db()
+        produto = existentes.get(codigo) or criados_no_lote.get(codigo)
 
-        if dados['codigo_produto'] == '110267':
-            logger.info(
-                '[importacao_produtos] Produto: %s EAN lido: %s EAN salvo: %s',
-                dados['codigo_produto'],
-                dados.get('codigo_ean') or '—',
-                produto.codigo_ean or '—',
+        if produto is None:
+            produto = Produto(
+                codigo_produto=codigo,
+                descricao=dados['descricao'],
+                embalagem=dados['embalagem'],
+                setor=dados['setor'],
+                codigo_ean=codigo_ean,
+                data_criacao=agora,
+                data_atualizacao=agora,
             )
-
-        if criado:
+            criar.append(produto)
+            criados_no_lote[codigo] = produto
             inseridos += 1
-        else:
-            atualizados += 1
+            continue
+
+        produto.descricao = dados['descricao']
+        produto.embalagem = dados['embalagem']
+        produto.setor = dados['setor']
+        produto.codigo_ean = codigo_ean
+        produto.data_atualizacao = agora
+        if codigo in existentes:
+            atualizar[codigo] = produto
+        atualizados += 1
+
+    if criar:
+        Produto.objects.bulk_create(criar, batch_size=BATCH_SIZE_IMPORTACAO)
+    if atualizar:
+        Produto.objects.bulk_update(
+            list(atualizar.values()),
+            ['descricao', 'embalagem', 'setor', 'codigo_ean', 'data_atualizacao'],
+            batch_size=BATCH_SIZE_IMPORTACAO,
+        )
 
     return ResultadoImportacao(
         inseridos=inseridos,
