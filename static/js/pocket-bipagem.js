@@ -8,8 +8,31 @@
     var toastTimer = null;
     var TOAST_MS = 2600;
 
+    function opcoesFetchPocket(csrfToken) {
+        return {
+            credentials: 'same-origin',
+            redirect: 'manual',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken || '',
+            },
+        };
+    }
+
     function parsearRespostaPocket(res) {
+        console.info('[PocketBipagem] resposta HTTP', {
+            status: res.status,
+            redirected: res.redirected,
+            url: res.url,
+            type: res.type,
+            contentType: res.headers.get('content-type'),
+        });
         var contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (res.type === 'opaqueredirect' || res.status === 0) {
+            return Promise.reject(new Error(
+                'Redirect opaco após POST (status=' + res.status + ' url=' + res.url + ')'
+            ));
+        }
         if (res.redirected) {
             return Promise.reject(new Error(
                 'Redirect inesperado após POST (status=' + res.status + ' url=' + res.url + ')'
@@ -17,7 +40,10 @@
         }
         if (res.status === 301 || res.status === 302 || res.status === 303 ||
             res.status === 307 || res.status === 308) {
-            return Promise.reject(new Error('Servidor retornou redirect HTTP ' + res.status));
+            var location = res.headers.get('location') || res.url || '';
+            return Promise.reject(new Error(
+                'Servidor retornou redirect HTTP ' + res.status + ' para ' + location
+            ));
         }
         if (!contentType.includes('application/json')) {
             return res.text().then(function (texto) {
@@ -391,14 +417,10 @@
         if (config.skuSelect && config.skuSelect.value) {
             fd.append('sku_id', config.skuSelect.value);
         }
-        fetch(urlPostPocket(config), {
+        fetch(urlPostPocket(config), Object.assign({
             method: 'POST',
             body: fd,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': config.csrfToken,
-            },
-        }).catch(function () { /* liberação best-effort */ });
+        }, opcoesFetchPocket(config.csrfToken))).catch(function () { /* liberação best-effort */ });
     }
 
     function reservarLockPosicao(config, codigoPosicao, callback) {
@@ -413,14 +435,10 @@
         if (config.skuSelect && config.skuSelect.value) {
             fd.append('sku_id', config.skuSelect.value);
         }
-        fetch(urlPostPocket(config), {
+        fetch(urlPostPocket(config), Object.assign({
             method: 'POST',
             body: fd,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': config.csrfToken,
-            },
-        })
+        }, opcoesFetchPocket(config.csrfToken)))
             .then(parsearRespostaPocket)
             .then(function (resultado) {
                 callback(resultado.ok, resultado.body.message || '', resultado.body || {});
@@ -653,14 +671,10 @@
                         if (config.inventarioId && !fd.get('inventario_id')) {
                             fd.append('inventario_id', config.inventarioId);
                         }
-                        fetch(urlPostPocket(config), {
+                        fetch(urlPostPocket(config), Object.assign({
                             method: 'POST',
                             body: fd,
-                            headers: {
-                                'X-Requested-With': 'XMLHttpRequest',
-                                'X-CSRFToken': csrfToken || '',
-                            },
-                        })
+                        }, opcoesFetchPocket(csrfToken)))
                             .then(parsearRespostaPocket)
                             .then(function (resultado) {
                                 if (btnSalvar) btnSalvar.disabled = false;
@@ -1051,14 +1065,10 @@
                 if (!bodyContagem.get('pocket_ajax')) {
                     bodyContagem.append('pocket_ajax', '1');
                 }
-                fetch(global.location.href, {
+                fetch(global.location.href, Object.assign({
                     method: 'POST',
                     body: bodyContagem,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRFToken': csrfToken || '',
-                    },
-                })
+                }, opcoesFetchPocket(csrfToken)))
                     .then(parsearRespostaPocket)
                     .then(function (resultado) {
                         if (btnSalvar) btnSalvar.disabled = false;
@@ -1170,6 +1180,7 @@
         toast: toast,
         focarCampo: focarCampo,
         parsearRespostaPocket: parsearRespostaPocket,
+        opcoesFetchPocket: opcoesFetchPocket,
         tratarErroFetchPocket: function (err) { tratarErroFetchPocket(err, toast); },
     };
 }(window));

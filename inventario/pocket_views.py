@@ -71,6 +71,12 @@ from inventario.services.pocket_lock_operacional import (
 )
 from inventario.services.tarefas import TarefaError
 from core.logging_auditoria import ip_do_request
+from core.pocket_http import (
+    deve_responder_json_pocket,
+    json_erro_pocket,
+    log_pocket_post,
+    resposta_json_pocket,
+)
 
 from inventario.services.pocket import (
 
@@ -111,29 +117,6 @@ from inventario.services.pocket import (
 
 
 logger = logging.getLogger(__name__)
-
-
-def requisicao_ajax_pocket(request) -> bool:
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return True
-    if request.POST.get('pocket_ajax') == '1':
-        return True
-    accept = (request.headers.get('Accept') or '').lower()
-    return 'application/json' in accept and 'text/html' not in accept
-
-
-def resposta_json_pocket(request, payload, *, status=200):
-    response = JsonResponse(payload, status=status)
-    logger.info(
-        'POCKET_AJAX_RESPONSE status=%s content_type=%s ajax=%s usuario=%s path=%s acao=%s',
-        response.status_code,
-        response.get('Content-Type'),
-        requisicao_ajax_pocket(request),
-        getattr(request.user, 'pk', None),
-        request.path,
-        request.POST.get('acao'),
-    )
-    return response
 
 
 class PocketSelecionarView(AcessoOperacionalMixin, View):
@@ -533,9 +516,14 @@ class PocketContagemView(RequerEscritaPocketMixin, View):
 class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
     template_name = 'inventario/pocket/contagem_ciclico.html'
 
+    def dispatch(self, request, *args, **kwargs):
+        if request.method == 'POST':
+            log_pocket_post(request)
+        return super().dispatch(request, *args, **kwargs)
+
     @staticmethod
     def _requisicao_ajax(request) -> bool:
-        return requisicao_ajax_pocket(request)
+        return deve_responder_json_pocket(request)
 
     def _resposta_json_erro(self, request, form=None, mensagem=''):
         payload = {'ok': False}
@@ -595,9 +583,6 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         return render(request, self.template_name, self._contexto(request))
 
     def _post_lock_operacional_ciclico(self, request, ciclo, acao: str):
-        if not self._requisicao_ajax(request):
-            return self._resposta_json_erro(request, mensagem='Requisição inválida.')
-
         codigo = request.POST.get('codigo_posicao', '').strip()
         if acao == 'liberar_posicao':
             liberar_lock_posicao_pocket_ciclico(request, ciclo, codigo)
@@ -624,25 +609,15 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         })
 
     def post(self, request):
-        ajax = self._requisicao_ajax(request)
         ciclo = obter_ciclo_atual(request.session)
         if ciclo is None:
-            if ajax:
-                return self._resposta_json_erro(request, mensagem='Nenhum ciclo cíclico ativo.')
-            messages.error(request, 'Nenhum ciclo cíclico ativo.')
-            return redirect('pocket:selecionar')
+            return self._resposta_json_erro(request, mensagem='Nenhum ciclo cíclico ativo.')
 
         if obter_lote_execucao_info(request.session) is None:
-            if ajax:
-                return self._resposta_json_erro(
-                    request,
-                    mensagem='Gere um lote na tela Executar Ciclo antes de contar.',
-                )
-            messages.warning(
+            return self._resposta_json_erro(
                 request,
-                'Gere um lote na tela Executar Ciclo antes de contar.',
+                mensagem='Gere um lote na tela Executar Ciclo antes de contar.',
             )
-            return redirect('pocket:selecionar')
 
         acao = request.POST.get('acao', 'contagem')
         painel = obter_painel_pocket_ciclico(request.session)
@@ -660,10 +635,6 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         return self._post_contagem(request, painel)
 
     def _post_finalizar_sku(self, request, painel):
-        if not self._requisicao_ajax(request):
-            messages.error(request, 'Requisição inválida.')
-            return redirect('pocket:contagem_ciclico')
-
         sku_raw = request.POST.get('sku_id', '').strip()
         if not sku_raw.isdigit():
             return self._resposta_json_erro(request, mensagem='SKU inválido.')
@@ -700,10 +671,6 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         })
 
     def _post_encerrar_ciclo(self, request):
-        if not self._requisicao_ajax(request):
-            messages.error(request, 'Requisição inválida.')
-            return redirect('pocket:contagem_ciclico')
-
         try:
             ciclo = encerrar_ciclo()
         except CiclicoError as exc:
@@ -719,55 +686,37 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         })
 
     def _post_recontar(self, request, painel):
-        ajax = self._requisicao_ajax(request)
         sku_id = request.POST.get('sku_id', '').strip()
         if not sku_id.isdigit():
-            if ajax:
-                return self._resposta_json_erro(request, mensagem='SKU inválido para recontagem.')
-            messages.error(request, 'SKU inválido para recontagem.')
-            return render(request, self.template_name, self._contexto(request, painel=painel))
+            return self._resposta_json_erro(request, mensagem='SKU inválido para recontagem.')
 
         try:
             solicitar_recontagem_pocket(request.session, int(sku_id), request.user)
         except CiclicoError as exc:
-            if ajax:
-                return self._resposta_json_erro(request, mensagem=str(exc))
-            messages.error(request, str(exc))
-            return render(request, self.template_name, self._contexto(request, painel=painel))
+            return self._resposta_json_erro(request, mensagem=str(exc))
 
-        if ajax:
-            resposta = obter_resposta_contagem_pocket(
-                request.session,
-                int(sku_id),
-                request.user,
-            )
-            return resposta_json_pocket(request, {
-                'ok': True,
-                'message': 'SKU enviado para recontagem na fila.',
-                **resposta,
-            })
-
-        messages.info(request, 'SKU enviado para recontagem na fila.')
-        return redirect('pocket:contagem_ciclico')
+        resposta = obter_resposta_contagem_pocket(
+            request.session,
+            int(sku_id),
+            request.user,
+        )
+        return resposta_json_pocket(request, {
+            'ok': True,
+            'message': 'SKU enviado para recontagem na fila.',
+            **resposta,
+        })
 
     def _post_aceitar_divergencia(self, request, painel):
-        ajax = self._requisicao_ajax(request)
         if not usuario_pode_supervisionar_ciclico(request.user):
-            if ajax:
-                return resposta_json_pocket(
-                    request,
-                    {'ok': False, 'message': 'Somente supervisor pode aceitar divergências.'},
-                    status=403,
-                )
-            messages.error(request, 'Somente supervisor pode aceitar divergências.')
-            return render(request, self.template_name, self._contexto(request, painel=painel))
+            return json_erro_pocket(
+                request,
+                'Somente supervisor pode aceitar divergências.',
+                status=403,
+            )
 
         sku_id = request.POST.get('sku_id', '').strip()
         if not sku_id.isdigit():
-            if ajax:
-                return self._resposta_json_erro(request, mensagem='SKU inválido.')
-            messages.error(request, 'SKU inválido.')
-            return render(request, self.template_name, self._contexto(request, painel=painel))
+            return self._resposta_json_erro(request, mensagem='SKU inválido.')
 
         try:
             _, ciclo_encerrado = aceitar_divergencia_pocket(
@@ -776,56 +725,39 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
                 request.user,
             )
         except CiclicoError as exc:
-            if ajax:
-                return self._resposta_json_erro(request, mensagem=str(exc))
-            messages.error(request, str(exc))
-            return render(request, self.template_name, self._contexto(request, painel=painel))
+            return self._resposta_json_erro(request, mensagem=str(exc))
 
-        if ajax:
-            resposta = obter_resposta_contagem_pocket(
-                request.session,
-                int(sku_id),
-                request.user,
-                ciclo_encerrado=ciclo_encerrado,
-            )
-            if ciclo_encerrado is not None:
-                return resposta_json_pocket(request, {
-                    'ok': True,
-                    'message': 'Inventário Cíclico concluído com sucesso.',
-                    'redirect_url': reverse('ciclico'),
-                    'ciclo_encerrado': serializar_ciclo_encerrado_pocket(ciclo_encerrado),
-                    **resposta,
-                })
+        resposta = obter_resposta_contagem_pocket(
+            request.session,
+            int(sku_id),
+            request.user,
+            ciclo_encerrado=ciclo_encerrado,
+        )
+        if ciclo_encerrado is not None:
             return resposta_json_pocket(request, {
                 'ok': True,
-                'message': 'Divergência aceita. SKU concluído no lote.',
+                'message': 'Inventário Cíclico concluído com sucesso.',
+                'redirect_url': reverse('ciclico'),
+                'ciclo_encerrado': serializar_ciclo_encerrado_pocket(ciclo_encerrado),
                 **resposta,
             })
-
-        if ciclo_encerrado is not None:
-            messages.success(
-                request,
-                'Inventário Cíclico concluído com sucesso.',
-            )
-            return redirect('ciclico')
-        messages.success(request, 'Divergência aceita. SKU concluído no lote.')
-        return redirect('pocket:contagem_ciclico')
+        return resposta_json_pocket(request, {
+            'ok': True,
+            'message': 'Divergência aceita. SKU concluído no lote.',
+            **resposta,
+        })
 
     def _post_contagem(self, request, painel):
         form = PocketContagemCiclicoForm(request.POST, fila=painel.fila)
         contexto = self._contexto(request, form=form, painel=painel)
 
         if not form.is_valid():
-            if self._requisicao_ajax(request):
-                return self._resposta_json_erro(request, form=form)
-            return render(request, self.template_name, contexto)
+            return self._resposta_json_erro(request, form=form)
 
         posicao = buscar_posicao_por_codigo(form.cleaned_data['codigo_posicao'])
         if posicao is None:
             form.add_error('codigo_posicao', 'Posição não encontrada.')
-            if self._requisicao_ajax(request):
-                return self._resposta_json_erro(request, form=form)
-            return render(request, self.template_name, contexto)
+            return self._resposta_json_erro(request, form=form)
 
         quantidade = Decimal(form.cleaned_data['quantidade_fisica'])
         sku_id = form.cleaned_data['sku_id']
@@ -856,15 +788,9 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
                     quantidade=ctx.get('quantidade'),
                     dados_extras={'motivo': 'DUPLICIDADE_CICLO_POSICAO_PRODUTO'},
                 )
-            if self._requisicao_ajax(request):
-                return self._resposta_json_erro(request, mensagem=str(exc))
-            form.add_error(None, str(exc))
-            return render(request, self.template_name, contexto)
+            return self._resposta_json_erro(request, mensagem=str(exc))
         except CiclicoError as exc:
-            if self._requisicao_ajax(request):
-                return self._resposta_json_erro(request, mensagem=str(exc))
-            form.add_error(None, str(exc))
-            return render(request, self.template_name, contexto)
+            return self._resposta_json_erro(request, mensagem=str(exc))
 
         registrar_historico_pocket_ciclico(
             request.session,
@@ -895,31 +821,20 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             )
             tipo_mensagem = 'success'
 
-        if self._requisicao_ajax(request):
-            resposta = obter_resposta_contagem_pocket(
-                request.session,
-                sku_id,
-                request.user,
-                ciclo_encerrado=ciclo_encerrado,
-                sku=sku,
-            )
-            if resposta.get('sku_removido_fila'):
-                limpar_pocket_sessao_contagem(request.session)
-            return resposta_json_pocket(request, {
-                'ok': True,
-                'message': mensagem,
-                'tipo_mensagem': tipo_mensagem,
-                **resposta,
-            })
-
-        if ciclo_encerrado is not None:
-            messages.success(request, 'Ciclo concluído com sucesso.')
-            return redirect('pocket:selecionar')
-
-        if tipo_mensagem == 'warning':
-            messages.warning(request, mensagem)
-        else:
-            messages.success(request, mensagem)
-        return redirect('pocket:contagem_ciclico')
+        resposta = obter_resposta_contagem_pocket(
+            request.session,
+            sku_id,
+            request.user,
+            ciclo_encerrado=ciclo_encerrado,
+            sku=sku,
+        )
+        if resposta.get('sku_removido_fila'):
+            limpar_pocket_sessao_contagem(request.session)
+        return resposta_json_pocket(request, {
+            'ok': True,
+            'message': mensagem,
+            'tipo_mensagem': tipo_mensagem,
+            **resposta,
+        })
 
 

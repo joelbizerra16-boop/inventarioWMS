@@ -878,21 +878,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
             body.append('csrfmiddlewaretoken', csrf ? csrf.value : '');
 
-            fetch(global.location.href, {
-
+            fetch(global.location.href, Object.assign({
                 method: 'POST',
-
                 body: body,
-
+            }, PocketBipagem.opcoesFetchPocket ? PocketBipagem.opcoesFetchPocket(csrf ? csrf.value : '') : {
+                credentials: 'same-origin',
+                redirect: 'manual',
                 headers: {
-
                     'X-Requested-With': 'XMLHttpRequest',
-
                     'X-CSRFToken': csrf ? csrf.value : '',
-
                 },
-
-            })
+            }))
 
                 .then(function (res) {
                     return PocketBipagem.parsearRespostaPocket(res);
@@ -950,21 +946,17 @@ document.addEventListener('DOMContentLoaded', function () {
 
             body.append('csrfmiddlewaretoken', csrf ? csrf.value : '');
 
-            fetch(global.location.href, {
-
+            fetch(global.location.href, Object.assign({
                 method: 'POST',
-
                 body: body,
-
+            }, PocketBipagem.opcoesFetchPocket ? PocketBipagem.opcoesFetchPocket(csrf ? csrf.value : '') : {
+                credentials: 'same-origin',
+                redirect: 'manual',
                 headers: {
-
                     'X-Requested-With': 'XMLHttpRequest',
-
                     'X-CSRFToken': csrf ? csrf.value : '',
-
                 },
-
-            })
+            }))
 
                 .then(function (res) {
                     return PocketBipagem.parsearRespostaPocket(res);

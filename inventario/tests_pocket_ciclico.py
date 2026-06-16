@@ -301,10 +301,11 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         response = self.client.post(reverse('pocket:contagem_ciclico'), {
             'acao': 'aceitar_divergencia',
             'sku_id': str(self.sku.pk),
-        }, follow=True)
+        })
         self.sku.refresh_from_db()
         self.assertEqual(self.sku.status_contagem, StatusItemCiclico.DIVERGENTE)
-        self.assertContains(response, 'Somente supervisor')
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('Somente supervisor', response.json()['message'])
 
     def test_execucao_nao_exibe_coluna_origem_na_grade(self):
         self._contar_pocket('PKT01', 10)
@@ -463,6 +464,30 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         self.assertTrue(dados['ok'])
         self.assertTrue(dados['sku_finalizado'])
 
+    def test_pocket_ciclico_post_sempre_json_mesmo_sem_ajax(self):
+        response = self.client.post(reverse('pocket:contagem_ciclico'), {
+            'acao': 'contagem',
+            'sku_id': str(self.sku.pk),
+            'codigo_posicao': 'PKT01',
+            'codigo_produto_lido': self.produto.codigo_produto,
+            'quantidade_fisica': '5',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('application/json', response['Content-Type'])
+        self.assertTrue(response.json()['ok'])
+
+    def test_pocket_ciclico_post_sem_autenticacao_retorna_json_401(self):
+        self.client.logout()
+        response = self.client.post(reverse('pocket:contagem_ciclico'), {
+            'acao': 'contagem',
+            'sku_id': str(self.sku.pk),
+            'codigo_posicao': 'PKT01',
+            'quantidade_fisica': '5',
+        })
+        self.assertEqual(response.status_code, 401)
+        self.assertIn('application/json', response['Content-Type'])
+        self.assertFalse(response.json()['ok'])
+
 
 class PocketCiclicoSupervisorViewTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
@@ -531,7 +556,10 @@ class PocketCiclicoSupervisorViewTestCase(CiclicoAuditoriaBaseMixin, ClienteAute
             'acao': 'aceitar_divergencia',
             'sku_id': str(self.sku.pk),
         })
-        self.assertRedirects(response, reverse('ciclico'))
+        self.assertEqual(response.status_code, 200)
+        dados = response.json()
+        self.assertTrue(dados['ok'])
+        self.assertEqual(dados['redirect_url'], reverse('ciclico'))
         self.sku.refresh_from_db()
         self.assertEqual(self.sku.status_contagem, StatusItemCiclico.VALIDADO_DIVERGENCIA)
 

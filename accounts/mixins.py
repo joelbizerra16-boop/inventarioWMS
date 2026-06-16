@@ -11,10 +11,20 @@ from accounts.services.perfil import (
     usuario_pode_escrever_inventario,
     usuario_pode_executar_pocket,
 )
+from core.pocket_http import deve_responder_json_pocket, json_erro_pocket
 
 
 class LoginRequiredMixin(DjangoLoginRequiredMixin):
     login_url = reverse_lazy('accounts:login')
+
+    def handle_no_permission(self):
+        if deve_responder_json_pocket(self.request):
+            return json_erro_pocket(
+                self.request,
+                'Sessão expirada. Faça login novamente.',
+                status=401,
+            )
+        return super().handle_no_permission()
 
 
 class AcessoOperacionalMixin(LoginRequiredMixin):
@@ -23,6 +33,12 @@ class AcessoOperacionalMixin(LoginRequiredMixin):
             return self.handle_no_permission()
         if not usuario_pode_acessar(request.user):
             logout(request)
+            if deve_responder_json_pocket(request):
+                return json_erro_pocket(
+                    request,
+                    'Usuário sem perfil operacional vinculado.',
+                    status=403,
+                )
             messages.error(request, 'Usuário sem perfil operacional vinculado.')
             return redirect('accounts:login')
         return super(DjangoLoginRequiredMixin, self).dispatch(request, *args, **kwargs)
@@ -69,6 +85,12 @@ class RequerEscritaPocketMixin(AcessoOperacionalMixin):
             and request.user.is_authenticated
             and not usuario_pode_executar_pocket(request.user)
         ):
+            if deve_responder_json_pocket(request):
+                return json_erro_pocket(
+                    request,
+                    'Perfil consulta não pode executar contagem.',
+                    status=403,
+                )
             messages.error(request, 'Perfil consulta não pode executar contagem.')
             return redirect(request.path or reverse_lazy('pocket:selecionar'))
         return super().dispatch(request, *args, **kwargs)

@@ -13,6 +13,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from accounts.services.perfil import usuario_e_operador_pocket
+from core.pocket_http import deve_responder_json_pocket, json_erro_pocket
 from core.services.perf_diagnostico import log_resumo_view
 from core.services.exclusao import (
     MENSAGEM_ERRO_INESPERADO,
@@ -94,12 +95,7 @@ class TratamentoExcecaoUsuarioMiddleware:
         )
 
     def _requisicao_ajax(self, request) -> bool:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return True
-        if request.POST.get('pocket_ajax') == '1':
-            return True
-        accept = (request.headers.get('Accept') or '').lower()
-        return 'application/json' in accept and 'text/html' not in accept
+        return deve_responder_json_pocket(request)
 
     def _mensagem_para_usuario(self, exception) -> str:
         if isinstance(exception, Http404):
