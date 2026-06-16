@@ -59,3 +59,35 @@ def resposta_json_pocket(request, payload, *, status=200):
 def json_erro_pocket(request, mensagem: str, *, status: int = 400, **extra):
     payload = {'ok': False, 'message': mensagem, **extra}
     return resposta_json_pocket(request, payload, status=status)
+
+
+def post_pocket_monitorado(request) -> bool:
+    if request.method != 'POST':
+        return False
+    if post_pocket_ciclico(request):
+        return True
+    if not request.path.startswith('/pocket/'):
+        return False
+    return (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or request.POST.get('pocket_ajax') == '1'
+    )
+
+
+def log_pocket_redirect_debug(request, *, fase='request', response=None) -> None:
+    dados = {
+        'fase': fase,
+        'user_id': getattr(request.user, 'pk', None) if getattr(request.user, 'is_authenticated', False) else None,
+        'authenticated': getattr(request.user, 'is_authenticated', False),
+        'path': request.path,
+        'method': request.method,
+        'ajax': request.headers.get('X-Requested-With'),
+        'pocket_ajax': request.POST.get('pocket_ajax'),
+        'acao': request.POST.get('acao'),
+        'referer': request.META.get('HTTP_REFERER', ''),
+    }
+    if response is not None:
+        dados['status'] = response.status_code
+        dados['content_type'] = response.get('Content-Type', '')
+        dados['location'] = response.get('Location', '')
+    logger.error('POCKET_REDIRECT_DEBUG %s', dados)

@@ -408,7 +408,7 @@
 
 {{ painel.skus_json|json_script:"pocket-skus-lote-data" }}
 
-<script src="{% static 'js/pocket-bipagem.js' %}"></script>
+<script src="{% static 'js/pocket-bipagem.js' %}?v={{ POCKET_STATIC_VERSION }}"></script>
 
 <script>
 
@@ -881,14 +881,7 @@ document.addEventListener('DOMContentLoaded', function () {
             fetch(global.location.href, Object.assign({
                 method: 'POST',
                 body: body,
-            }, PocketBipagem.opcoesFetchPocket ? PocketBipagem.opcoesFetchPocket(csrf ? csrf.value : '') : {
-                credentials: 'same-origin',
-                redirect: 'manual',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': csrf ? csrf.value : '',
-                },
-            }))
+            }, PocketBipagem.opcoesFetchPocket(csrf ? csrf.value : '')))
 
                 .then(function (res) {
                     return PocketBipagem.parsearRespostaPocket(res);
@@ -949,14 +942,7 @@ document.addEventListener('DOMContentLoaded', function () {
             fetch(global.location.href, Object.assign({
                 method: 'POST',
                 body: body,
-            }, PocketBipagem.opcoesFetchPocket ? PocketBipagem.opcoesFetchPocket(csrf ? csrf.value : '') : {
-                credentials: 'same-origin',
-                redirect: 'manual',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRFToken': csrf ? csrf.value : '',
-                },
-            }))
+            }, PocketBipagem.opcoesFetchPocket(csrf ? csrf.value : '')))
 
                 .then(function (res) {
                     return PocketBipagem.parsearRespostaPocket(res);

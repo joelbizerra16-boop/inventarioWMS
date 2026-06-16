@@ -60,6 +60,8 @@ INSTALLED_APPS = [
     'dashboard',
 ]
 
+POCKET_STATIC_VERSION = os.environ.get('POCKET_STATIC_VERSION', '20250616b')
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -70,6 +72,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'accounts.middleware.OperadorPocketMiddleware',
     'core.middleware.TratamentoExcecaoUsuarioMiddleware',
+    'core.pocket_middleware.PocketPostRedirectGuardMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
