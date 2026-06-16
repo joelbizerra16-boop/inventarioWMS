@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from contextlib import ContextDecorator
 
@@ -6,6 +7,10 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 logger = logging.getLogger('perf.diagnostico')
+
+
+def _perf_diagnostico_ativo() -> bool:
+    return os.environ.get('PERF_DIAGNOSTICO', 'False').lower() in ('true', '1', 'yes')
 
 _SQL_MAX_LEN = 240
 
@@ -46,6 +51,8 @@ class medir_etapa(ContextDecorator):
         self._force_debug_anterior = None
 
     def __enter__(self):
+        if not _perf_diagnostico_ativo():
+            return self
         self._inicio = time.perf_counter()
         self._force_debug_anterior = connection.force_debug_cursor
         connection.force_debug_cursor = True
@@ -54,6 +61,8 @@ class medir_etapa(ContextDecorator):
         return self
 
     def __exit__(self, exc_type, exc, tb):
+        if not _perf_diagnostico_ativo():
+            return False
         fim = time.perf_counter()
         captura = self._captura
         if captura is not None:
@@ -75,6 +84,8 @@ class medir_etapa(ContextDecorator):
 
 
 def log_resumo_view(nome_view: str, captured_queries: list[dict], duracao_segundos: float) -> None:
+    if not _perf_diagnostico_ativo():
+        return
     tempo_sql_lenta, sql_lenta = _query_mais_lenta(captured_queries)
     logger.info(
         'PERF_VIEW view=%s tempo=%.4fs queries=%s query_lenta=%.4fs sql_lenta="%s"',
