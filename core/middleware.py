@@ -96,7 +96,9 @@ class TratamentoExcecaoUsuarioMiddleware:
     def _requisicao_ajax(self, request) -> bool:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return True
-        accept = request.headers.get('Accept', '')
+        if request.POST.get('pocket_ajax') == '1':
+            return True
+        accept = (request.headers.get('Accept') or '').lower()
         return 'application/json' in accept and 'text/html' not in accept
 
     def _mensagem_para_usuario(self, exception) -> str:

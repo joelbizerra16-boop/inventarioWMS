@@ -894,7 +894,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
             })
 
-                .then(function (res) { return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; }); })
+                .then(function (res) {
+                    return PocketBipagem.parsearRespostaPocket(res);
+                })
 
                 .then(function (resultado) {
 
@@ -902,23 +904,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         btnEncerrar.disabled = false;
 
-                        if (window.PocketBipagem) PocketBipagem.toast(resultado.payload.message || 'Erro ao encerrar.', 'erro');
+                        if (window.PocketBipagem) PocketBipagem.toast(resultado.body.message || 'Erro ao encerrar.', 'erro');
 
                         return;
 
                     }
 
-                    if (window.PocketBipagem) PocketBipagem.toast(resultado.payload.message || 'Ciclo encerrado.', 'ok');
+                    if (window.PocketBipagem) PocketBipagem.toast(resultado.body.message || 'Ciclo encerrado.', 'ok');
 
-                    global.location.href = resultado.payload.redirect_url || '{% url "ciclico" %}';
+                    global.location.href = resultado.body.redirect_url || '{% url "ciclico" %}';
 
                 })
 
-                .catch(function () {
+                .catch(function (err) {
 
                     btnEncerrar.disabled = false;
 
-                    if (window.PocketBipagem) PocketBipagem.toast('Sem conexão', 'erro');
+                    if (window.PocketBipagem) PocketBipagem.tratarErroFetchPocket(err);
 
                 });
 
@@ -964,7 +966,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
             })
 
-                .then(function (res) { return res.json().then(function (payload) { return { ok: res.ok, payload: payload }; }); })
+                .then(function (res) {
+                    return PocketBipagem.parsearRespostaPocket(res);
+                })
 
                 .then(function (resultado) {
 
@@ -972,27 +976,27 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         if (mapaSkus[skuSelect.value]) atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
 
-                        if (window.PocketBipagem) PocketBipagem.toast(resultado.payload.message || 'Erro ao finalizar.', 'erro');
+                        if (window.PocketBipagem) PocketBipagem.toast(resultado.body.message || 'Erro ao finalizar.', 'erro');
 
                         return;
 
                     }
 
-                    var tipo = resultado.payload.tipo_mensagem === 'warning' ? 'aviso' : 'ok';
+                    var tipo = resultado.body.tipo_mensagem === 'warning' ? 'aviso' : 'ok';
 
-                    if (window.PocketBipagem) PocketBipagem.toast(resultado.payload.message || 'SKU finalizado.', tipo);
+                    if (window.PocketBipagem) PocketBipagem.toast(resultado.body.message || 'SKU finalizado.', tipo);
 
-                    processarRespostaOperacional(resultado.payload);
+                    processarRespostaOperacional(resultado.body);
 
                     resetCamposEntradaCiclico();
 
                 })
 
-                .catch(function () {
+                .catch(function (err) {
 
                     if (mapaSkus[skuSelect.value]) atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
 
-                    if (window.PocketBipagem) PocketBipagem.toast('Sem conexão', 'erro');
+                    if (window.PocketBipagem) PocketBipagem.tratarErroFetchPocket(err);
 
                 });
 

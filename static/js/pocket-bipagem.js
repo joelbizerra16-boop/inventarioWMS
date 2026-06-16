@@ -8,6 +8,59 @@
     var toastTimer = null;
     var TOAST_MS = 2600;
 
+    function parsearRespostaPocket(res) {
+        var contentType = (res.headers.get('content-type') || '').toLowerCase();
+        if (res.redirected) {
+            return Promise.reject(new Error(
+                'Redirect inesperado após POST (status=' + res.status + ' url=' + res.url + ')'
+            ));
+        }
+        if (res.status === 301 || res.status === 302 || res.status === 303 ||
+            res.status === 307 || res.status === 308) {
+            return Promise.reject(new Error('Servidor retornou redirect HTTP ' + res.status));
+        }
+        if (!contentType.includes('application/json')) {
+            return res.text().then(function (texto) {
+                var amostra = (texto || '').trim().slice(0, 160);
+                throw new Error(
+                    'Resposta inválida (status=' + res.status +
+                    ' content-type=' + (contentType || 'vazio') +
+                    ' corpo=' + amostra + ')'
+                );
+            });
+        }
+        return res.json().then(function (body) {
+            return { ok: res.ok, status: res.status, body: body };
+        });
+    }
+
+    function tratarErroFetchPocket(erro, toastFn) {
+        console.error('[PocketBipagem] falha na requisição:', erro);
+        var msg = 'Falha na comunicação com o servidor.';
+        if (erro && erro.message) {
+            if (erro.message.indexOf('Failed to fetch') >= 0 ||
+                erro.message.indexOf('NetworkError') >= 0 ||
+                erro.message.indexOf('Load failed') >= 0) {
+                msg = 'Sem conexão';
+            } else {
+                msg = erro.message;
+            }
+        }
+        if (toastFn) toastFn(msg, 'erro');
+    }
+
+    function processarSucessoPocket(callback, dados, limparFn, toastFn) {
+        try {
+            if (callback) callback(dados);
+            if (limparFn) limparFn();
+        } catch (err) {
+            console.error('[PocketBipagem] erro ao processar sucesso:', err);
+            if (toastFn) {
+                toastFn('Operação salva, mas houve erro ao atualizar a tela.', 'alerta');
+            }
+        }
+    }
+
     function obterAudioContext() {
         if (!audioCtx) {
             var Ctx = global.AudioContext || global.webkitAudioContext;
@@ -368,16 +421,14 @@
                 'X-CSRFToken': config.csrfToken,
             },
         })
-            .then(function (res) {
-                return res.json().then(function (body) {
-                    return { ok: res.ok, body: body };
-                });
-            })
+            .then(parsearRespostaPocket)
             .then(function (resultado) {
                 callback(resultado.ok, resultado.body.message || '', resultado.body || {});
             })
-            .catch(function () {
-                callback(false, 'Sem conexão', {});
+            .catch(function (err) {
+                tratarErroFetchPocket(err, function (msg) {
+                    callback(false, msg, {});
+                });
             });
     }
 
@@ -610,11 +661,7 @@
                                 'X-CSRFToken': csrfToken || '',
                             },
                         })
-                            .then(function (res) {
-                                return res.json().then(function (body) {
-                                    return { ok: res.ok, body: body };
-                                });
-                            })
+                            .then(parsearRespostaPocket)
                             .then(function (resultado) {
                                 if (btnSalvar) btnSalvar.disabled = false;
                                 if (!resultado.ok) {
@@ -635,10 +682,10 @@
                                 toast('Contagem registrada', 'ok');
                                 limparTudoPosSalvar();
                             })
-                            .catch(function () {
+                            .catch(function (err) {
                                 if (btnSalvar) btnSalvar.disabled = false;
                                 Sons.erro();
-                                toast('Sem conexão', 'erro');
+                                tratarErroFetchPocket(err, toast);
                             });
                         return;
                     }
@@ -1012,11 +1059,7 @@
                         'X-CSRFToken': csrfToken || '',
                     },
                 })
-                    .then(function (res) {
-                        return res.json().then(function (body) {
-                            return { ok: res.ok, body: body };
-                        });
-                    })
+                    .then(parsearRespostaPocket)
                     .then(function (resultado) {
                         if (btnSalvar) btnSalvar.disabled = false;
                         if (!resultado.ok) {
@@ -1042,13 +1085,17 @@
                         } else {
                             toast('Contagem registrada', 'ok');
                         }
-                        if (callbacks.onSucesso) callbacks.onSucesso(b);
-                        limparTudoPosSalvar();
+                        processarSucessoPocket(
+                            callbacks.onSucesso,
+                            b,
+                            limparTudoPosSalvar,
+                            toast
+                        );
                     })
-                    .catch(function () {
+                    .catch(function (err) {
                         if (btnSalvar) btnSalvar.disabled = false;
                         Sons.erro();
-                        toast('Sem conexão', 'erro');
+                        tratarErroFetchPocket(err, toast);
                     });
             });
         }
@@ -1122,5 +1169,7 @@
         initCiclico: initCiclico,
         toast: toast,
         focarCampo: focarCampo,
+        parsearRespostaPocket: parsearRespostaPocket,
+        tratarErroFetchPocket: function (err) { tratarErroFetchPocket(err, toast); },
     };
 }(window));

@@ -428,6 +428,41 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         self.assertEqual(dados['skus_lote'], [])
         self.assertIsNone(dados['proximo_sku_id'])
 
+    def test_pocket_ajax_contagem_retorna_json_sem_header_xmlhttprequest(self):
+        response = self.client.post(reverse('pocket:contagem_ciclico'), {
+            'acao': 'contagem',
+            'pocket_ajax': '1',
+            'sku_id': str(self.sku.pk),
+            'codigo_posicao': 'PKT01',
+            'codigo_produto_lido': self.produto.codigo_produto,
+            'quantidade_fisica': '10',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('application/json', response['Content-Type'])
+        dados = response.json()
+        self.assertTrue(dados['ok'])
+
+    def test_pocket_ajax_encerra_ciclo_com_json_valido(self):
+        self._contar_pocket('PKT01', 10)
+        response = self._contar_pocket_ajax('PKT02', 60)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('application/json', response['Content-Type'])
+        dados = response.json()
+        self.assertTrue(dados['ok'])
+        self.assertTrue(dados['resumo']['lote_concluido'])
+        self.assertTrue(dados['resumo']['ciclo_concluido'])
+        self.assertIn('ciclo_encerrado', dados['resumo'])
+
+    def test_pocket_ajax_finalizar_sku_retorna_json(self):
+        self._contar_pocket('PKT01', 50)
+        self._contar_pocket('PKT02', 30)
+        response = self._finalizar_pocket()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('application/json', response['Content-Type'])
+        dados = response.json()
+        self.assertTrue(dados['ok'])
+        self.assertTrue(dados['sku_finalizado'])
+
 
 class PocketCiclicoSupervisorViewTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
