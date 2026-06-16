@@ -137,6 +137,33 @@ class LocksMultiusuarioTestCase(CiclicoAuditoriaBaseMixin, TestCase):
             ).exists()
         )
 
+    def test_lock_sessao_orfa_e_liberado_automaticamente(self):
+        adquirir_lock(
+            tipo_inventario=InventarioLock.TipoInventario.GERAL,
+            inventario=self.inventario,
+            posicao=self.posicao,
+            produto=self.produto,
+            usuario=self.op1,
+            session_key='a' * 32,
+        )
+        info = adquirir_lock(
+            tipo_inventario=InventarioLock.TipoInventario.GERAL,
+            inventario=self.inventario,
+            posicao=self.posicao,
+            produto=self.produto,
+            usuario=self.op2,
+            session_key='sessao-op2',
+        )
+        self.assertFalse(info.renovado)
+        self.assertEqual(info.lock.usuario_id, self.op2.pk)
+        self.assertFalse(
+            InventarioLock.objects.filter(
+                usuario=self.op1,
+                posicao=self.posicao,
+                ativo=True,
+            ).exists()
+        )
+
 
 class TarefasMultiusuarioTestCase(CiclicoAuditoriaBaseMixin, TestCase):
     def setUp(self):

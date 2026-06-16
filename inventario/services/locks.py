@@ -1,14 +1,18 @@
 """Controle de locks transacionais para inventário multiusuário."""
 
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.sessions.models import Session
 from django.db import transaction
 from django.utils import timezone
 
 from inventario.models_operacional import InventarioAuditoriaEvento, InventarioLock, InventarioTarefa
 from inventario.services.auditoria_operacional import registrar_evento_operacional
+
+logger = logging.getLogger(__name__)
 
 
 class LockError(Exception):
@@ -105,19 +109,41 @@ def _calcular_expiracao(agora=None) -> timezone.datetime:
     return agora + timedelta(seconds=obter_timeout_segundos())
 
 
+def _sessao_lock_ativa(lock: InventarioLock, agora=None) -> bool:
+    agora = agora or timezone.now()
+    chave = (lock.session_key or '').strip()
+    if not chave:
+        return True
+    if len(chave) != 32:
+        return True
+    return Session.objects.filter(session_key=chave, expire_date__gt=agora).exists()
+
+
 @transaction.atomic
 def expirar_locks_abandonados(*, ip: str | None = None) -> int:
     agora = timezone.now()
-    locks = list(
+    locks_expirados = list(
         InventarioLock.objects.select_for_update(skip_locked=True).filter(
             ativo=True,
             expira_em__lte=agora,
         )
     )
+    locks_sessao_orfa = [
+        lock for lock in InventarioLock.objects.select_for_update(skip_locked=True).filter(
+            ativo=True,
+            expira_em__gt=agora,
+        )
+        if not _sessao_lock_ativa(lock, agora)
+    ]
+    locks = locks_expirados + locks_sessao_orfa
     for lock in locks:
         lock.ativo = False
         lock.liberado_em = agora
-        lock.motivo_liberacao = InventarioLock.MotivoLiberacao.TIMEOUT
+        lock.motivo_liberacao = (
+            InventarioLock.MotivoLiberacao.TIMEOUT
+            if lock.expira_em <= agora
+            else InventarioLock.MotivoLiberacao.SESSAO
+        )
         lock.save(update_fields=['ativo', 'liberado_em', 'motivo_liberacao'])
 
         if lock.tarefa_id:
@@ -127,7 +153,11 @@ def expirar_locks_abandonados(*, ip: str | None = None) -> int:
             ).update(status=InventarioTarefa.Status.PENDENTE)
 
         registrar_evento_operacional(
-            evento=InventarioAuditoriaEvento.Evento.LOCK_TIMEOUT,
+            evento=(
+                InventarioAuditoriaEvento.Evento.LOCK_TIMEOUT
+                if lock.motivo_liberacao == InventarioLock.MotivoLiberacao.TIMEOUT
+                else InventarioAuditoriaEvento.Evento.LOCK_LIBERADO
+            ),
             tipo_inventario=lock.tipo_inventario,
             inventario=lock.inventario,
             ciclo=lock.ciclo,
@@ -139,7 +169,7 @@ def expirar_locks_abandonados(*, ip: str | None = None) -> int:
             posicao=lock.posicao,
             produto=lock.produto,
             dados_extras={
-                'motivo': InventarioLock.MotivoLiberacao.TIMEOUT,
+                'motivo': lock.motivo_liberacao,
                 'adquirido_em': lock.adquirido_em.isoformat(),
             },
         )
@@ -193,6 +223,18 @@ def adquirir_lock(
     )
 
     if existente:
+        if not _sessao_lock_ativa(existente, agora):
+            logger.warning(
+                'LOCK_ORFAO_SESSAO tipo=%s posicao=%s lock_usuario_id=%s lock_session_key=%s solicitante_id=%s',
+                existente.tipo_inventario,
+                existente.posicao_id,
+                existente.usuario_id,
+                existente.session_key,
+                getattr(usuario, 'pk', None),
+            )
+            liberar_lock(existente, motivo=InventarioLock.MotivoLiberacao.SESSAO, ip=ip)
+            existente = None
+    if existente:
         if _lock_mesmo_operador(existente, usuario):
             existente.renovado_em = agora
             existente.expira_em = expira
@@ -224,6 +266,13 @@ def adquirir_lock(
         if existente.expira_em <= agora:
             liberar_lock(existente, motivo=InventarioLock.MotivoLiberacao.TIMEOUT, ip=ip)
         else:
+            logger.info(
+                'LOCK_VALIDACAO_POSICAO tipo=%s posicao=%s operador_logado_id=%s operador_lock_id=%s status=LOCK_ATIVO',
+                tipo_inventario,
+                posicao.pk,
+                getattr(usuario, 'pk', None),
+                existente.usuario_id,
+            )
             raise LockError(
                 _mensagem_lock_ocupado(existente, resumida=True),
                 lock=existente,
