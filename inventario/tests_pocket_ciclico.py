@@ -179,6 +179,39 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         self.assertEqual(item.origem_contagem, CicloInventarioItem.OrigemContagem.POCKET)
         self.assertEqual(item.dispositivo_contagem, '')
 
+    def test_pocket_contagem_aceita_user_agent_maior_que_100_caracteres(self):
+        user_agent = (
+            'Mozilla/5.0 (Linux; Android 14; SM-G991B Build/UP1A.231005.007; wv) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 '
+            'Chrome/120.0.6099.210 Mobile Safari/537.36 InventarioBrida/2.1'
+        )
+        self.assertGreater(len(user_agent), 100)
+
+        response = self.client.post(
+            reverse('pocket:contagem_ciclico'),
+            {
+                'acao': 'contagem',
+                'pocket_ajax': '1',
+                'sku_id': str(self.sku.pk),
+                'codigo_posicao': 'PKT01',
+                'codigo_produto_lido': self.produto.codigo_produto,
+                'quantidade_fisica': '10',
+            },
+            HTTP_USER_AGENT=user_agent,
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()['ok'])
+
+        item = self.sku.posicoes.get(codigo_posicao='PKT01')
+        self.assertEqual(item.dispositivo_contagem, user_agent[:200])
+
+        historico = CicloAuditoriaHistorico.objects.filter(
+            item=item,
+            tipo=CicloAuditoriaHistorico.TipoRegistro.CONTAGEM,
+        ).latest('data_hora')
+        self.assertEqual(historico.dispositivo_contagem, user_agent[:200])
+
     def test_pocket_consolida_saldo_por_sku(self):
         self._contar_pocket('PKT01', 10)
         self.sku.refresh_from_db()

@@ -494,7 +494,7 @@ class CicloInventarioItem(models.Model):
     )
     dispositivo_contagem = models.CharField(
         'dispositivo da contagem',
-        max_length=100,
+        max_length=200,
         blank=True,
     )
     data_atualizacao_sap = models.DateTimeField(
@@ -715,7 +715,7 @@ class CicloAuditoriaHistorico(models.Model):
     )
     dispositivo_contagem = models.CharField(
         'dispositivo da contagem',
-        max_length=100,
+        max_length=200,
         blank=True,
     )
     motivo = models.TextField('motivo', blank=True)

@@ -1146,6 +1146,9 @@ def _registrar_historico_posicao(
     origem_contagem: str = '',
     dispositivo_contagem: str = '',
 ) -> CicloAuditoriaHistorico:
+    from inventario.services.locks import normalizar_dispositivo_contagem
+
+    dispositivo_contagem = normalizar_dispositivo_contagem(dispositivo_contagem)
     return CicloAuditoriaHistorico.objects.create(
         ciclo_sku=sku,
         item=item,
@@ -2121,6 +2124,9 @@ def salvar_contagem_sku(
     origem_contagem: str = OrigemContagem.WEB,
     dispositivo_contagem: str = '',
 ) -> SkuCicloDetalhe:
+    from inventario.services.locks import normalizar_dispositivo_contagem
+
+    dispositivo_contagem = normalizar_dispositivo_contagem(dispositivo_contagem)
     ciclo = _obter_ciclo_ativo()
     if ciclo is None:
         raise CiclicoError('Nenhum ciclo cíclico ativo.')
@@ -2208,6 +2214,9 @@ def registrar_contagem_pocket_ciclico(
     usuario,
     dispositivo: str = '',
 ) -> SkuCicloDetalhe:
+    from inventario.services.locks import normalizar_dispositivo_contagem
+
+    dispositivo = normalizar_dispositivo_contagem(dispositivo)
     ciclo = _obter_ciclo_ativo()
     if ciclo is None:
         raise CiclicoError('Nenhum ciclo cíclico ativo.')

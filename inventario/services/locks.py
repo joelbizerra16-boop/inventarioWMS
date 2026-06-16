@@ -31,10 +31,18 @@ def obter_timeout_segundos() -> int:
     return int(getattr(settings, 'INVENTARIO_LOCK_TIMEOUT_SECONDS', 900))
 
 
+DISPOSITIVO_MAX_LENGTH = 200
+
+
+def normalizar_dispositivo_contagem(valor: str = '') -> str:
+    """Trunca User-Agent e identificadores de coletor ao limite do banco."""
+    return (valor or '')[:DISPOSITIVO_MAX_LENGTH]
+
+
 def obter_dispositivo(request) -> str:
     if request is None:
         return ''
-    return (request.META.get('HTTP_USER_AGENT') or '')[:200]
+    return normalizar_dispositivo_contagem(request.META.get('HTTP_USER_AGENT') or '')
 
 
 def obter_session_key(session) -> str:
