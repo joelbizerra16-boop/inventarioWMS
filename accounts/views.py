@@ -10,7 +10,7 @@ from accounts.forms import UsuarioForm
 from accounts.mixins import PaginacaoContextMixin, PaginacaoMixin, RequerAdministradorMixin
 from accounts.models import Usuario
 from core.logging_auditoria import ip_do_request, registrar_evento
-from core.pocket_http import json_erro_pocket
+from core.pocket_http import is_pocket_ajax, json_erro_pocket
 from core.mixins import ExclusaoSeguraMixin
 from accounts.services.perfil import usuario_pode_acessar
 from accounts.services.usuarios import (
@@ -32,7 +32,7 @@ class OperacionalLoginView(LoginView):
         if request.user.is_authenticated:
             if usuario_pode_acessar(request.user):
                 referer = request.META.get('HTTP_REFERER', '') or ''
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or '/pocket/' in referer:
+                if is_pocket_ajax(request) or '/pocket/' in referer:
                     return json_erro_pocket(
                         request,
                         'Sessão expirada. Faça login novamente.',

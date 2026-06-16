@@ -17,12 +17,11 @@ from django.utils import timezone
 from core.services.perf_diagnostico import medir_etapa
 from inventario.models import CicloAuditoriaHistorico, CicloInventario, CicloInventarioSku
 from inventario.models_operacional import InventarioLock
-from inventario.services.locks import LockError, adquirir_lock, liberar_lock, obter_dispositivo, obter_session_key
+from inventario.services.locks import LockError, liberar_lock, obter_dispositivo
+from inventario.services.pocket_lock_operacional import garantir_lock_contagem_ciclico_pocket
 from inventario.services.tarefas import (
     TarefaError,
-    iniciar_tarefa,
     item_atribuido_operador_ciclico,
-    obter_tarefa_ciclica,
 )
 
 from inventario.services.ciclico import (
@@ -903,14 +902,6 @@ def registrar_contagem_pocket_ciclico_por_sku(
 
 
 
-    tarefa = obter_tarefa_ciclica(item, usuario) if item else None
-
-    if tarefa:
-
-        iniciar_tarefa(tarefa)
-
-
-
     ip = None
 
     if request is not None:
@@ -929,31 +920,27 @@ def registrar_contagem_pocket_ciclico_por_sku(
 
     try:
 
-        lock_info = adquirir_lock(
+        if request is None:
 
-            tipo_inventario=InventarioLock.TipoInventario.CICLICO,
+            raise CiclicoError('Requisição inválida para contagem pocket.')
 
-            ciclo=sku.ciclo,
+        lock = garantir_lock_contagem_ciclico_pocket(
 
-            ciclo_item=item,
+            request,
 
-            posicao=posicao,
+            sku,
 
-            usuario=usuario,
+            posicao,
 
-            tarefa=tarefa,
+            item,
 
             dispositivo=dispositivo,
-
-            session_key=obter_session_key(session),
 
             ip=ip,
 
         )
 
-        lock = lock_info.lock
-
-    except LockError as exc:
+    except (LockError, TarefaError) as exc:
 
         raise CiclicoError(str(exc)) from exc
 

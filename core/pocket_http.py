@@ -7,6 +7,15 @@ from django.http import JsonResponse
 logger = logging.getLogger(__name__)
 
 
+def is_pocket_ajax(request) -> bool:
+    """Detecção única de requisições Pocket que devem receber JSON."""
+    if not request.path.startswith('/pocket/'):
+        return False
+    if request.method == 'POST' and post_pocket_ciclico(request):
+        return True
+    return requisicao_ajax_pocket(request)
+
+
 def requisicao_ajax_pocket(request) -> bool:
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return True
@@ -23,11 +32,7 @@ def post_pocket_ciclico(request) -> bool:
 
 
 def deve_responder_json_pocket(request) -> bool:
-    if not request.path.startswith('/pocket/'):
-        return False
-    if request.method == 'POST' and post_pocket_ciclico(request):
-        return True
-    return requisicao_ajax_pocket(request)
+    return is_pocket_ajax(request)
 
 
 def log_pocket_post(request) -> None:
@@ -62,16 +67,7 @@ def json_erro_pocket(request, mensagem: str, *, status: int = 400, **extra):
 
 
 def post_pocket_monitorado(request) -> bool:
-    if request.method != 'POST':
-        return False
-    if post_pocket_ciclico(request):
-        return True
-    if not request.path.startswith('/pocket/'):
-        return False
-    return (
-        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        or request.POST.get('pocket_ajax') == '1'
-    )
+    return request.method == 'POST' and is_pocket_ajax(request)
 
 
 def log_pocket_redirect_debug(request, *, fase='request', response=None) -> None:

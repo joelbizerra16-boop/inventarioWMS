@@ -19,10 +19,43 @@ from inventario.services.tarefas import (
     posicao_atribuida_operador_geral,
 )
 from core.logging_auditoria import ip_do_request
+from posicoes.models import Posicao
 
 
 class PocketLockOperacionalError(Exception):
     pass
+
+
+def _preparar_tarefa_ciclico(item, usuario):
+    if item and not item_atribuido_operador_ciclico(item, usuario):
+        raise TarefaError('Posição não atribuída a você. Contate o supervisor.')
+    tarefa = obter_tarefa_ciclica(item, usuario) if item else None
+    if tarefa:
+        iniciar_tarefa(tarefa)
+    return tarefa
+
+
+def _adquirir_lock_ciclico(
+    *,
+    request,
+    sku: CicloInventarioSku,
+    posicao: Posicao,
+    item,
+    tarefa,
+    dispositivo: str = '',
+    ip: str | None = None,
+):
+    return adquirir_lock(
+        tipo_inventario=InventarioLock.TipoInventario.CICLICO,
+        ciclo=sku.ciclo,
+        ciclo_item=item,
+        posicao=posicao,
+        usuario=request.user,
+        tarefa=tarefa,
+        dispositivo=dispositivo or obter_dispositivo(request),
+        session_key=obter_session_key(request.session),
+        ip=ip if ip is not None else ip_do_request(request),
+    )
 
 
 def adquirir_lock_posicao_pocket_geral(request, inventario, codigo_posicao: str):
@@ -73,25 +106,42 @@ def adquirir_lock_posicao_pocket_ciclico(request, sku_id: int, codigo_posicao: s
         raise PocketLockOperacionalError('SKU inválido')
 
     item = sku.posicoes.filter(posicao=posicao).first()
-    if item and not item_atribuido_operador_ciclico(item, request.user):
-        raise TarefaError('Posição não atribuída a você. Contate o supervisor.')
+    tarefa = _preparar_tarefa_ciclico(item, request.user)
 
-    tarefa = obter_tarefa_ciclica(item, request.user) if item else None
-    if tarefa:
-        iniciar_tarefa(tarefa)
-
-    lock = adquirir_lock(
-        tipo_inventario=InventarioLock.TipoInventario.CICLICO,
-        ciclo=sku.ciclo,
-        ciclo_item=item,
+    lock = _adquirir_lock_ciclico(
+        request=request,
+        sku=sku,
         posicao=posicao,
-        usuario=request.user,
+        item=item,
         tarefa=tarefa,
-        dispositivo=obter_dispositivo(request),
-        session_key=obter_session_key(request.session),
-        ip=ip_do_request(request),
     )
     return lock, posicao
+
+
+def garantir_lock_contagem_ciclico_pocket(
+    request,
+    sku: CicloInventarioSku,
+    posicao: Posicao,
+    item,
+    *,
+    dispositivo: str = '',
+    ip: str | None = None,
+):
+    """
+    Ponto único de lock na gravação: renova lock da UI ou adquire se ausente
+    (compatibilidade com testes e POST direto sem lock_posicao).
+    """
+    tarefa = _preparar_tarefa_ciclico(item, request.user)
+    lock_info = _adquirir_lock_ciclico(
+        request=request,
+        sku=sku,
+        posicao=posicao,
+        item=item,
+        tarefa=tarefa,
+        dispositivo=dispositivo,
+        ip=ip,
+    )
+    return lock_info.lock
 
 
 def liberar_lock_posicao_pocket_ciclico(request, ciclo, codigo_posicao: str) -> bool:

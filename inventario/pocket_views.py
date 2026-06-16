@@ -72,6 +72,7 @@ from inventario.services.pocket_lock_operacional import (
 from inventario.services.tarefas import TarefaError
 from core.logging_auditoria import ip_do_request
 from core.pocket_http import (
+    is_pocket_ajax,
     deve_responder_json_pocket,
     json_erro_pocket,
     log_pocket_post,
@@ -190,7 +191,7 @@ class PocketContagemView(RequerEscritaPocketMixin, View):
 
     @staticmethod
     def _requisicao_ajax(request) -> bool:
-        return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        return is_pocket_ajax(request)
 
     @staticmethod
     def _resposta_json_erro(form=None, mensagem=''):
@@ -541,7 +542,7 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
 
     @staticmethod
     def _requisicao_ajax(request) -> bool:
-        return deve_responder_json_pocket(request)
+        return is_pocket_ajax(request)
 
     def _resposta_json_erro(self, request, form=None, mensagem=''):
         payload = {'ok': False}
