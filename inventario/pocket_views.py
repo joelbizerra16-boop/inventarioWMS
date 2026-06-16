@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal
 
 
@@ -107,6 +108,9 @@ from inventario.services.pocket import (
 
 
 
+
+
+logger = logging.getLogger(__name__)
 
 
 class PocketSelecionarView(AcessoOperacionalMixin, View):
@@ -508,6 +512,13 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
 
     @staticmethod
     def _requisicao_ajax(request) -> bool:
+        logger.error(
+            'POCKET_AJAX header=%s pocket_ajax=%s path=%s method=%s',
+            request.headers.get('X-Requested-With'),
+            request.POST.get('pocket_ajax'),
+            request.path,
+            request.method,
+        )
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return True
         # Coletores RF (WebView Android) podem omitir cabeçalhos customizados no fetch.
@@ -544,6 +555,13 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         ciclo = obter_ciclo_atual(request.session)
         if ciclo is None:
             messages.error(request, 'Nenhum ciclo cíclico ativo.')
+            logger.error(
+                'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+                '547',
+                'pocket:selecionar',
+                request.POST.get('acao'),
+                self._requisicao_ajax(request),
+            )
             return redirect('pocket:selecionar')
 
         lote_info = obter_lote_execucao_info(request.session)
@@ -551,6 +569,13 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             messages.warning(
                 request,
                 'Gere um lote na tela Executar Ciclo antes de contar.',
+            )
+            logger.error(
+                'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+                '555',
+                'pocket:selecionar',
+                request.POST.get('acao'),
+                self._requisicao_ajax(request),
             )
             return redirect('pocket:selecionar')
 
@@ -592,12 +617,26 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
         ciclo = obter_ciclo_atual(request.session)
         if ciclo is None:
             messages.error(request, 'Nenhum ciclo cíclico ativo.')
+            logger.error(
+                'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+                '595',
+                'pocket:selecionar',
+                request.POST.get('acao'),
+                self._requisicao_ajax(request),
+            )
             return redirect('pocket:selecionar')
 
         if obter_lote_execucao_info(request.session) is None:
             messages.warning(
                 request,
                 'Gere um lote na tela Executar Ciclo antes de contar.',
+            )
+            logger.error(
+                'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+                '602',
+                'pocket:selecionar',
+                request.POST.get('acao'),
+                self._requisicao_ajax(request),
             )
             return redirect('pocket:selecionar')
 
@@ -619,6 +658,13 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
     def _post_finalizar_sku(self, request, painel):
         if not self._requisicao_ajax(request):
             messages.error(request, 'Requisição inválida.')
+            logger.error(
+                'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+                '622',
+                'pocket:contagem_ciclico',
+                request.POST.get('acao'),
+                self._requisicao_ajax(request),
+            )
             return redirect('pocket:contagem_ciclico')
 
         sku_raw = request.POST.get('sku_id', '').strip()
@@ -659,6 +705,13 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
     def _post_encerrar_ciclo(self, request):
         if not self._requisicao_ajax(request):
             messages.error(request, 'Requisição inválida.')
+            logger.error(
+                'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+                '662',
+                'pocket:contagem_ciclico',
+                request.POST.get('acao'),
+                self._requisicao_ajax(request),
+            )
             return redirect('pocket:contagem_ciclico')
 
         try:
@@ -688,6 +741,13 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             return render(request, self.template_name, self._contexto(request, painel=painel))
 
         messages.info(request, 'SKU enviado para recontagem na fila.')
+        logger.error(
+            'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+            '691',
+            'pocket:contagem_ciclico',
+            request.POST.get('acao'),
+            self._requisicao_ajax(request),
+        )
         return redirect('pocket:contagem_ciclico')
 
     def _post_aceitar_divergencia(self, request, painel):
@@ -715,8 +775,22 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
                 request,
                 'Inventário Cíclico concluído com sucesso.',
             )
+            logger.error(
+                'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+                '718',
+                'ciclico',
+                request.POST.get('acao'),
+                self._requisicao_ajax(request),
+            )
             return redirect('ciclico')
         messages.success(request, 'Divergência aceita. SKU concluído no lote.')
+        logger.error(
+            'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+            '720',
+            'pocket:contagem_ciclico',
+            request.POST.get('acao'),
+            self._requisicao_ajax(request),
+        )
         return redirect('pocket:contagem_ciclico')
 
     def _post_contagem(self, request, painel):
@@ -803,6 +877,12 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             )
             tipo_mensagem = 'success'
 
+        logger.error(
+            'POCKET_CONTAGEM ajax=%s acao=%s pocket_ajax=%s',
+            self._requisicao_ajax(request),
+            request.POST.get('acao'),
+            request.POST.get('pocket_ajax'),
+        )
         if self._requisicao_ajax(request):
             resposta = obter_resposta_contagem_pocket(
                 request.session,
@@ -822,12 +902,26 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
 
         if ciclo_encerrado is not None:
             messages.success(request, 'Ciclo concluído com sucesso.')
+            logger.error(
+                'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+                '825',
+                'pocket:selecionar',
+                request.POST.get('acao'),
+                self._requisicao_ajax(request),
+            )
             return redirect('pocket:selecionar')
 
         if tipo_mensagem == 'warning':
             messages.warning(request, mensagem)
         else:
             messages.success(request, mensagem)
+        logger.error(
+            'POCKET_REDIRECT linha=%s destino=%s acao=%s ajax=%s',
+            '831',
+            'pocket:contagem_ciclico',
+            request.POST.get('acao'),
+            self._requisicao_ajax(request),
+        )
         return redirect('pocket:contagem_ciclico')
 
 
