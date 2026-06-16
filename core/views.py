@@ -6,6 +6,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 
 from accounts.services.perfil import usuario_e_operador_pocket
+from core.pocket_http import deve_responder_json_pocket, json_erro_pocket
 from core.services.exclusao import MENSAGEM_ERRO_INESPERADO, MENSAGEM_NAO_ENCONTRADO
 
 MENSAGEM_ERRO_HTTP = 'Erro interno. Contate o suporte.'
@@ -32,6 +33,8 @@ def _destino_pos_erro(request) -> str:
 
 
 def handler404(request, exception):
+    if deve_responder_json_pocket(request):
+        return json_erro_pocket(request, MENSAGEM_NAO_ENCONTRADO, status=404)
     messages.error(request, MENSAGEM_NAO_ENCONTRADO)
     if request.user.is_authenticated and usuario_e_operador_pocket(request.user):
         return redirect(reverse('pocket:selecionar'))
@@ -45,6 +48,8 @@ def handler404(request, exception):
 
 
 def handler500(request):
+    if deve_responder_json_pocket(request):
+        return json_erro_pocket(request, MENSAGEM_ERRO_INESPERADO, status=500)
     messages.error(request, MENSAGEM_ERRO_INESPERADO)
     destino = _destino_pos_erro(request)
     if _paths_equivalent(request.path, destino):

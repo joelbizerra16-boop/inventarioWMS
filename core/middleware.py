@@ -77,6 +77,18 @@ class TratamentoExcecaoUsuarioMiddleware:
         destino_path = urlparse(destino).path if '://' in destino else destino
         if (destino_path or '/').rstrip('/') == (request.path or '/').rstrip('/'):
             return HttpResponseServerError('Erro interno. Contate o suporte.')
+        logger.error(
+            'CONTAGEM_RETURN %s',
+            {
+                'tipo': 'redirect',
+                'destino': destino,
+                'status': 302,
+                'motivo': type(exception).__name__,
+                'path': request.path,
+                'acao': request.POST.get('acao'),
+                'user_id': getattr(request.user, 'pk', None),
+            },
+        )
         return redirect(destino)
 
     def _deve_tratar(self, request, exception) -> bool:

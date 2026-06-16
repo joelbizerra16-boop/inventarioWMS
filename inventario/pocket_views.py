@@ -119,6 +119,24 @@ from inventario.services.pocket import (
 logger = logging.getLogger(__name__)
 
 
+def _log_contagem_return(request, *, tipo, destino='', status=200, motivo='', exc=None):
+    """Forense: rastreia cada retorno do fluxo POST acao=contagem."""
+    extra = {
+        'tipo': tipo,
+        'destino': destino,
+        'status': status,
+        'motivo': motivo,
+        'user_id': getattr(request.user, 'pk', None),
+        'acao': request.POST.get('acao', 'contagem'),
+        'sku_id': request.POST.get('sku_id'),
+        'codigo_posicao': request.POST.get('codigo_posicao'),
+    }
+    if exc is not None:
+        extra['exc_type'] = type(exc).__name__
+        extra['exc_msg'] = str(exc)
+    logger.error('CONTAGEM_RETURN %s', extra)
+
+
 class PocketSelecionarView(AcessoOperacionalMixin, View):
 
     template_name = 'inventario/pocket/selecionar.html'
@@ -634,6 +652,118 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             return self._post_finalizar_sku(request, painel)
         return self._post_contagem(request, painel)
 
+    def _post_contagem(self, request, painel):
+        try:
+            return self._post_contagem_impl(request, painel)
+        except Exception as exc:
+            logger.exception('Exceção inesperada em POST contagem pocket cíclico')
+            _log_contagem_return(
+                request,
+                tipo='exception',
+                status=500,
+                motivo=str(exc),
+                exc=exc,
+            )
+            return json_erro_pocket(
+                request,
+                'Erro interno ao salvar contagem. Contate o suporte.',
+                status=500,
+            )
+
+    def _post_contagem_impl(self, request, painel):
+        form = PocketContagemCiclicoForm(request.POST, fila=painel.fila)
+
+        if not form.is_valid():
+            _log_contagem_return(request, tipo='json', status=400, motivo='form_invalido')
+            return self._resposta_json_erro(request, form=form)
+
+        posicao = buscar_posicao_por_codigo(form.cleaned_data['codigo_posicao'])
+        if posicao is None:
+            form.add_error('codigo_posicao', 'Posição não encontrada.')
+            _log_contagem_return(request, tipo='json', status=400, motivo='posicao_nao_encontrada')
+            return self._resposta_json_erro(request, form=form)
+
+        quantidade = Decimal(form.cleaned_data['quantidade_fisica'])
+        sku_id = form.cleaned_data['sku_id']
+
+        try:
+            sku, ciclo_encerrado = registrar_contagem_pocket_ciclico_por_sku(
+                request.session,
+                sku_id,
+                posicao,
+                quantidade,
+                request.user,
+                request=request,
+            )
+        except CiclicoContagemDuplicadaError as exc:
+            from inventario.models_operacional import InventarioAuditoriaEvento, InventarioLock
+            from inventario.services.auditoria_operacional import registrar_evento_operacional
+
+            ctx = exc.contexto_auditoria
+            if ctx:
+                registrar_evento_operacional(
+                    evento=InventarioAuditoriaEvento.Evento.CONTAGEM_REJEITADA,
+                    tipo_inventario=InventarioLock.TipoInventario.CICLICO,
+                    ciclo=ctx.get('ciclo'),
+                    usuario=ctx.get('usuario'),
+                    dispositivo=ctx.get('dispositivo', ''),
+                    posicao=ctx.get('posicao'),
+                    produto=ctx.get('produto'),
+                    quantidade=ctx.get('quantidade'),
+                    dados_extras={'motivo': 'DUPLICIDADE_CICLO_POSICAO_PRODUTO'},
+                )
+            _log_contagem_return(request, tipo='json', status=400, motivo=str(exc))
+            return self._resposta_json_erro(request, mensagem=str(exc))
+        except CiclicoError as exc:
+            _log_contagem_return(request, tipo='json', status=400, motivo=str(exc))
+            return self._resposta_json_erro(request, mensagem=str(exc))
+
+        registrar_historico_pocket_ciclico(
+            request.session,
+            posicao,
+            sku.produto,
+            quantidade,
+        )
+
+        if sku.status_contagem == 'VALIDADO':
+            limpar_pocket_sessao_contagem(request.session)
+            mensagem = (
+                f'Contagem validada: {posicao.codigo} / {sku.codigo_produto} '
+                f'= {sku.quantidade_fisica} (+{quantidade})'
+            )
+            tipo_mensagem = 'success'
+        elif sku.status_contagem == 'DIVERGENTE':
+            request.session[SESSION_POCKET_MANTER_CONTAGEM] = True
+            mensagem = (
+                f'Contagem registrada com divergência: {posicao.codigo} / '
+                f'{sku.codigo_produto} = {sku.quantidade_fisica} (+{quantidade})'
+            )
+            tipo_mensagem = 'warning'
+        else:
+            request.session[SESSION_POCKET_MANTER_CONTAGEM] = True
+            mensagem = (
+                f'Contagem cíclica: {posicao.codigo} / {sku.codigo_produto} '
+                f'= {sku.quantidade_fisica} (+{quantidade})'
+            )
+            tipo_mensagem = 'success'
+
+        resposta = obter_resposta_contagem_pocket(
+            request.session,
+            sku_id,
+            request.user,
+            ciclo_encerrado=ciclo_encerrado,
+            sku=sku,
+        )
+        if resposta.get('sku_removido_fila'):
+            limpar_pocket_sessao_contagem(request.session)
+        _log_contagem_return(request, tipo='json', status=200, motivo='contagem_ok')
+        return resposta_json_pocket(request, {
+            'ok': True,
+            'message': mensagem,
+            'tipo_mensagem': tipo_mensagem,
+            **resposta,
+        })
+
     def _post_finalizar_sku(self, request, painel):
         sku_raw = request.POST.get('sku_id', '').strip()
         if not sku_raw.isdigit():
@@ -746,95 +876,4 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             'message': 'Divergência aceita. SKU concluído no lote.',
             **resposta,
         })
-
-    def _post_contagem(self, request, painel):
-        form = PocketContagemCiclicoForm(request.POST, fila=painel.fila)
-        contexto = self._contexto(request, form=form, painel=painel)
-
-        if not form.is_valid():
-            return self._resposta_json_erro(request, form=form)
-
-        posicao = buscar_posicao_por_codigo(form.cleaned_data['codigo_posicao'])
-        if posicao is None:
-            form.add_error('codigo_posicao', 'Posição não encontrada.')
-            return self._resposta_json_erro(request, form=form)
-
-        quantidade = Decimal(form.cleaned_data['quantidade_fisica'])
-        sku_id = form.cleaned_data['sku_id']
-
-        try:
-            sku, ciclo_encerrado = registrar_contagem_pocket_ciclico_por_sku(
-                request.session,
-                sku_id,
-                posicao,
-                quantidade,
-                request.user,
-                request=request,
-            )
-        except CiclicoContagemDuplicadaError as exc:
-            from inventario.models_operacional import InventarioAuditoriaEvento, InventarioLock
-            from inventario.services.auditoria_operacional import registrar_evento_operacional
-
-            ctx = exc.contexto_auditoria
-            if ctx:
-                registrar_evento_operacional(
-                    evento=InventarioAuditoriaEvento.Evento.CONTAGEM_REJEITADA,
-                    tipo_inventario=InventarioLock.TipoInventario.CICLICO,
-                    ciclo=ctx.get('ciclo'),
-                    usuario=ctx.get('usuario'),
-                    dispositivo=ctx.get('dispositivo', ''),
-                    posicao=ctx.get('posicao'),
-                    produto=ctx.get('produto'),
-                    quantidade=ctx.get('quantidade'),
-                    dados_extras={'motivo': 'DUPLICIDADE_CICLO_POSICAO_PRODUTO'},
-                )
-            return self._resposta_json_erro(request, mensagem=str(exc))
-        except CiclicoError as exc:
-            return self._resposta_json_erro(request, mensagem=str(exc))
-
-        registrar_historico_pocket_ciclico(
-            request.session,
-            posicao,
-            sku.produto,
-            quantidade,
-        )
-
-        if sku.status_contagem == 'VALIDADO':
-            limpar_pocket_sessao_contagem(request.session)
-            mensagem = (
-                f'Contagem validada: {posicao.codigo} / {sku.codigo_produto} '
-                f'= {sku.quantidade_fisica} (+{quantidade})'
-            )
-            tipo_mensagem = 'success'
-        elif sku.status_contagem == 'DIVERGENTE':
-            request.session[SESSION_POCKET_MANTER_CONTAGEM] = True
-            mensagem = (
-                f'Contagem registrada com divergência: {posicao.codigo} / '
-                f'{sku.codigo_produto} = {sku.quantidade_fisica} (+{quantidade})'
-            )
-            tipo_mensagem = 'warning'
-        else:
-            request.session[SESSION_POCKET_MANTER_CONTAGEM] = True
-            mensagem = (
-                f'Contagem cíclica: {posicao.codigo} / {sku.codigo_produto} '
-                f'= {sku.quantidade_fisica} (+{quantidade})'
-            )
-            tipo_mensagem = 'success'
-
-        resposta = obter_resposta_contagem_pocket(
-            request.session,
-            sku_id,
-            request.user,
-            ciclo_encerrado=ciclo_encerrado,
-            sku=sku,
-        )
-        if resposta.get('sku_removido_fila'):
-            limpar_pocket_sessao_contagem(request.session)
-        return resposta_json_pocket(request, {
-            'ok': True,
-            'message': mensagem,
-            'tipo_mensagem': tipo_mensagem,
-            **resposta,
-        })
-
 
