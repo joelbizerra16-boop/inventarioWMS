@@ -592,6 +592,29 @@ def _obter_canais_sku(sku: CicloInventarioSku) -> tuple[Decimal | None, Decimal 
     return canais
 
 
+def _precarregar_canais_skus(
+    skus: list[CicloInventarioSku],
+) -> dict[int, tuple[Decimal | None, Decimal | None]]:
+    produto_ids = {
+        sku.produto_id
+        for sku in skus
+        if sku.quantidade_cosan is None and sku.quantidade_brida is None
+    }
+    return _obter_canais_sap_por_produto(produto_ids)
+
+
+def _obter_canais_sku_com_cache(
+    sku: CicloInventarioSku,
+    canais_por_produto: dict[int, tuple[Decimal | None, Decimal | None]],
+) -> tuple[Decimal | None, Decimal | None]:
+    if sku.quantidade_cosan is not None or sku.quantidade_brida is not None:
+        return sku.quantidade_cosan, sku.quantidade_brida
+    canais = canais_por_produto.get(sku.produto_id)
+    if canais is None:
+        return None, None
+    return canais
+
+
 def _produto_elegivel_ciclo(
     sap: EstoqueSAP,
     embalagens: list[str] | None,
@@ -619,10 +642,13 @@ def _produto_elegivel_ciclo(
 
 
 def obter_info_sap_para_ciclo() -> InfoSapCiclo:
-    sap_por_produto = _obter_estoque_sap_por_produto()
-    total = sum(
-        1 for sap in sap_por_produto.values()
-        if sap.produto.participa_ciclico
+    total = (
+        Produto.objects.filter(
+            participa_ciclico=True,
+            estoques_sap__isnull=False,
+        )
+        .distinct()
+        .count()
     )
     ultima = (
         EstoqueSAP.objects.order_by('-data_importacao')
@@ -1719,6 +1745,7 @@ def calcular_resumo_skus(skus: list[CicloInventarioSku]) -> CicloResumo:
     por_usuario: dict[str, int] = {}
     por_origem: dict[str, int] = {}
     por_canal_cosan = por_canal_brida = 0
+    canais_por_produto = _precarregar_canais_skus(ativos)
 
     with medir_etapa('ciclico.calcular_resumo_skus.loop_skus'):
         for sku in ativos:
@@ -1726,7 +1753,7 @@ def calcular_resumo_skus(skus: list[CicloInventarioSku]) -> CicloResumo:
             por_embalagem[embalagem] = por_embalagem.get(embalagem, 0) + 1
             setor = sku.setor or 'Sem setor'
             por_setor[setor] = por_setor.get(setor, 0) + 1
-            cosan, brida = _obter_canais_sku(sku)
+            cosan, brida = _obter_canais_sku_com_cache(sku, canais_por_produto)
             if cosan and cosan > 0:
                 por_canal_cosan += 1
             if brida and brida > 0:
@@ -1784,7 +1811,19 @@ def calcular_resumo_ciclo(ciclo: CicloInventario) -> CicloResumo:
             'usuario_contagem__perfil_operacional',
         )
         skus = list(
-            CicloInventarioSku.objects.filter(ciclo=ciclo).prefetch_related(
+            CicloInventarioSku.objects.filter(ciclo=ciclo)
+            .only(
+                'id',
+                'status_contagem',
+                'embalagem',
+                'setor',
+                'quantidade_cosan',
+                'quantidade_brida',
+                'quantidade_fisica',
+                'quantidade_sap',
+                'produto_id',
+            )
+            .prefetch_related(
                 Prefetch('posicoes', queryset=posicoes_qs),
             ),
         )
