@@ -13,6 +13,7 @@ from core.services.importacao_excel import (
     limpar_valor,
     validar_colunas_obrigatorias,
 )
+from core.services.perf_diagnostico import medir_etapa
 from estoque_sap.models import EstoqueSAP
 from produtos.models import Produto
 
@@ -510,9 +511,10 @@ def importar_dados(
             batch_size=BATCH_SIZE_IMPORTACAO,
         )
 
-    from inventario.services.ciclico import sincronizar_sap_ciclo_ativo
+    with medir_etapa('estoque_sap.importar.confirmar.sincronizar_ciclo'):
+        from inventario.services.ciclico import sincronizar_sap_ciclo_ativo
 
-    sincronizar_sap_ciclo_ativo(produto_ids)
+        sincronizar_sap_ciclo_ativo(produto_ids)
 
     return ResultadoImportacao(
         inseridos=inseridos,

@@ -1042,6 +1042,23 @@ def _obter_ultima_contagem_sku(sku: CicloInventarioSku) -> datetime | None:
     return max(datas) if datas else None
 
 
+def _obter_totais_sap_por_produto(
+    produto_ids: set[int] | list[int],
+) -> dict[int, Decimal]:
+    if not produto_ids:
+        return {}
+
+    totais: dict[int, Decimal] = {}
+    registros = EstoqueSAP.objects.filter(
+        produto_id__in=produto_ids,
+    ).order_by('produto_id', '-data_importacao').values('produto_id', 'total')
+    for registro in registros:
+        produto_id = registro['produto_id']
+        if produto_id not in totais:
+            totais[produto_id] = _decimal(registro['total'])
+    return totais
+
+
 def _obter_estoque_sap_por_produto() -> dict[int, EstoqueSAP]:
     estoques: dict[int, EstoqueSAP] = {}
     registros = EstoqueSAP.objects.select_related('produto').order_by(
@@ -2492,30 +2509,46 @@ def sincronizar_sap_ciclo_ativo(produto_ids: list[int] | None = None) -> int:
     if ciclo is None:
         return 0
 
-    sap_por_produto = _obter_estoque_sap_por_produto()
-    if produto_ids is not None:
-        sap_por_produto = {
-            pid: sap for pid, sap in sap_por_produto.items() if pid in produto_ids
-        }
+    produto_ids_set = set(produto_ids) if produto_ids else None
 
-    atualizados = 0
-    agora = timezone.now()
+    with medir_etapa('ciclico.sincronizar_sap_ciclo_ativo.carregar_sap'):
+        if produto_ids_set is not None:
+            sap_totais = _obter_totais_sap_por_produto(produto_ids_set)
+        else:
+            sap_totais = {
+                produto_id: _decimal(sap.total)
+                for produto_id, sap in _obter_estoque_sap_por_produto().items()
+            }
 
-    for produto_id, sap in sap_por_produto.items():
-        try:
-            sku = CicloInventarioSku.objects.get(ciclo=ciclo, produto_id=produto_id)
-        except CicloInventarioSku.DoesNotExist:
-            continue
+    if not sap_totais:
+        return 0
 
-        if sku.status_contagem not in (StatusItemCiclico.PENDENTE,):
-            continue
+    filtro_produtos = produto_ids_set if produto_ids_set is not None else sap_totais.keys()
 
-        sku.quantidade_sap = _decimal(sap.total)
-        sku.data_atualizacao_sap = agora
-        sku.save(update_fields=['quantidade_sap', 'data_atualizacao_sap'])
-        atualizados += 1
+    with medir_etapa('ciclico.sincronizar_sap_ciclo_ativo.atualizar_skus'):
+        skus = CicloInventarioSku.objects.filter(
+            ciclo=ciclo,
+            produto_id__in=filtro_produtos,
+            status_contagem=StatusItemCiclico.PENDENTE,
+        )
+        agora = timezone.now()
+        atualizar_skus: list[CicloInventarioSku] = []
+        for sku in skus:
+            sap_total = sap_totais.get(sku.produto_id)
+            if sap_total is None:
+                continue
+            sku.quantidade_sap = sap_total
+            sku.data_atualizacao_sap = agora
+            atualizar_skus.append(sku)
 
-    return atualizados
+        if atualizar_skus:
+            CicloInventarioSku.objects.bulk_update(
+                atualizar_skus,
+                ['quantidade_sap', 'data_atualizacao_sap'],
+                batch_size=500,
+            )
+
+        return len(atualizar_skus)
 
 
 def obter_historico_sku(sku_id: int) -> list[CicloAuditoriaHistorico]:

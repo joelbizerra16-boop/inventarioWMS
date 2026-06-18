@@ -1,11 +1,17 @@
 from decimal import Decimal
 
 import pandas as pd
-from django.test import TestCase
+from django.db import connection
+from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
+from estoque_sap.models import EstoqueSAP
 from estoque_sap.services.importacao_estoque_sap import (
+    CAMPOS_CANAIS,
     MAPEAMENTO_COLUNAS,
     excluir_linha_preview,
+    importar_dados,
     montar_preview_sessao,
     normalizar_colunas_importacao,
     obter_status_linha,
@@ -13,7 +19,20 @@ from estoque_sap.services.importacao_estoque_sap import (
     serializar_preview_sessao,
     validar_produto_preview,
 )
+from inventario.models import CicloInventarioSku
+from inventario.services.ciclico import criar_ciclo, limpar_estado_ciclico
+from posicoes.models import Posicao
 from produtos.models import Produto
+
+
+def _linha_importacao_sap(codigo: str, total: str = '10') -> dict:
+    dados = {
+        'codigo_produto': codigo,
+        'total': total,
+    }
+    for campo in CAMPOS_CANAIS:
+        dados[campo] = '0' if campo != 'canal_1' else total
+    return dados
 
 
 class NormalizacaoColunasSAPTestCase(TestCase):
@@ -150,3 +169,46 @@ class PreviewImportacaoSAPTestCase(TestCase):
         self.assertEqual(len(linhas), total_antes)
         self.assertEqual(preview_atualizado.total_linhas, total_antes - 1)
         self.assertTrue(Produto.objects.filter(pk__isnull=False).exists())
+
+
+class ImportacaoSAPCicloPerformanceTestCase(TestCase):
+    def setUp(self):
+        limpar_estado_ciclico()
+        self.posicao = Posicao.objects.create(codigo='SAP-PERF', posicao='P-01')
+        self.produtos = []
+        for indice in range(368):
+            codigo = f'SAP{indice:04d}'
+            produto = Produto.objects.create(
+                codigo_produto=codigo,
+                descricao=f'Produto {codigo}',
+                setor='A',
+                embalagem='Unidade',
+                participa_ciclico=True,
+            )
+            EstoqueSAP.objects.create(
+                produto=produto,
+                total=Decimal('10'),
+                arquivo_origem='inicial.xlsx',
+            )
+            self.produtos.append(produto)
+        criar_ciclo()
+
+    def tearDown(self):
+        limpar_estado_ciclico()
+
+    @override_settings(DEBUG=True)
+    def test_importar_368_registros_sincroniza_ciclo_sem_n_plus1(self):
+        linhas = [_linha_importacao_sap(p.codigo_produto, '15') for p in self.produtos]
+
+        with CaptureQueriesContext(connection) as contexto:
+            resultado = importar_dados(linhas, arquivo_origem='carga.xlsx')
+
+        self.assertEqual(resultado.inseridos + resultado.atualizados, 368)
+        skus = CicloInventarioSku.objects.filter(status_contagem='PENDENTE')
+        self.assertEqual(skus.count(), 368)
+        self.assertTrue(all(sku.quantidade_sap == Decimal('15') for sku in skus))
+        self.assertLessEqual(
+            len(contexto.captured_queries),
+            25,
+            msg='Importação SAP com ciclo ativo deve evitar N+1 na sincronização.',
+        )
