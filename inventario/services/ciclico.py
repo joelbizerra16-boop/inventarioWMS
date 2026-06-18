@@ -436,23 +436,49 @@ def _posicao_generica_sem_contagem(item: CicloInventarioItem) -> bool:
 
 
 def _posicoes_operacionais_sku(sku: CicloInventarioSku) -> list[CicloInventarioItem]:
-    return [
-        posicao for posicao in sku.posicoes.all()
-        if not _posicao_generica_sem_contagem(posicao)
-    ]
+    return _filtrar_posicoes_ui(_posicoes_sku_ordenadas(sku))
+
+
+def _posicoes_sku_ordenadas(sku: CicloInventarioSku) -> list[CicloInventarioItem]:
+    posicoes_prefetch = getattr(sku, '_prefetched_objects_cache', {}).get('posicoes')
+    if posicoes_prefetch is not None:
+        posicoes = list(posicoes_prefetch)
+    else:
+        posicoes = list(
+            sku.posicoes.select_related(
+                'usuario_contagem',
+                'usuario_contagem__perfil_operacional',
+            ),
+        )
+    posicoes.sort(key=lambda posicao: posicao.codigo_posicao or '')
+    return posicoes
+
+
+def _historico_sku_ordenado(sku: CicloInventarioSku) -> list[CicloAuditoriaHistorico]:
+    historico_prefetch = getattr(sku, '_prefetched_objects_cache', {}).get('historico')
+    if historico_prefetch is not None:
+        registros = list(historico_prefetch)
+    else:
+        registros = list(
+            sku.historico.select_related(
+                'usuario',
+                'usuario__perfil_operacional',
+            ),
+        )
+    registros.sort(key=lambda registro: registro.data_hora, reverse=True)
+    return registros
 
 
 def sku_contagem_pocket_completa(sku: CicloInventarioSku) -> bool:
-    posicoes = [
-        posicao for posicao in CicloInventarioItem.objects.filter(ciclo_sku=sku)
-        if not _posicao_generica_sem_contagem(posicao)
-    ]
+    posicoes = _posicoes_operacionais_sku(sku)
     if not posicoes:
         return True
     return all(posicao.quantidade_fisica is not None for posicao in posicoes)
 
 
 def _filtrar_posicoes_ui(posicoes) -> list:
+    if hasattr(posicoes, '_prefetch_related_lookups'):
+        posicoes = list(posicoes)
     return [p for p in posicoes if not _posicao_generica_sem_contagem(p)]
 
 
@@ -1091,16 +1117,12 @@ def _sku_para_dto(
     incluir_posicoes: bool = False,
     incluir_historico: bool = False,
     usuario=None,
+    canais_por_produto: dict[int, tuple[Decimal | None, Decimal | None]] | None = None,
 ) -> SkuCicloDetalhe:
     posicoes_dto: list[PosicaoCicloDetalhe] = []
     historico_dto: list[HistoricoCicloLinha] = []
     if incluir_posicoes:
-        posicoes_visiveis = _filtrar_posicoes_ui(
-            sku.posicoes.select_related(
-                'usuario_contagem',
-                'usuario_contagem__perfil_operacional',
-            ).order_by('codigo_posicao'),
-        )
+        posicoes_visiveis = _filtrar_posicoes_ui(_posicoes_sku_ordenadas(sku))
         for posicao in posicoes_visiveis:
             posicoes_dto.append(PosicaoCicloDetalhe(
                 pk=posicao.pk,
@@ -1117,13 +1139,19 @@ def _sku_para_dto(
     if incluir_historico:
         historico_dto = [
             _historico_para_dto(registro)
-            for registro in sku.historico.order_by('-data_hora')
+            for registro in _historico_sku_ordenado(sku)
         ]
 
     ultima_origem, ultima_origem_label, ultimo_usuario, ultima_data, ultimo_dispositivo = (
         _obter_ultima_contagem_sku_info(sku)
     )
-    quantidade_cosan, quantidade_brida = _obter_canais_sku(sku)
+    if canais_por_produto is not None:
+        quantidade_cosan, quantidade_brida = _obter_canais_sku_com_cache(
+            sku,
+            canais_por_produto,
+        )
+    else:
+        quantidade_cosan, quantidade_brida = _obter_canais_sku(sku)
     diferenca_sap, indicador_sap, indicador_sap_tooltip = _calcular_indicador_confronto(
         sku.quantidade_fisica,
         sku.quantidade_sap,

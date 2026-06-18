@@ -7,12 +7,14 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from django.contrib.auth.models import AbstractBaseUser
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from inventario.models import (
     CicloAuditoriaHistorico,
     CicloEstoqueFisicoAjuste,
     CicloInventario,
+    CicloInventarioItem,
     CicloInventarioSku,
 )
 from inventario.services.ciclico import (
@@ -25,6 +27,7 @@ from inventario.services.ciclico import (
     _calcular_indicador_confronto,
     _historico_para_dto,
     _obter_ultima_contagem_sku_info,
+    _precarregar_canais_skus,
     _sku_para_dto,
     calcular_resumo_ciclo,
     calcular_resumo_skus,
@@ -810,24 +813,39 @@ def obter_relatorio_executivo(
 def obter_grupos_consulta_ciclo(
     ciclo_id: int,
     filtros: FiltrosCicloConsulta | None = None,
+    *,
+    incluir_historico: bool = True,
 ) -> list[GrupoProdutoCiclo]:
     ciclo = obter_ciclo_consulta(ciclo_id)
     if ciclo is None:
         return []
 
+    posicoes_qs = CicloInventarioItem.objects.select_related(
+        'usuario_contagem',
+        'usuario_contagem__perfil_operacional',
+    ).order_by('codigo_posicao')
+    prefetch: list = [Prefetch('posicoes', queryset=posicoes_qs)]
+    if incluir_historico:
+        historico_qs = CicloAuditoriaHistorico.objects.select_related(
+            'usuario',
+            'usuario__perfil_operacional',
+        ).order_by('-data_hora')
+        prefetch.append(Prefetch('historico', queryset=historico_qs))
+
     skus = CicloInventarioSku.objects.filter(ciclo=ciclo).prefetch_related(
-        'posicoes',
-        'posicoes__usuario_contagem',
-        'posicoes__usuario_contagem__perfil_operacional',
-        'historico',
-        'historico__usuario',
-        'historico__usuario__perfil_operacional',
+        *prefetch,
     ).order_by('ordem_planejamento', 'codigo_produto')
 
     skus_list = _aplicar_filtros_consulta(list(skus), filtros)
+    canais_por_produto = _precarregar_canais_skus(skus_list)
     grupos: list[GrupoProdutoCiclo] = []
     for sku in skus_list:
-        dto = _sku_para_dto(sku, incluir_posicoes=True, incluir_historico=True)
+        dto = _sku_para_dto(
+            sku,
+            incluir_posicoes=True,
+            incluir_historico=incluir_historico,
+            canais_por_produto=canais_por_produto,
+        )
         grupos.append(GrupoProdutoCiclo(
             pk=sku.pk,
             codigo_produto=sku.codigo_produto,

@@ -359,7 +359,7 @@ def obter_detalhe_historico_unificado(tipo: str, pk: int) -> HistoricoDetalheUni
         metricas = _metricas_ciclo(ciclo)
         conciliados = max(int(metricas['contados']) - int(metricas['divergentes']), 0)
         produtos = []
-        for grupo in obter_grupos_consulta_ciclo(ciclo.pk):
+        for grupo in obter_grupos_consulta_ciclo(ciclo.pk, incluir_historico=False):
             fisico = grupo.fisico_total if grupo.fisico_total is not None else Decimal('0')
             diferenca = grupo.diferenca_cosan if grupo.diferenca_cosan is not None else Decimal('0')
             produtos.append(HistoricoProdutoDetalhe(

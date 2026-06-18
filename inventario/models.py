@@ -527,6 +527,12 @@ class CicloInventarioItem(models.Model):
         verbose_name = 'posição do ciclo cíclico'
         verbose_name_plural = 'posições do ciclo cíclico'
         ordering = ['ciclo', 'codigo_produto', 'codigo_posicao']
+        indexes = [
+            models.Index(
+                fields=['ciclo_sku', 'codigo_posicao'],
+                name='idx_ciclo_item_sku_pos',
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=['ciclo', 'produto', 'posicao'],
@@ -722,6 +728,12 @@ class CicloAuditoriaHistorico(models.Model):
         verbose_name = 'histórico de auditoria cíclica'
         verbose_name_plural = 'históricos de auditoria cíclica'
         ordering = ['-data_hora']
+        indexes = [
+            models.Index(
+                fields=['ciclo_sku', '-data_hora'],
+                name='idx_ciclo_hist_sku_data',
+            ),
+        ]
 
     def __str__(self):
         if self.item_id:
