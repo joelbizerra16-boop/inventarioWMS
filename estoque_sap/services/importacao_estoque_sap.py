@@ -4,7 +4,7 @@ import re
 import unicodedata
 
 import pandas as pd
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from core.services.importacao_excel import (
@@ -18,6 +18,7 @@ from estoque_sap.models import EstoqueSAP
 from produtos.models import Produto
 
 BATCH_SIZE_IMPORTACAO = 500
+LOCK_SNAPSHOT_SAP = 73924501
 
 COLUNAS_OBRIGATORIAS = [
     'codigo_produto',
@@ -442,6 +443,46 @@ def serializar_linhas_validas(preview: ResultadoPreview) -> list[dict]:
     return linhas_serializadas
 
 
+def _adquirir_lock_snapshot_sap() -> None:
+    if connection.vendor != 'postgresql':
+        return
+    with connection.cursor() as cursor:
+        cursor.execute('SELECT pg_advisory_xact_lock(%s)', [LOCK_SNAPSHOT_SAP])
+
+
+def _montar_registros_snapshot(
+    linhas_validas: list[dict],
+    *,
+    arquivo_origem: str,
+    agora,
+    produtos_por_codigo: dict[str, Produto],
+) -> tuple[list[EstoqueSAP], set[int]]:
+    linhas_por_codigo: dict[str, dict] = {}
+    for dados in linhas_validas:
+        linhas_por_codigo[dados['codigo_produto']] = dados
+
+    registros: list[EstoqueSAP] = []
+    produto_ids_importados: set[int] = set()
+
+    for dados in linhas_por_codigo.values():
+        produto = produtos_por_codigo.get(dados['codigo_produto'])
+        if produto is None:
+            continue
+
+        produto_ids_importados.add(produto.pk)
+        valores = {
+            'arquivo_origem': arquivo_origem,
+            'data_importacao': agora,
+            'total': Decimal(dados['total']),
+        }
+        for campo in CAMPOS_CANAIS:
+            valores[campo] = Decimal(dados[campo])
+
+        registros.append(EstoqueSAP(produto=produto, **valores))
+
+    return registros, produto_ids_importados
+
+
 @transaction.atomic
 def importar_dados(
     linhas_validas: list[dict],
@@ -451,70 +492,43 @@ def importar_dados(
     if not linhas_validas:
         return ResultadoImportacao(inseridos=0, atualizados=0, rejeitados=rejeitados)
 
-    agora = timezone.now()
-    inseridos = 0
-    atualizados = 0
-    produto_ids: list[int] = []
+    _adquirir_lock_snapshot_sap()
 
+    agora = timezone.now()
     codigos_unicos = {dados['codigo_produto'] for dados in linhas_validas}
     produtos_por_codigo = {
         produto.codigo_produto: produto
         for produto in Produto.objects.filter(codigo_produto__in=codigos_unicos)
     }
-    estoques_existentes = {
-        estoque.produto_id: estoque
-        for estoque in EstoqueSAP.objects.filter(
-            produto_id__in=[produto.pk for produto in produtos_por_codigo.values()],
-        )
-    }
 
-    campos_atualizacao = ['arquivo_origem', 'data_importacao', 'total', *CAMPOS_CANAIS]
-    criar: list[EstoqueSAP] = []
-    criados_no_lote: dict[int, EstoqueSAP] = {}
-    atualizar: dict[int, EstoqueSAP] = {}
+    registros, produto_ids_importados = _montar_registros_snapshot(
+        linhas_validas,
+        arquivo_origem=arquivo_origem,
+        agora=agora,
+        produtos_por_codigo=produtos_por_codigo,
+    )
 
-    for dados in linhas_validas:
-        produto = produtos_por_codigo.get(dados['codigo_produto'])
-        if produto is None:
-            continue
+    if not produto_ids_importados:
+        return ResultadoImportacao(inseridos=0, atualizados=0, rejeitados=rejeitados)
 
-        produto_ids.append(produto.pk)
-        valores = {
-            'arquivo_origem': arquivo_origem,
-            'data_importacao': agora,
-            'total': Decimal(dados['total']),
-        }
-        for campo in CAMPOS_CANAIS:
-            valores[campo] = Decimal(dados[campo])
+    produtos_com_estoque_antes = set(
+        EstoqueSAP.objects.values_list('produto_id', flat=True)
+    )
+    inseridos = len(produto_ids_importados - produtos_com_estoque_antes)
+    atualizados = len(produto_ids_importados & produtos_com_estoque_antes)
 
-        estoque = estoques_existentes.get(produto.pk) or criados_no_lote.get(produto.pk)
-
-        if estoque is None:
-            estoque = EstoqueSAP(produto=produto, **valores)
-            criar.append(estoque)
-            criados_no_lote[produto.pk] = estoque
-            inseridos += 1
-            continue
-
-        for campo, valor in valores.items():
-            setattr(estoque, campo, valor)
-        if produto.pk in estoques_existentes:
-            atualizar[produto.pk] = estoque
-        atualizados += 1
-
-    if criar:
-        EstoqueSAP.objects.bulk_create(criar, batch_size=BATCH_SIZE_IMPORTACAO)
-    if atualizar:
-        EstoqueSAP.objects.bulk_update(
-            list(atualizar.values()),
-            campos_atualizacao,
+    with medir_etapa('estoque_sap.importar.confirmar.substituir_snapshot'):
+        EstoqueSAP.objects.exclude(produto_id__in=produto_ids_importados).delete()
+        EstoqueSAP.objects.filter(produto_id__in=produto_ids_importados).delete()
+        EstoqueSAP.objects.bulk_create(
+            registros,
             batch_size=BATCH_SIZE_IMPORTACAO,
         )
 
     with medir_etapa('estoque_sap.importar.confirmar.sincronizar_ciclo'):
         from inventario.services.ciclico import sincronizar_sap_ciclo_ativo
 
-        sincronizar_sap_ciclo_ativo(produto_ids)
+        sincronizar_sap_ciclo_ativo(list(produto_ids_importados))
 
     return ResultadoImportacao(
         inseridos=inseridos,

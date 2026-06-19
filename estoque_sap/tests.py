@@ -171,6 +171,124 @@ class PreviewImportacaoSAPTestCase(TestCase):
         self.assertTrue(Produto.objects.filter(pk__isnull=False).exists())
 
 
+class ImportacaoSAPSnapshotTestCase(TestCase):
+    """Importação SAP deve substituir integralmente a fotografia anterior."""
+
+    def setUp(self):
+        self.produto_a = Produto.objects.create(
+            codigo_produto='SNAP-A',
+            descricao='Produto A',
+            setor='A',
+        )
+        self.produto_b = Produto.objects.create(
+            codigo_produto='SNAP-B',
+            descricao='Produto B',
+            setor='A',
+        )
+        self.produto_c = Produto.objects.create(
+            codigo_produto='SNAP-C',
+            descricao='Produto C',
+            setor='A',
+        )
+
+    def test_segunda_importacao_remove_produto_ausente_no_arquivo(self):
+        importar_dados(
+            [
+                _linha_importacao_sap('SNAP-A', '100'),
+                _linha_importacao_sap('SNAP-B', '50'),
+                _linha_importacao_sap('SNAP-C', '20'),
+            ],
+            arquivo_origem='importacao-1.xlsx',
+        )
+
+        self.assertEqual(EstoqueSAP.objects.count(), 3)
+        self.assertTrue(
+            EstoqueSAP.objects.filter(produto=self.produto_b, total=Decimal('50')).exists(),
+        )
+
+        importar_dados(
+            [
+                _linha_importacao_sap('SNAP-A', '80'),
+                _linha_importacao_sap('SNAP-C', '10'),
+            ],
+            arquivo_origem='importacao-2.xlsx',
+        )
+
+        self.assertEqual(EstoqueSAP.objects.count(), 2)
+        self.assertFalse(EstoqueSAP.objects.filter(produto=self.produto_b).exists())
+
+        estoque_a = EstoqueSAP.objects.get(produto=self.produto_a)
+        estoque_c = EstoqueSAP.objects.get(produto=self.produto_c)
+        self.assertEqual(estoque_a.total, Decimal('80'))
+        self.assertEqual(estoque_c.total, Decimal('10'))
+
+    def test_segunda_importacao_substitui_quantidade_sem_somar(self):
+        importar_dados(
+            [_linha_importacao_sap('SNAP-A', '100')],
+            arquivo_origem='importacao-1.xlsx',
+        )
+
+        importar_dados(
+            [_linha_importacao_sap('SNAP-A', '50')],
+            arquivo_origem='importacao-2.xlsx',
+        )
+
+        estoque = EstoqueSAP.objects.get(produto=self.produto_a)
+        self.assertEqual(estoque.total, Decimal('50'))
+        self.assertEqual(EstoqueSAP.objects.filter(produto=self.produto_a).count(), 1)
+
+    def test_snapshot_mantem_apenas_registros_do_arquivo_confirmado(self):
+        produtos = []
+        linhas_iniciais = []
+        for indice in range(100):
+            codigo = f'SNAP-BULK-{indice:04d}'
+            produto = Produto.objects.create(
+                codigo_produto=codigo,
+                descricao=f'Produto {codigo}',
+                setor='A',
+            )
+            produtos.append(produto)
+            linhas_iniciais.append(_linha_importacao_sap(codigo, '10'))
+
+        importar_dados(linhas_iniciais, arquivo_origem='carga-grande-1.xlsx')
+        self.assertEqual(EstoqueSAP.objects.count(), 100)
+
+        linhas_reduzidas = [
+            _linha_importacao_sap(produto.codigo_produto, '7')
+            for produto in produtos[:95]
+        ]
+        importar_dados(linhas_reduzidas, arquivo_origem='carga-grande-2.xlsx')
+
+        self.assertEqual(EstoqueSAP.objects.count(), 95)
+        removidos = produtos[95:]
+        for produto in removidos:
+            self.assertFalse(EstoqueSAP.objects.filter(produto=produto).exists())
+
+    def test_reimportacao_elimina_duplicatas_por_produto(self):
+        EstoqueSAP.objects.create(
+            produto=self.produto_a,
+            total=Decimal('10'),
+            arquivo_origem='legado-1.xlsx',
+        )
+        EstoqueSAP.objects.create(
+            produto=self.produto_a,
+            total=Decimal('20'),
+            arquivo_origem='legado-2.xlsx',
+        )
+        self.assertEqual(EstoqueSAP.objects.filter(produto=self.produto_a).count(), 2)
+
+        importar_dados(
+            [_linha_importacao_sap('SNAP-A', '50')],
+            arquivo_origem='importacao.xlsx',
+        )
+
+        self.assertEqual(EstoqueSAP.objects.filter(produto=self.produto_a).count(), 1)
+        self.assertEqual(
+            EstoqueSAP.objects.get(produto=self.produto_a).total,
+            Decimal('50'),
+        )
+
+
 class ImportacaoSAPCicloPerformanceTestCase(TestCase):
     def setUp(self):
         limpar_estado_ciclico()
