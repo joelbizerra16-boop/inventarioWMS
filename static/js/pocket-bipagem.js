@@ -205,6 +205,7 @@
         campo.addEventListener('keydown', function (evento) {
             if (evento.key === 'Enter') {
                 evento.preventDefault();
+                evento.stopPropagation();
                 callback();
             }
         });
@@ -214,7 +215,9 @@
         if (!campo) return;
         campo.addEventListener('keydown', function (evento) {
             if (evento.key === 'Enter' || evento.key === 'Tab') {
+                // Impede submit nativo do <form> (Enter em campo único).
                 evento.preventDefault();
+                evento.stopPropagation();
                 callback();
             }
         });
@@ -729,6 +732,7 @@
         if (form) {
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
+                e.stopPropagation();
                 enviarContagem();
             });
         }
@@ -1151,6 +1155,8 @@
         if (form) {
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
+                e.stopPropagation();
+                // Somente SALVAR (contagem física) passa por aqui.
                 enviarContagem();
             });
         }

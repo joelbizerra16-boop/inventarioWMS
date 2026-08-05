@@ -443,6 +443,8 @@
 
 document.addEventListener('DOMContentLoaded', function () {
 
+    var global = window;
+
     var mapaPosicoes = JSON.parse(document.getElementById('pocket-posicoes-data').textContent);
 
     var skusLote = JSON.parse(document.getElementById('pocket-skus-lote-data').textContent);
@@ -450,6 +452,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var skuSelect = document.getElementById('pocket-sku-lote');
 
     var form = document.getElementById('pocket-contagem-form');
+
+    if (!form) {
+        return;
+    }
 
     var csrf = form.querySelector('[name=csrfmiddlewaretoken]');
 
@@ -966,8 +972,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var modalDivergencia = null;
     var pendenteFinalizacao = null;
 
-    if (modalDivergenciaEl && global.bootstrap && bootstrap.Modal) {
-        modalDivergencia = bootstrap.Modal.getOrCreateInstance(modalDivergenciaEl);
+    try {
+        if (modalDivergenciaEl && global.bootstrap && global.bootstrap.Modal) {
+            modalDivergencia = global.bootstrap.Modal.getOrCreateInstance(modalDivergenciaEl);
+        }
+    } catch (errModal) {
+        modalDivergencia = null;
     }
 
     function formatarQtdDialogo(valor) {

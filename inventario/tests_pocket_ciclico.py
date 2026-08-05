@@ -633,6 +633,21 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         self.assertContains(response, 'Sim, finalizar com divergência')
         self.assertContains(response, 'Cancelar e continuar contando')
 
+    def test_tela_define_global_window_antes_da_inicializacao(self):
+        """Garante que o script da página não quebra com ReferenceError em `global`."""
+        response = self.client.get(reverse('pocket:contagem_ciclico'))
+        self.assertContains(response, 'var global = window;')
+        self.assertContains(response, 'PocketBipagem.initCiclico')
+        self.assertContains(response, 'id="pocket-contagem-form"')
+        self.assertContains(response, 'type="submit"')
+        self.assertContains(response, 'pocket-btn-finalizar-sku')
+        # Botões fora do form de contagem física
+        html = response.content.decode()
+        form_end = html.find('</form>')
+        finalizar_pos = html.find('pocket-btn-finalizar-sku')
+        self.assertGreater(form_end, 0)
+        self.assertGreater(finalizar_pos, form_end)
+
     def test_pocket_ciclico_post_sempre_json_mesmo_sem_ajax(self):
         response = self.client.post(reverse('pocket:contagem_ciclico'), {
             'acao': 'contagem',
