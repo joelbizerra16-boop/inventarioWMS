@@ -474,9 +474,43 @@
     background: var(--pocket-action) !important;
 }
 
-.pocket-page .pocket-scan-form button.pocket-btn-finalizar-sku:disabled {
+.pocket-page .pocket-scan-form button.pocket-btn-finalizar-sku:disabled,
+.pocket-page .pocket-scan-panel > button.pocket-btn-finalizar-sku:disabled,
+.pocket-page .pocket-scan-panel > button.pocket-btn-nao-encontrado:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+}
+
+.pocket-page .pocket-scan-panel > button.pocket-btn-finalizar-sku,
+.pocket-page .pocket-scan-panel > button.pocket-btn-nao-encontrado {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    width: 100% !important;
+    min-height: 2.75rem;
+    margin-top: 0.45rem;
+    padding: 0.5rem 1rem !important;
+    font-size: 0.8125rem !important;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 6px;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.pocket-page .pocket-scan-panel > button.pocket-btn-finalizar-sku {
+    color: var(--pocket-action) !important;
+    background: #fff !important;
+    border: 2px solid var(--pocket-action) !important;
+}
+
+.pocket-page .pocket-scan-panel > button.pocket-btn-nao-encontrado {
+    color: #b45309 !important;
+    background: #fff !important;
+    border: 2px solid #f59e0b !important;
 }
 
 /* Botão salvar */

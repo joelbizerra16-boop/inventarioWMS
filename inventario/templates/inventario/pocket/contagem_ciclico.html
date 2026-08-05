@@ -290,6 +290,8 @@
 
         </button>
 
+    </form>
+
         <button type="button" class="pocket-btn-finalizar-sku" id="pocket-btn-finalizar-sku" disabled>
 
             <i class="bi bi-flag-fill pocket-btn-salvar-icon" aria-hidden="true"></i>
@@ -298,11 +300,38 @@
 
         </button>
 
-    </form>
+        <button type="button" class="pocket-btn-nao-encontrado" id="pocket-btn-nao-encontrado" disabled>
+
+            <i class="bi bi-x-circle pocket-btn-salvar-icon" aria-hidden="true"></i>
+
+            Produto não encontrado
+
+        </button>
 
     </div>
 
     {% endif %}
+
+    <div class="modal fade" id="modal-finalizar-divergencia" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h2 class="modal-title h6 fw-semibold" id="modal-finalizar-divergencia-titulo">Finalizar com divergência</h2>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0" id="modal-finalizar-divergencia-texto"></p>
+                </div>
+                <div class="modal-footer border-0 pt-0 flex-column gap-2">
+                    <button type="button" class="btn btn-primary w-100" id="modal-finalizar-divergencia-confirmar">
+                        Sim, finalizar com divergência
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary w-100" data-bs-dismiss="modal" id="modal-finalizar-divergencia-cancelar">
+                        Cancelar e continuar contando
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
 
@@ -556,11 +585,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var btn = document.getElementById('pocket-btn-finalizar-sku');
 
-        if (!btn) return;
+        var btnNaoEncontrado = document.getElementById('pocket-btn-nao-encontrado');
 
         var contado = Number(sku.contado || 0);
 
-        btn.disabled = !(skuEmContagem(sku) && contado > 0);
+        var emContagem = skuEmContagem(sku);
+
+        if (btn) {
+
+            btn.disabled = !(emContagem && contado > 0);
+
+        }
+
+        if (btnNaoEncontrado) {
+
+            btnNaoEncontrado.disabled = !(emContagem && contado <= 0);
+
+        }
 
     }
 
@@ -920,66 +961,151 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
     var btnFinalizar = document.getElementById('pocket-btn-finalizar-sku');
+    var btnNaoEncontrado = document.getElementById('pocket-btn-nao-encontrado');
+    var modalDivergenciaEl = document.getElementById('modal-finalizar-divergencia');
+    var modalDivergencia = null;
+    var pendenteFinalizacao = null;
+
+    if (modalDivergenciaEl && global.bootstrap && bootstrap.Modal) {
+        modalDivergencia = bootstrap.Modal.getOrCreateInstance(modalDivergenciaEl);
+    }
+
+    function formatarQtdDialogo(valor) {
+        var n = Number(valor);
+        if (Number.isNaN(n)) return '0';
+        return Number.isInteger(n) ? String(n) : String(n);
+    }
+
+    function montarMensagemDivergencia(sku, modo) {
+        var sap = Number(sku.sap || 0);
+        var contado = Number(sku.contado || 0);
+        var falta = Math.max(sap - contado, 0);
+        var sobra = Math.max(contado - sap, 0);
+        if (modo === 'nao_encontrado') {
+            return (
+                'Produto não encontrado. SAP: ' + formatarQtdDialogo(sap) +
+                ' | Contado: 0 | Falta: ' + formatarQtdDialogo(sap) +
+                '. Deseja finalizar a contagem com essa divergência?'
+            );
+        }
+        if (sobra > 0) {
+            return (
+                'Este SKU possui divergência. SAP: ' + formatarQtdDialogo(sap) +
+                ' | Contado: ' + formatarQtdDialogo(contado) +
+                ' | Sobra: ' + formatarQtdDialogo(sobra) +
+                '. Deseja finalizar a contagem com essa divergência?'
+            );
+        }
+        return (
+            'Este SKU possui divergência. SAP: ' + formatarQtdDialogo(sap) +
+            ' | Contado: ' + formatarQtdDialogo(contado) +
+            ' | Falta: ' + formatarQtdDialogo(falta) +
+            '. Deseja finalizar a contagem com essa divergência?'
+        );
+    }
+
+    function enviarFinalizacaoSku(acao) {
+        if (!skuSelect || !skuSelect.value) return;
+        if (btnFinalizar) btnFinalizar.disabled = true;
+        if (btnNaoEncontrado) btnNaoEncontrado.disabled = true;
+
+        var body = new FormData();
+        body.append('acao', acao);
+        body.append('sku_id', skuSelect.value);
+        body.append('pocket_ajax', '1');
+        body.append('csrfmiddlewaretoken', csrf ? csrf.value : '');
+
+        fetch(global.location.href, Object.assign({
+            method: 'POST',
+            body: body,
+        }, PocketBipagem.opcoesFetchPocket(csrf ? csrf.value : '')))
+            .then(function (res) {
+                return PocketBipagem.parsearRespostaPocket(res);
+            })
+            .then(function (resultado) {
+                if (!resultado.ok) {
+                    if (mapaSkus[skuSelect.value]) atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
+                    if (window.PocketBipagem) {
+                        PocketBipagem.toast(resultado.body.message || 'Erro ao finalizar.', 'erro');
+                    }
+                    return;
+                }
+                var tipo = resultado.body.tipo_mensagem === 'warning' ? 'aviso' : 'ok';
+                if (window.PocketBipagem) {
+                    PocketBipagem.toast(resultado.body.message || 'SKU finalizado.', tipo);
+                }
+                processarRespostaOperacional(resultado.body);
+                resetCamposEntradaCiclico();
+            })
+            .catch(function (err) {
+                if (mapaSkus[skuSelect.value]) atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
+                if (window.PocketBipagem) PocketBipagem.tratarErroFetchPocket(err);
+            });
+    }
+
+    function solicitarFinalizacao(acao) {
+        if (!skuSelect || !skuSelect.value) return;
+        var sku = mapaSkus[skuSelect.value];
+        if (!sku || !skuEmContagem(sku)) return;
+
+        var sap = Number(sku.sap || 0);
+        var contado = Number(sku.contado || 0);
+        var temDivergencia = acao === 'produto_nao_encontrado' || contado !== sap;
+
+        if (!temDivergencia) {
+            enviarFinalizacaoSku(acao);
+            return;
+        }
+
+        var textoEl = document.getElementById('modal-finalizar-divergencia-texto');
+        if (textoEl) {
+            textoEl.textContent = montarMensagemDivergencia(
+                sku,
+                acao === 'produto_nao_encontrado' ? 'nao_encontrado' : 'finalizar'
+            );
+        }
+        pendenteFinalizacao = acao;
+        if (modalDivergencia) {
+            modalDivergencia.show();
+        } else if (global.confirm(textoEl ? textoEl.textContent : 'Finalizar com divergência?')) {
+            enviarFinalizacaoSku(acao);
+            pendenteFinalizacao = null;
+        }
+    }
 
     if (btnFinalizar) {
-
-        btnFinalizar.addEventListener('click', function () {
-
-            if (!skuSelect || !skuSelect.value) return;
-
-            btnFinalizar.disabled = true;
-
-            var body = new FormData();
-
-            body.append('acao', 'finalizar_sku');
-
-            body.append('sku_id', skuSelect.value);
-
-            body.append('pocket_ajax', '1');
-
-            body.append('csrfmiddlewaretoken', csrf ? csrf.value : '');
-
-            fetch(global.location.href, Object.assign({
-                method: 'POST',
-                body: body,
-            }, PocketBipagem.opcoesFetchPocket(csrf ? csrf.value : '')))
-
-                .then(function (res) {
-                    return PocketBipagem.parsearRespostaPocket(res);
-                })
-
-                .then(function (resultado) {
-
-                    if (!resultado.ok) {
-
-                        if (mapaSkus[skuSelect.value]) atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
-
-                        if (window.PocketBipagem) PocketBipagem.toast(resultado.body.message || 'Erro ao finalizar.', 'erro');
-
-                        return;
-
-                    }
-
-                    var tipo = resultado.body.tipo_mensagem === 'warning' ? 'aviso' : 'ok';
-
-                    if (window.PocketBipagem) PocketBipagem.toast(resultado.body.message || 'SKU finalizado.', tipo);
-
-                    processarRespostaOperacional(resultado.body);
-
-                    resetCamposEntradaCiclico();
-
-                })
-
-                .catch(function (err) {
-
-                    if (mapaSkus[skuSelect.value]) atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
-
-                    if (window.PocketBipagem) PocketBipagem.tratarErroFetchPocket(err);
-
-                });
-
+        btnFinalizar.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            solicitarFinalizacao('finalizar_sku');
         });
+    }
 
+    if (btnNaoEncontrado) {
+        btnNaoEncontrado.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            solicitarFinalizacao('produto_nao_encontrado');
+        });
+    }
+
+    var btnConfirmarDivergencia = document.getElementById('modal-finalizar-divergencia-confirmar');
+    if (btnConfirmarDivergencia) {
+        btnConfirmarDivergencia.addEventListener('click', function () {
+            var acao = pendenteFinalizacao;
+            pendenteFinalizacao = null;
+            if (modalDivergencia) modalDivergencia.hide();
+            if (acao) enviarFinalizacaoSku(acao);
+        });
+    }
+
+    if (modalDivergenciaEl) {
+        modalDivergenciaEl.addEventListener('hidden.bs.modal', function () {
+            pendenteFinalizacao = null;
+            if (skuSelect && mapaSkus[skuSelect.value]) {
+                atualizarBotaoFinalizar(mapaSkus[skuSelect.value]);
+            }
+        });
     }
 
 

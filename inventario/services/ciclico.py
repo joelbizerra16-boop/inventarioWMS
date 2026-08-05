@@ -40,7 +40,7 @@ class StatusItemCiclico:
     LABELS = {
         PENDENTE: 'Pendente',
         CONTADO: 'Contado',
-        DIVERGENTE: 'Divergente',
+        DIVERGENTE: 'Finalizado c/ divergência',
         RECONTAGEM: 'Em Recontagem',
         VALIDADO: 'Validado',
         VALIDADO_DIVERGENCIA: 'Validado c/ divergência',
@@ -1421,6 +1421,8 @@ def _recalcular_consolidacao_sku(
 def finalizar_contagem_sku_pocket(
     sku: CicloInventarioSku,
     usuario,
+    *,
+    permitir_sem_contagem: bool = False,
 ) -> CicloInventarioSku:
     from inventario.services.ciclico_estoque_fisico import (
         tentar_sincronizar_estoque_fisico_pos_finalizacao,
@@ -1447,7 +1449,7 @@ def finalizar_contagem_sku_pocket(
         if posicao.quantidade_fisica is not None
         and not _posicao_generica_sem_contagem(posicao)
     ]
-    if not posicoes_contadas:
+    if not posicoes_contadas and not permitir_sem_contagem:
         raise CiclicoError('Registre ao menos uma contagem antes de finalizar o SKU.')
 
     status_anterior = sku.status_contagem

@@ -286,7 +286,7 @@ class CicloInventarioSku(models.Model):
     class StatusContagem(models.TextChoices):
         PENDENTE = 'PENDENTE', 'Pendente'
         CONTADO = 'CONTADO', 'Contado'
-        DIVERGENTE = 'DIVERGENTE', 'Divergente'
+        DIVERGENTE = 'DIVERGENTE', 'Finalizado c/ divergência'
         RECONTAGEM = 'RECONTAGEM', 'Recontagem'
         VALIDADO = 'VALIDADO', 'Validado'
         VALIDADO_DIVERGENCIA = 'VALIDADO_DIVERGENCIA', 'Validado c/ divergência'

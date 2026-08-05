@@ -1040,6 +1040,8 @@
         }
 
         function enviarContagem() {
+            // Validação exclusiva do SALVAR (contagem física).
+            // FINALIZAR SKU / PRODUTO NÃO ENCONTRADO usam fluxo próprio fora deste form.
             if (!config.posicaoValidada || !config.posicaoComLock) {
                 Sons.posicaoInvalida();
                 toast('Confirme a posição antes de salvar.', 'erro');

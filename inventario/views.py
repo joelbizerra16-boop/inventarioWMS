@@ -874,7 +874,7 @@ class CiclicoConsultaView(AcessoOperacionalMixin, View):
             'status_opcoes': [
                 ('PENDENTE', 'Pendente'),
                 ('CONTADO', 'Contado'),
-                ('DIVERGENTE', 'Divergente'),
+                ('DIVERGENTE', 'Finalizado c/ divergência'),
                 ('RECONTAGEM', 'Recontagem'),
                 ('VALIDADO', 'Validado'),
                 ('VALIDADO_DIVERGENCIA', 'Validado c/ divergência'),

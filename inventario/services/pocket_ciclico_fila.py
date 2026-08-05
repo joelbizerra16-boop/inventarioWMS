@@ -141,7 +141,7 @@ def _status_operacional_pocket(sku: CicloInventarioSku) -> tuple[str, str]:
     if status == StatusItemCiclico.CONTADO:
         return 'CONCILIADO', 'conciliado'
     if status == StatusItemCiclico.DIVERGENTE:
-        return 'DIVERGENTE', 'divergente'
+        return 'FINALIZADO COM DIVERGÊNCIA', 'divergente'
     if status in (StatusItemCiclico.PENDENTE, StatusItemCiclico.RECONTAGEM):
         return 'EM CONTAGEM', 'em-contagem'
     return 'PENDENTE', 'pendente'
@@ -1010,6 +1010,10 @@ def finalizar_sku_pocket_ciclico(
 
     usuario,
 
+    *,
+
+    permitir_sem_contagem: bool = False,
+
 ) -> tuple[SkuCicloDetalhe, CicloInventario | None]:
 
     sku = _obter_sku_lote(session, sku_id)
@@ -1032,7 +1036,11 @@ def finalizar_sku_pocket_ciclico(
 
     status_anterior = sku.status_contagem
 
-    finalizar_contagem_sku_pocket(sku, usuario)
+    finalizar_contagem_sku_pocket(
+        sku,
+        usuario,
+        permitir_sem_contagem=permitir_sem_contagem,
+    )
 
     sku.refresh_from_db()
 
@@ -1041,6 +1049,26 @@ def finalizar_sku_pocket_ciclico(
     sku.refresh_from_db()
 
     return _sku_para_dto(sku, incluir_posicoes=True), ciclo_encerrado
+
+
+@transaction.atomic
+def produto_nao_encontrado_pocket_ciclico(
+    session,
+    sku_id: int,
+    usuario,
+) -> tuple[SkuCicloDetalhe, CicloInventario | None]:
+    """Finaliza SKU com contado=0 (nenhuma unidade localizada fisicamente)."""
+    sku = _obter_sku_lote(session, sku_id)
+    if _decimal_pocket(sku.quantidade_fisica) > 0:
+        raise CiclicoError(
+            'Já existem contagens registradas para este SKU. Use Finalizar SKU.',
+        )
+    return finalizar_sku_pocket_ciclico(
+        session,
+        sku_id,
+        usuario,
+        permitir_sem_contagem=True,
+    )
 
 
 

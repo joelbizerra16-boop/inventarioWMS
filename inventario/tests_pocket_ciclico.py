@@ -497,6 +497,142 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         self.assertTrue(dados['ok'])
         self.assertTrue(dados['sku_finalizado'])
 
+    def _produto_nao_encontrado(self, sku_id=None):
+        sku_id = sku_id or self.sku.pk
+        return self.client.post(reverse('pocket:contagem_ciclico'), {
+            'acao': 'produto_nao_encontrado',
+            'sku_id': str(sku_id),
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+    def test_finalizar_sku_sem_divergencia_quando_bate_sap(self):
+        """SAP 70, contado 70 → VALIDADO sem divergência."""
+        self._contar_pocket('PKT01', 10)
+        self._contar_pocket('PKT02', 60)
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.quantidade_sap, Decimal('70'))
+        self.assertEqual(self.sku.quantidade_fisica, Decimal('70'))
+        self.assertEqual(self.sku.status_contagem, StatusItemCiclico.VALIDADO)
+        self.assertEqual(self.sku.diferenca, Decimal('0'))
+
+    def test_finalizar_sku_com_falta_persiste_divergencia(self):
+        """SAP 70, contado 69 → finalizado com falta de 1."""
+        self._contar_pocket('PKT01', 10)
+        self._contar_pocket('PKT02', 59)
+        response = self._finalizar_pocket()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.quantidade_sap, Decimal('70'))
+        self.assertEqual(self.sku.quantidade_fisica, Decimal('69'))
+        self.assertEqual(self.sku.diferenca, Decimal('-1'))
+        self.assertEqual(self.sku.status_contagem, StatusItemCiclico.DIVERGENTE)
+        historico = CicloAuditoriaHistorico.objects.filter(
+            ciclo_sku=self.sku,
+            tipo=CicloAuditoriaHistorico.TipoRegistro.CONSOLIDACAO,
+        ).latest('data_hora')
+        self.assertEqual(historico.usuario_id, self.user.pk)
+        self.assertEqual(historico.quantidade_fisica, Decimal('69'))
+        self.assertEqual(historico.diferenca, Decimal('-1'))
+
+    def test_produto_nao_encontrado_finaliza_com_contado_zero(self):
+        """SAP 70, contado 0 → produto não encontrado, falta 70."""
+        sap_antes = self.sku.quantidade_sap
+        qtd_itens_antes = self.sku.posicoes.count()
+        response = self._produto_nao_encontrado()
+        self.assertEqual(response.status_code, 200)
+        dados = response.json()
+        self.assertTrue(dados['ok'])
+        self.assertTrue(dados['sku_finalizado'])
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.quantidade_sap, sap_antes)
+        self.assertEqual(self.sku.quantidade_fisica, Decimal('0'))
+        self.assertEqual(self.sku.diferenca, -sap_antes)
+        self.assertEqual(self.sku.status_contagem, StatusItemCiclico.DIVERGENTE)
+        self.assertEqual(self.sku.posicoes.count(), qtd_itens_antes)
+        self.assertFalse(
+            self.sku.posicoes.filter(quantidade_fisica__isnull=False)
+            .exclude(codigo_posicao='CICLICO-SEM-POS')
+            .exists()
+        )
+        estoque_sap = EstoqueSAP.objects.get(produto=self.produto)
+        self.assertEqual(estoque_sap.total, Decimal('70'))
+
+    def test_finalizar_sku_com_sobra(self):
+        """SAP 70, contado 72 → finalizado com sobra de 2."""
+        self._contar_pocket('PKT01', 12)
+        self._contar_pocket('PKT02', 60)
+        response = self._finalizar_pocket()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.quantidade_fisica, Decimal('72'))
+        self.assertEqual(self.sku.diferenca, Decimal('2'))
+        self.assertEqual(self.sku.status_contagem, StatusItemCiclico.DIVERGENTE)
+
+    def test_contagem_sem_posicao_continua_bloqueada(self):
+        response = self.client.post(reverse('pocket:contagem_ciclico'), {
+            'acao': 'contagem',
+            'sku_id': str(self.sku.pk),
+            'codigo_posicao': '',
+            'codigo_produto_lido': self.produto.codigo_produto,
+            'quantidade_fisica': '5',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 400)
+        self.sku.refresh_from_db()
+        self.assertIn(self.sku.quantidade_fisica, (None, Decimal('0')))
+
+    def test_finalizar_sku_nao_exige_posicao_no_post(self):
+        """FINALIZAR SKU não depende de posição/produto/quantidade do form de contagem."""
+        self._contar_pocket('PKT01', 10)
+        self._contar_pocket('PKT02', 50)
+        response = self.client.post(reverse('pocket:contagem_ciclico'), {
+            'acao': 'finalizar_sku',
+            'sku_id': str(self.sku.pk),
+            'codigo_posicao': '',
+            'codigo_produto_lido': '',
+            'quantidade_fisica': '',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.status_contagem, StatusItemCiclico.DIVERGENTE)
+        self.assertEqual(self.sku.quantidade_fisica, Decimal('60'))
+
+    def test_produto_nao_encontrado_bloqueado_se_ja_houver_contagem(self):
+        self._contar_pocket('PKT01', 10)
+        response = self._produto_nao_encontrado()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Já existem contagens', response.json()['message'])
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.status_contagem, StatusItemCiclico.PENDENTE)
+
+    def test_finalizar_com_divergencia_mantem_apos_refresh(self):
+        self._contar_pocket('PKT01', 10)
+        self._contar_pocket('PKT02', 50)
+        self._finalizar_pocket()
+        self.sku.refresh_from_db()
+        status = self.sku.status_contagem
+        fisico = self.sku.quantidade_fisica
+        diferenca = self.sku.diferenca
+        self.sku = CicloInventarioSku.objects.get(pk=self.sku.pk)
+        self.assertEqual(self.sku.status_contagem, status)
+        self.assertEqual(self.sku.quantidade_fisica, fisico)
+        self.assertEqual(self.sku.diferenca, diferenca)
+        self.assertEqual(
+            self.sku.status_contagem,
+            StatusItemCiclico.DIVERGENTE,
+        )
+        painel = obter_painel_pocket_ciclico(self.client.session)
+        self.assertEqual(len(painel.divergencias), 1)
+
+    def test_tela_exibe_acoes_finalizar_e_produto_nao_encontrado(self):
+        response = self.client.get(reverse('pocket:contagem_ciclico'))
+        self.assertContains(response, 'Finalizar SKU')
+        self.assertContains(response, 'Produto não encontrado')
+        self.assertContains(response, 'modal-finalizar-divergencia')
+        self.assertContains(response, 'Sim, finalizar com divergência')
+        self.assertContains(response, 'Cancelar e continuar contando')
+
     def test_pocket_ciclico_post_sempre_json_mesmo_sem_ajax(self):
         response = self.client.post(reverse('pocket:contagem_ciclico'), {
             'acao': 'contagem',

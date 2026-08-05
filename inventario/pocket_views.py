@@ -40,6 +40,7 @@ from inventario.services.ciclico import (
 from inventario.services.pocket_ciclico_fila import (
     aceitar_divergencia_pocket,
     finalizar_sku_pocket_ciclico,
+    produto_nao_encontrado_pocket_ciclico,
     obter_painel_pocket_ciclico,
     obter_resposta_contagem_pocket,
     registrar_contagem_pocket_ciclico_por_sku,
@@ -651,6 +652,8 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             return self._post_encerrar_ciclo(request)
         if acao == 'finalizar_sku':
             return self._post_finalizar_sku(request, painel)
+        if acao == 'produto_nao_encontrado':
+            return self._post_produto_nao_encontrado(request, painel)
         return self._post_contagem(request, painel)
 
     def _post_contagem(self, request, painel):
@@ -797,6 +800,36 @@ class PocketContagemCiclicoView(RequerEscritaPocketMixin, View):
             'ok': True,
             'message': mensagem,
             'tipo_mensagem': tipo_mensagem,
+            'sku_finalizado': True,
+            **resposta,
+        })
+
+    def _post_produto_nao_encontrado(self, request, painel):
+        sku_raw = request.POST.get('sku_id', '').strip()
+        if not sku_raw.isdigit():
+            return self._resposta_json_erro(request, mensagem='SKU inválido.')
+
+        sku_id = int(sku_raw)
+        try:
+            _, ciclo_encerrado = produto_nao_encontrado_pocket_ciclico(
+                request.session,
+                sku_id,
+                request.user,
+            )
+        except CiclicoError as exc:
+            return self._resposta_json_erro(request, mensagem=str(exc))
+
+        limpar_pocket_sessao_contagem(request.session)
+        resposta = obter_resposta_contagem_pocket(
+            request.session,
+            sku_id,
+            request.user,
+            ciclo_encerrado=ciclo_encerrado,
+        )
+        return resposta_json_pocket(request, {
+            'ok': True,
+            'message': 'SKU finalizado: produto não encontrado (contado = 0).',
+            'tipo_mensagem': 'warning',
             'sku_finalizado': True,
             **resposta,
         })
