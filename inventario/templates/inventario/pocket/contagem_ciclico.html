@@ -319,7 +319,7 @@
                     <h2 class="modal-title h6 fw-semibold" id="modal-finalizar-divergencia-titulo">Finalizar com divergência</h2>
                 </div>
                 <div class="modal-body">
-                    <p class="mb-0" id="modal-finalizar-divergencia-texto"></p>
+                    <p class="mb-0" id="modal-finalizar-divergencia-texto" style="white-space: pre-line;"></p>
                 </div>
                 <div class="modal-footer border-0 pt-0 flex-column gap-2">
                     <button type="button" class="btn btn-primary w-100" id="modal-finalizar-divergencia-confirmar">
@@ -605,7 +605,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (btnNaoEncontrado) {
 
-            btnNaoEncontrado.disabled = !(emContagem && contado <= 0);
+            btnNaoEncontrado.disabled = !emContagem;
 
         }
 
@@ -993,9 +993,11 @@ document.addEventListener('DOMContentLoaded', function () {
         var sobra = Math.max(contado - sap, 0);
         if (modo === 'nao_encontrado') {
             return (
-                'Produto não encontrado. SAP: ' + formatarQtdDialogo(sap) +
-                ' | Contado: 0 | Falta: ' + formatarQtdDialogo(sap) +
-                '. Deseja finalizar a contagem com essa divergência?'
+                'SKU: ' + (sku.codigo_produto || '—') + '\n' +
+                'Produto: ' + (sku.descricao || '—') + '\n' +
+                'Quantidade SAP: ' + formatarQtdDialogo(sap) + '\n' +
+                'Quantidade contada: 0\n\n' +
+                'Esta ação encerrará o SKU como "Produto não encontrado".'
             );
         }
         if (sobra > 0) {
@@ -1012,6 +1014,21 @@ document.addEventListener('DOMContentLoaded', function () {
             ' | Falta: ' + formatarQtdDialogo(falta) +
             '. Deseja finalizar a contagem com essa divergência?'
         );
+    }
+
+    function prepararModalFinalizacao(acao) {
+        var tituloEl = document.getElementById('modal-finalizar-divergencia-titulo');
+        var confirmarEl = document.getElementById('modal-finalizar-divergencia-confirmar');
+        var cancelarEl = document.getElementById('modal-finalizar-divergencia-cancelar');
+        if (acao === 'produto_nao_encontrado') {
+            if (tituloEl) tituloEl.textContent = 'Confirmar produto não encontrado?';
+            if (confirmarEl) confirmarEl.textContent = 'Sim, declarar não encontrado';
+            if (cancelarEl) cancelarEl.textContent = 'Cancelar e continuar contando';
+            return;
+        }
+        if (tituloEl) tituloEl.textContent = 'Finalizar com divergência';
+        if (confirmarEl) confirmarEl.textContent = 'Sim, finalizar com divergência';
+        if (cancelarEl) cancelarEl.textContent = 'Cancelar e continuar contando';
     }
 
     function enviarFinalizacaoSku(acao) {
@@ -1068,6 +1085,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         var textoEl = document.getElementById('modal-finalizar-divergencia-texto');
+        prepararModalFinalizacao(acao);
         if (textoEl) {
             textoEl.textContent = montarMensagemDivergencia(
                 sku,

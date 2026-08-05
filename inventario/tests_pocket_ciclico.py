@@ -556,6 +556,43 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         )
         estoque_sap = EstoqueSAP.objects.get(produto=self.produto)
         self.assertEqual(estoque_sap.total, Decimal('70'))
+        historico = CicloAuditoriaHistorico.objects.filter(
+            ciclo_sku=self.sku,
+            tipo=CicloAuditoriaHistorico.TipoRegistro.CONSOLIDACAO,
+        ).latest('data_hora')
+        self.assertEqual(historico.usuario_id, self.user.pk)
+        self.assertEqual(historico.quantidade_fisica, Decimal('0'))
+        self.assertEqual(historico.diferenca, -sap_antes)
+
+    def test_produto_nao_encontrado_com_sap_zero_sem_divergencia_artificial(self):
+        """SAP 0, contado 0 → encerra sem criar divergência artificial."""
+        self.sku.quantidade_sap = Decimal('0')
+        self.sku.save(update_fields=['quantidade_sap'])
+        response = self._produto_nao_encontrado()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.quantidade_fisica, Decimal('0'))
+        self.assertEqual(self.sku.diferenca, Decimal('0'))
+        self.assertEqual(self.sku.status_contagem, StatusItemCiclico.VALIDADO)
+        self.assertFalse(
+            self.sku.posicoes.filter(quantidade_fisica__isnull=False).exists()
+        )
+
+    def test_produto_nao_encontrado_nao_exige_campos_do_form(self):
+        """Declaração própria: sem posição, EAN nem quantidade no POST."""
+        response = self.client.post(reverse('pocket:contagem_ciclico'), {
+            'acao': 'produto_nao_encontrado',
+            'sku_id': str(self.sku.pk),
+            'codigo_posicao': '',
+            'codigo_produto_lido': '',
+            'quantidade_fisica': '',
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.sku.refresh_from_db()
+        self.assertEqual(self.sku.quantidade_fisica, Decimal('0'))
+        self.assertEqual(self.sku.status_contagem, StatusItemCiclico.DIVERGENTE)
 
     def test_finalizar_sku_com_sobra(self):
         """SAP 70, contado 72 → finalizado com sobra de 2."""
@@ -627,11 +664,25 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
 
     def test_tela_exibe_acoes_finalizar_e_produto_nao_encontrado(self):
         response = self.client.get(reverse('pocket:contagem_ciclico'))
+        html = response.content.decode()
         self.assertContains(response, 'Finalizar SKU')
         self.assertContains(response, 'Produto não encontrado')
         self.assertContains(response, 'modal-finalizar-divergencia')
         self.assertContains(response, 'Sim, finalizar com divergência')
         self.assertContains(response, 'Cancelar e continuar contando')
+        self.assertContains(response, 'Confirmar produto não encontrado?')
+        self.assertContains(response, 'Sim, declarar não encontrado')
+        self.assertIn('id="pocket-btn-nao-encontrado"', html)
+        btn_pos = html.find('id="pocket-btn-nao-encontrado"')
+        btn_chunk = html[max(0, btn_pos - 80):btn_pos + 80]
+        self.assertIn('type="button"', btn_chunk)
+        # Habilitação só por SKU em contagem — sem exigir contado <= 0 / posição / EAN.
+        self.assertIn('btnNaoEncontrado.disabled = !emContagem', html)
+        self.assertNotIn('btnNaoEncontrado.disabled = !(emContagem && contado <= 0)', html)
+        form_end = html.find('</form>')
+        nao_encontrado_pos = html.find('pocket-btn-nao-encontrado')
+        self.assertGreater(form_end, 0)
+        self.assertGreater(nao_encontrado_pos, form_end)
 
     def test_tela_define_global_window_antes_da_inicializacao(self):
         """Garante que o script da página não quebra com ReferenceError em `global`."""
