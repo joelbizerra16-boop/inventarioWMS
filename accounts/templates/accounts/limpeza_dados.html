@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Excluir dados | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Excluir dados</h1>
+        <p class="text-muted mb-0">
+            Escolha quais grupos o administrador deseja remover. Cadastro de produtos, usuários e senhas permanecem protegidos.
+        </p>
+    </div>
+</div>
+
+<div class="alert alert-danger d-flex gap-2" role="alert">
+    <i class="bi bi-exclamation-triangle-fill mt-1" aria-hidden="true"></i>
+    <div>
+        <strong>Ação irreversível.</strong>
+        Os registros selecionados são apagados definitivamente do banco. Marque apenas o que realmente deve sair.
+    </div>
+</div>
+
+<form method="post" id="formLimpezaDados">
+    {% csrf_token %}
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="fw-semibold">Grupos disponíveis</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnSelecionarOperacionais">
+                Selecionar dados operacionais
+            </button>
+        </div>
+        <div class="list-group list-group-flush">
+            {% for grupo in grupos %}
+            <label class="list-group-item d-flex gap-3 py-3{% if grupo.protegido %} bg-light{% endif %}" {% if not grupo.protegido %}for="grupo-{{ grupo.id }}"{% endif %}>
+                <div class="pt-1">
+                    {% if grupo.protegido %}
+                    <input class="form-check-input" type="checkbox" disabled>
+                    {% else %}
+                    <input
+                        class="form-check-input grupo-excluivel"
+                        type="checkbox"
+                        name="grupos"
+                        id="grupo-{{ grupo.id }}"
+                        value="{{ grupo.id }}"
+                        data-dependencias="{{ grupo.dependencias|join:',' }}"
+                        {% if grupo.id in grupos_selecionados %}checked{% endif %}
+                    >
+                    {% endif %}
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex flex-wrap justify-content-between gap-2">
+                        <div>
+                            <span class="fw-semibold">{{ grupo.titulo }}</span>
+                            {% if grupo.protegido %}
+                            <span class="badge text-bg-success ms-1">Protegido</span>
+                            {% endif %}
+                        </div>
+                        <span class="badge text-bg-{% if grupo.protegido %}secondary{% else %}primary{% endif %}">
+                            {{ grupo.quantidade }} registro(s)
+                        </span>
+                    </div>
+                    <p class="text-muted small mb-0 mt-1">{{ grupo.descricao }}</p>
+                    {% if grupo.detalhes %}
+                    <ul class="list-unstyled small text-secondary mb-0 mt-2">
+                        {% for rotulo, quantidade in grupo.detalhes %}
+                        <li>{{ rotulo }}: {{ quantidade }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <label for="confirmacao" class="form-label">
+                Para confirmar, digite <strong>{{ frase_confirmacao }}</strong>
+            </label>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <input
+                        type="text"
+                        class="form-control"
+                        id="confirmacao"
+                        name="confirmacao"
+                        value="{{ confirmacao }}"
+                        autocomplete="off"
+                        placeholder="{{ frase_confirmacao }}"
+                    >
+                </div>
+                <div class="col-md-8 d-flex gap-2">
+                    <button type="submit" class="btn btn-danger" id="btnExcluirDados">
+                        <i class="bi bi-trash me-1"></i>Excluir selecionados
+                    </button>
+                    <a href="{% url 'home' %}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const frase = "{{ frase_confirmacao|escapejs }}";
+    const form = document.getElementById("formLimpezaDados");
+    const confirmacao = document.getElementById("confirmacao");
+    const selecionar = document.getElementById("btnSelecionarOperacionais");
+    const checkboxes = Array.from(document.querySelectorAll(".grupo-excluivel"));
+
+    function marcarDependencias(origem) {
+        const ids = (origem.dataset.dependencias || "").split(",").filter(Boolean);
+        ids.forEach((id) => {
+            const alvo = document.getElementById("grupo-" + id);
+            if (alvo) alvo.checked = true;
+        });
+    }
+
+    checkboxes.forEach((checkbox) => {
+        checkbox.addEventListener("change", function () {
+            if (this.checked) marcarDependencias(this);
+        });
+    });
+
+    if (selecionar) {
+        selecionar.addEventListener("click", function () {
+            checkboxes.forEach((checkbox) => {
+                checkbox.checked = true;
+            });
+        });
+    }
+
+    form.addEventListener("submit", function (evento) {
+        const escolhidos = checkboxes.filter((item) => item.checked);
+        if (!escolhidos.length) {
+            evento.preventDefault();
+            alert("Selecione ao menos um grupo de dados para excluir.");
+            return;
+        }
+        if ((confirmacao.value || "").trim().toUpperCase() !== frase) {
+            evento.preventDefault();
+            alert("Digite " + frase + " para confirmar a exclusão definitiva.");
+            return;
+        }
+        if (!window.confirm("Confirma a exclusão definitiva dos grupos selecionados?")) {
+            evento.preventDefault();
+        }
+    });
+})();
+</script>
+{% endblock %}

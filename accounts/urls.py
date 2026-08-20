@@ -10,6 +10,7 @@ from accounts.views import (
     UsuarioToggleStatusView,
     UsuarioUpdateView,
 )
+from accounts.views_limpeza import LimpezaDadosView
 from accounts.views_pendencias import (
     PendenciasOperacionaisView,
     PosicaoPendenciaAprovarView,
@@ -31,6 +32,7 @@ urlpatterns = [
     path('usuarios/<int:pk>/editar/', UsuarioUpdateView.as_view(), name='usuarios_editar'),
     path('usuarios/<int:pk>/excluir/', UsuarioDeleteView.as_view(), name='usuarios_excluir'),
     path('usuarios/<int:pk>/status/', UsuarioToggleStatusView.as_view(), name='usuarios_toggle_status'),
+    path('limpeza-dados/', LimpezaDadosView.as_view(), name='limpeza_dados'),
     path('pendencias/', PendenciasOperacionaisView.as_view(), name='pendencias_operacionais'),
     path('pendencias/produto/<int:pk>/aprovar/', ProdutoPendenciaAprovarView.as_view(), name='pendencia_produto_aprovar'),
     path('pendencias/produto/<int:pk>/rejeitar/', ProdutoPendenciaRejeitarView.as_view(), name='pendencia_produto_rejeitar'),
