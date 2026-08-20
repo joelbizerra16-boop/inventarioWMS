@@ -20,4 +20,7 @@ echo "==> staticfiles OK ($(find staticfiles -type f | wc -l | tr -d ' ') arquiv
 echo "==> Aplicando migrations"
 python manage.py migrate --noinput
 
+echo "==> Garantindo usuário administrador (se ADMIN_USERNAME/ADMIN_PASSWORD definidos)"
+python manage.py ensure_admin
+
 echo "==> Build concluído"
