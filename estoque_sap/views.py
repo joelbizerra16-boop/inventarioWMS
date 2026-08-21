@@ -21,6 +21,7 @@ from estoque_sap.models import EstoqueSAP
 from estoque_sap.services.importacao_estoque_sap import (
     excluir_linha_preview,
     filtrar_linhas_para_importacao,
+    garantir_produtos_das_linhas,
     importar_dados,
     linha_permite_validar_produto,
     montar_preview_sessao,
@@ -33,6 +34,7 @@ SESSION_LINHAS_KEY = 'importacao_estoque_sap_linhas'
 SESSION_COLUNAS_DETECTADAS_KEY = 'importacao_estoque_sap_colunas_detectadas'
 SESSION_COLUNAS_NORMALIZADAS_KEY = 'importacao_estoque_sap_colunas_normalizadas'
 SESSION_ARQUIVO_KEY = 'importacao_estoque_sap_arquivo'
+SESSION_ABA_KEY = 'importacao_estoque_sap_aba'
 logger = logging.getLogger(__name__)
 
 
@@ -105,6 +107,12 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
             logger.info('VIEW=%s TEMPO=%.2fs', 'EstoqueSAPImportarView.post', fim - inicio)
             return resposta
 
+        if acao == 'validar_todos':
+            resposta = self._validar_todos_preview(request)
+            fim = time.perf_counter()
+            logger.info('VIEW=%s TEMPO=%.2fs', 'EstoqueSAPImportarView.post', fim - inicio)
+            return resposta
+
         if acao == 'excluir_linha':
             resposta = self._excluir_linha_preview(request)
             fim = time.perf_counter()
@@ -132,7 +140,13 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
         try:
             with medir_etapa('estoque_sap.importar.post.processar_arquivo'):
                 preview = processar_arquivo(arquivo)
-        except (ValueError, Exception):
+        except ValueError as exc:
+            messages.error(request, str(exc) or 'Arquivo inválido.')
+            return render(request, self.template_name, {
+                'etapa': 'upload',
+                'form': EstoqueSAPImportacaoForm(),
+            })
+        except Exception:
             messages.error(request, 'Arquivo inválido.')
             return render(request, self.template_name, {
                 'etapa': 'upload',
@@ -151,6 +165,7 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
         request.session[SESSION_COLUNAS_DETECTADAS_KEY] = preview.colunas_detectadas
         request.session[SESSION_COLUNAS_NORMALIZADAS_KEY] = preview.colunas_normalizadas
         request.session[SESSION_ARQUIVO_KEY] = arquivo.name
+        request.session[SESSION_ABA_KEY] = preview.aba
         request.session.modified = True
         logger.info(
             'IMPORTACAO_SAP_PREVIEW sessao_bytes=%s registros=%s',
@@ -177,6 +192,22 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
         request.session[SESSION_LINHAS_KEY] = linhas
         request.session.modified = True
         messages.success(request, f'Pré-cadastro criado para a linha {numero_linha}.')
+
+        return self._render_preview(request)
+
+    def _validar_todos_preview(self, request):
+        linhas = request.session.get(SESSION_LINHAS_KEY)
+        if not linhas:
+            messages.error(request, 'Nenhum preview ativo. Envie o arquivo novamente.')
+            return redirect('estoque_sap:importar')
+
+        criados = garantir_produtos_das_linhas(linhas)
+        request.session[SESSION_LINHAS_KEY] = linhas
+        request.session.modified = True
+        if criados:
+            messages.success(request, f'{criados} produto(s) pré-cadastrado(s) para esta importação.')
+        else:
+            messages.info(request, 'Nenhum produto novo precisou ser pré-cadastrado.')
 
         return self._render_preview(request)
 
@@ -211,6 +242,7 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
                 linhas,
                 request.session.get(SESSION_COLUNAS_DETECTADAS_KEY, []),
                 request.session.get(SESSION_COLUNAS_NORMALIZADAS_KEY, []),
+                request.session.get(SESSION_ABA_KEY, ''),
             )
         for linha in preview.linhas:
             linha.permite_validar_produto = linha_permite_validar_produto(linha)
@@ -232,6 +264,11 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
             messages.error(request, 'Nenhum registro encontrado.')
             return redirect('estoque_sap:importar')
 
+        with medir_etapa('estoque_sap.importar.confirmar.garantir_produtos'):
+            precadastros = garantir_produtos_das_linhas(linhas)
+        request.session[SESSION_LINHAS_KEY] = linhas
+        request.session.modified = True
+
         with medir_etapa('estoque_sap.importar.confirmar.filtrar_linhas'):
             linhas_validas, rejeitados = filtrar_linhas_para_importacao(linhas)
 
@@ -252,10 +289,23 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
         )
         self._limpar_sessao(request)
 
+        if precadastros:
+            messages.info(
+                request,
+                f'{precadastros} produto(s) sem cadastro foram pré-cadastrados automaticamente.',
+            )
         if resultado.rejeitados > 0:
-            messages.warning(request, 'Importação concluída parcialmente.')
+            messages.warning(
+                request,
+                f'Importação concluída com {resultado.inseridos + resultado.atualizados} '
+                f'registro(s) no estoque SAP e {resultado.rejeitados} linha(s) rejeitada(s).',
+            )
         else:
-            messages.success(request, 'Importação concluída com sucesso.')
+            messages.success(
+                request,
+                f'Importação concluída: {resultado.inseridos + resultado.atualizados} '
+                'registro(s) no estoque SAP.',
+            )
 
         return render(request, self.template_name, {
             'etapa': 'resultado',
@@ -267,3 +317,4 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
         request.session.pop(SESSION_COLUNAS_DETECTADAS_KEY, None)
         request.session.pop(SESSION_COLUNAS_NORMALIZADAS_KEY, None)
         request.session.pop(SESSION_ARQUIVO_KEY, None)
+        request.session.pop(SESSION_ABA_KEY, None)

@@ -137,8 +137,8 @@
                                 type="button"
                                 class="grid-acao grid-acao-editar btn-editar-sku"
                                 data-url="{% url 'ciclico_sku_editar' sku.pk %}"
-                                title="Editar contagem"
-                                aria-label="Editar contagem"
+                                title="{% if sku.quantidade_fisica is None %}Inserir contagem manual{% else %}Editar contagem{% endif %}"
+                                aria-label="{% if sku.quantidade_fisica is None %}Inserir contagem manual{% else %}Editar contagem{% endif %}"
                             >
                                 <i class="bi bi-pencil-square"></i>
                             </button>
@@ -242,8 +242,9 @@ function atualizarLinhaSku(sku) {
 }
 
 function validarFormularioEdicao(form) {
+    const contagemInicial = form.dataset.contagemInicial === '1';
     const motivo = form.querySelector('[name="motivo_edicao"]');
-    if (!motivo || !motivo.value.trim()) {
+    if (!contagemInicial && (!motivo || !motivo.value.trim())) {
         return 'Informe o motivo da alteração.';
     }
 

@@ -1,18 +1,23 @@
 from decimal import Decimal
+import io
 
 import pandas as pd
 from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from openpyxl import Workbook
 
 from estoque_sap.models import EstoqueSAP
 from estoque_sap.services.importacao_estoque_sap import (
     CAMPOS_CANAIS,
     MAPEAMENTO_COLUNAS,
     excluir_linha_preview,
+    filtrar_linhas_para_importacao,
+    garantir_produtos_das_linhas,
     importar_dados,
     montar_preview_sessao,
+    normalizar_codigo_produto,
     normalizar_colunas_importacao,
     obter_status_linha,
     processar_arquivo,
@@ -33,6 +38,55 @@ def _linha_importacao_sap(codigo: str, total: str = '10') -> dict:
     for campo in CAMPOS_CANAIS:
         dados[campo] = '0' if campo != 'canal_1' else total
     return dados
+
+
+def _excel_sap(
+    registros: list[dict],
+    *,
+    sheet='Estoque',
+    header_row=1,
+    extra_sheets=None,
+    colunas=None,
+):
+    workbook = Workbook()
+    extra_sheets = extra_sheets or {}
+    colunas = colunas or ['CodProduto', 'Descricao', 0, 1, 2, 66, 80, 81, 82, 99, 110]
+
+    def _preencher(aba, linhas, linha_cabecalho=1):
+        for indice, nome in enumerate(colunas, start=1):
+            aba.cell(linha_cabecalho, indice, nome)
+        for offset, registro in enumerate(linhas, start=1):
+            valores = [
+                registro.get('codigo'),
+                registro.get('descricao'),
+                registro.get('canal_0', 0),
+                registro.get('canal_1', 0),
+                registro.get('canal_2', 0),
+                registro.get('canal_66', 0),
+                registro.get('canal_80', 0),
+                registro.get('canal_81', 0),
+                registro.get('canal_82', 0),
+                registro.get('canal_99', 0),
+                registro.get('canal_110', 0),
+            ]
+            for coluna, valor in enumerate(valores, start=1):
+                aba.cell(linha_cabecalho + offset, coluna, valor)
+
+    primeira = workbook.active
+    primeira.title = sheet
+    if header_row > 1:
+        primeira.cell(1, 1, 'Relatório de estoque SAP')
+    _preencher(primeira, registros, header_row)
+
+    for nome, linhas in extra_sheets.items():
+        aba = workbook.create_sheet(nome)
+        _preencher(aba, linhas, 1)
+
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    buffer.name = 'sap.xlsx'
+    return buffer
 
 
 class NormalizacaoColunasSAPTestCase(TestCase):
@@ -147,7 +201,7 @@ class PreviewImportacaoSAPTestCase(TestCase):
             Produto.objects.filter(codigo_produto='10001').exists(),
         )
         produto = Produto.objects.get(codigo_produto='10001')
-        self.assertEqual(produto.setor, 'PENDENTE')
+        self.assertEqual(produto.setor, 'PRÉ-CADASTRO')
         self.assertTrue(produto.ativo)
 
     def test_excluir_linha_remove_da_sessao_sem_apagar_banco(self):
@@ -330,3 +384,106 @@ class ImportacaoSAPCicloPerformanceTestCase(TestCase):
             25,
             msg='Importação SAP com ciclo ativo deve evitar N+1 na sincronização.',
         )
+
+
+class ImportacaoSAPArquivoCompletoTestCase(TestCase):
+    def test_normaliza_codigo_com_decimal_excel(self):
+        self.assertEqual(normalizar_codigo_produto('110279.0'), '110279')
+        self.assertEqual(normalizar_codigo_produto('1.10279e5'), '110279')
+
+    def test_mapeia_cabecalho_canal_como_float(self):
+        dataframe = pd.DataFrame(columns=['CodProduto', 'Descricao', 0.0, 1.0, 110.0])
+        normalizado = normalizar_colunas_importacao(dataframe)
+        self.assertIn('codigo_produto', normalizado.columns)
+        self.assertIn('canal_0', normalizado.columns)
+        self.assertIn('canal_1', normalizado.columns)
+        self.assertIn('canal_110', normalizado.columns)
+
+    def test_casa_codigo_excel_com_cadastro_sem_ponto_zero(self):
+        Produto.objects.create(
+            codigo_produto='110279',
+            descricao='NUTO H 68 20L',
+            setor='LUBRIFICANTE',
+        )
+        arquivo = _excel_sap([
+            {'codigo': 110279.0, 'descricao': 'NUTO H 68 20L', 'canal_110': 152},
+        ])
+        preview = processar_arquivo(arquivo)
+        self.assertEqual(preview.total_linhas, 1)
+        self.assertEqual(preview.linhas_validas, 1)
+        self.assertEqual(preview.linhas[0].codigo_produto, '110279')
+
+    def test_le_aba_com_mais_skus_e_ignora_linhas_em_branco(self):
+        cadastrados = []
+        for indice in range(1, 32):
+            codigo = f'P{indice:03d}'
+            Produto.objects.create(
+                codigo_produto=codigo,
+                descricao=f'Produto {codigo}',
+                setor='A',
+            )
+            cadastrados.append({'codigo': codigo, 'descricao': f'Produto {codigo}', 'canal_1': 1})
+
+        completos = list(cadastrados)
+        for indice in range(32, 301):
+            codigo = f'P{indice:03d}'
+            completos.append({'codigo': codigo, 'descricao': f'Produto {codigo}', 'canal_110': 2})
+        completos.extend([{'codigo': '', 'descricao': '', 'canal_1': 0} for _ in range(20)])
+
+        arquivo = _excel_sap(
+            cadastrados,
+            sheet='Resumo',
+            extra_sheets={'Estoque': completos},
+        )
+        preview = processar_arquivo(arquivo)
+
+        self.assertEqual(preview.aba, 'Estoque')
+        self.assertEqual(preview.total_linhas, 300)
+        self.assertEqual(preview.linhas_validas, 31)
+        self.assertEqual(preview.linhas_invalidas, 269)
+
+    def test_confirmacao_precadastra_skus_faltantes_e_grava_snapshot_completo(self):
+        Produto.objects.create(codigo_produto='P001', descricao='Produto P001', setor='A')
+        registros = [
+            {'codigo': f'P{indice:03d}', 'descricao': f'Produto P{indice:03d}', 'canal_110': indice}
+            for indice in range(1, 41)
+        ]
+        arquivo = _excel_sap(registros, header_row=3)
+        preview = processar_arquivo(arquivo)
+        linhas = serializar_preview_sessao(preview)
+        self.assertEqual(preview.total_linhas, 40)
+        self.assertEqual(preview.linhas_validas, 1)
+
+        criados = garantir_produtos_das_linhas(linhas)
+        self.assertEqual(criados, 39)
+
+        importaveis, rejeitados = filtrar_linhas_para_importacao(linhas)
+        self.assertEqual(rejeitados, 0)
+        self.assertEqual(len(importaveis), 40)
+
+        importar_dados(importaveis, arquivo_origem='carga-300.xlsx')
+        self.assertEqual(EstoqueSAP.objects.count(), 40)
+
+    def test_importa_sem_todas_as_colunas_de_canal(self):
+        Produto.objects.create(codigo_produto='110378', descricao='SPARTAN', setor='A')
+        workbook = Workbook()
+        aba = workbook.active
+        aba.title = 'SAP'
+        aba['A1'] = 'CodProduto'
+        aba['B1'] = 'Descricao'
+        aba['C1'] = 1
+        aba['D1'] = 110
+        aba['A2'] = '110378'
+        aba['B2'] = 'SPARTAN'
+        aba['C2'] = 0
+        aba['D2'] = 85
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+        buffer.name = 'sap-parcial.xlsx'
+
+        preview = processar_arquivo(buffer)
+        self.assertEqual(preview.total_linhas, 1)
+        self.assertEqual(preview.linhas_validas, 1)
+        self.assertEqual(preview.linhas[0].canais['canal_110'], Decimal('85'))
+        self.assertEqual(preview.linhas[0].canais['canal_0'], Decimal('0'))

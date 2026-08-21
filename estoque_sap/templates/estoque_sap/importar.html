@@ -120,6 +120,11 @@
 
     <strong>Colunas normalizadas:</strong> {{ preview.colunas_normalizadas|join:", " }}
 
+    {% if preview.aba %}
+    <br>
+    <strong>Aba lida:</strong> {{ preview.aba }}
+    {% endif %}
+
 </div>
 
 {% endif %}
@@ -175,6 +180,22 @@
     </div>
 
 </div>
+
+
+
+{% if preview.linhas_invalidas %}
+
+<div class="alert alert-warning">
+
+    <strong>{{ preview.linhas_invalidas }} linha(s) ainda não entram no estoque SAP.</strong>
+
+    Confirmar a importação agora substituiria a fotografia anterior só com as linhas válidas.
+
+    Use <em>Validar todos os não encontrados</em> ou confirme: o sistema pré-cadastra automaticamente os SKUs que tiverem descrição.
+
+</div>
+
+{% endif %}
 
 
 
@@ -358,9 +379,9 @@
 
 
 
-<div class="d-flex gap-2">
+<div class="d-flex flex-wrap gap-2">
 
-    {% if preview.linhas_validas > 0 %}
+    {% if preview.linhas_validas > 0 or preview.linhas_invalidas > 0 %}
 
     <form method="post">
 
@@ -376,7 +397,27 @@
 
     </form>
 
-    {% else %}
+    {% endif %}
+
+    {% if preview.linhas_invalidas > 0 %}
+
+    <form method="post">
+
+        {% csrf_token %}
+
+        <input type="hidden" name="acao" value="validar_todos">
+
+        <button type="submit" class="btn btn-outline-success">
+
+            <i class="bi bi-plus-circle me-1"></i>Validar todos os não encontrados
+
+        </button>
+
+    </form>
+
+    {% endif %}
+
+    {% if preview.linhas_validas == 0 and preview.linhas_invalidas == 0 %}
 
     <span class="text-muted align-self-center">Nenhuma linha válida para importação.</span>
 

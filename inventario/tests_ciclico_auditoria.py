@@ -667,6 +667,42 @@ class CiclicoEdicaoContagemTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticad
         self.assertContains(response, 'bi-trash')
         self.assertContains(response, 'Ações')
 
+    def test_executar_exibe_editar_em_sku_pendente(self):
+        self.client.force_login(self.user_operador)
+        self.client.post(reverse('ciclico_executar'), {
+            'acao': 'gerar_lote',
+            'quantidade_skus': '1',
+        })
+        response = self.client.get(reverse('ciclico_executar'))
+        self.assertContains(response, 'btn-editar-sku')
+        self.assertContains(response, 'Inserir contagem manual')
+
+    def test_inserir_contagem_manual_via_editar(self):
+        self.client.force_login(self.user_operador)
+        self.assertTrue(usuario_pode_editar_contagem_ciclico(self.user_operador, self.sku))
+        response = self.client.post(
+            reverse('ciclico_sku_editar', kwargs={'sku_id': self.sku.pk}),
+            {
+                f'quantidade_posicao_{self.item.pk}': '50',
+                f'posicao_id_{self.item.pk}': str(self.posicao.pk),
+            },
+        )
+        self.assertRedirects(response, reverse('ciclico_executar'))
+        self.item.refresh_from_db()
+        self.sku.refresh_from_db()
+        self.assertEqual(self.item.quantidade_fisica, Decimal('50'))
+        self.assertEqual(self.sku.quantidade_fisica, Decimal('50'))
+
+    def test_get_editar_sku_pendente_exibe_posicao_para_contar(self):
+        self.client.force_login(self.user_operador)
+        response = self.client.get(
+            reverse('ciclico_sku_editar', kwargs={'sku_id': self.sku.pk}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Inserir contagem manual')
+        self.assertContains(response, f'quantidade_posicao_{self.item.pk}')
+        self.assertContains(response, 'Salvar contagem')
+
     def test_detalhe_exibe_historico_edicao(self):
         self._contar_sku()
         editar_contagem_ciclico(

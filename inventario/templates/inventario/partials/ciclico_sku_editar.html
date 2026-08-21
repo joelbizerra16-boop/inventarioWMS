@@ -1,6 +1,6 @@
 <div class="modal-header flex-shrink-0">
     <div>
-        <h5 class="modal-title">Editar contagem — {{ sku.codigo_produto }}</h5>
+        <h5 class="modal-title">{% if contagem_inicial %}Inserir contagem manual{% else %}Editar contagem{% endif %} — {{ sku.codigo_produto }}</h5>
         <p class="text-muted small mb-0">{{ sku.descricao }}</p>
     </div>
     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
@@ -11,6 +11,7 @@
     method="post"
     action="{% url 'ciclico_sku_editar' sku.pk %}"
     data-sku-id="{{ sku.pk }}"
+    data-contagem-inicial="{% if contagem_inicial %}1{% else %}0{% endif %}"
 >
     {% csrf_token %}
     <div class="modal-body flex-grow-1 overflow-auto">
@@ -48,10 +49,14 @@
         </div>
 
         <p class="text-muted small">
+            {% if contagem_inicial %}
+            Informe a quantidade física de cada posição. SAP, Cosan e Brida não são alterados.
+            {% else %}
             SAP, Cosan, Brida, data e usuário originais não podem ser alterados.
+            {% endif %}
         </p>
 
-        <h6 class="fw-semibold">Posições contadas</h6>
+        <h6 class="fw-semibold">{% if contagem_inicial %}Posições para contar{% else %}Posições contadas{% endif %}</h6>
         {% if sku.posicoes %}
         <div class="table-responsive mb-3">
             <table class="table table-sm align-middle">
@@ -64,7 +69,6 @@
                 </thead>
                 <tbody>
                     {% for pos in sku.posicoes %}
-                    {% if pos.quantidade_fisica is not None %}
                     <tr>
                         <td>
                             <select
@@ -89,33 +93,39 @@
                                 class="form-control form-control-sm"
                                 step="0.001"
                                 min="0"
-                                value="{{ pos.quantidade_fisica }}"
+                                value="{% if pos.quantidade_fisica is not None %}{{ pos.quantidade_fisica }}{% endif %}"
+                                placeholder="0"
                                 required
                             >
                         </td>
                         <td class="small text-muted">
+                            {% if pos.quantidade_fisica is not None %}
                             {{ pos.usuario_contagem_nome }}
                             {% if pos.data_contagem %}<br>{{ pos.data_contagem|date:"d/m/Y H:i" }}{% endif %}
+                            {% else %}
+                            Sem contagem
+                            {% endif %}
                         </td>
                     </tr>
-                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <p class="text-muted small">Nenhuma posição contada para editar.</p>
+        <p class="text-muted small">Nenhuma posição disponível para contar.</p>
         {% endif %}
 
         <div class="mb-0">
-            <label for="motivo_edicao" class="form-label fw-semibold">Motivo da alteração</label>
+            <label for="motivo_edicao" class="form-label fw-semibold">
+                {% if contagem_inicial %}Observação{% else %}Motivo da alteração{% endif %}
+            </label>
             <textarea
                 name="motivo_edicao"
                 id="motivo_edicao"
                 class="form-control"
                 rows="3"
-                required
-                placeholder="Ex.: Erro de digitação"
+                {% if not contagem_inicial %}required{% endif %}
+                placeholder="{% if contagem_inicial %}Opcional. Ex.: Contagem manual na web{% else %}Ex.: Erro de digitação{% endif %}"
             ></textarea>
         </div>
     </div>
@@ -124,7 +134,8 @@
             Cancelar
         </button>
         <button type="submit" class="btn btn-primary w-100 w-sm-auto" id="btnSalvarEdicaoContagem">
-            <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Salvar Alteração
+            <i class="bi bi-check-lg me-1" aria-hidden="true"></i>
+            {% if contagem_inicial %}Salvar contagem{% else %}Salvar Alteração{% endif %}
         </button>
     </div>
 </form>

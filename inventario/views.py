@@ -1071,7 +1071,7 @@ class CiclicoSkuEditarView(RequerEscritaInventarioMixin, View):
 
     def get(self, request, sku_id):
         try:
-            sku = obter_sku_detalhe(sku_id)
+            sku = obter_sku_detalhe(sku_id, incluir_posicoes_sem_contagem=True)
         except CiclicoError as exc:
             messages.error(request, str(exc))
             return redirect('ciclico_executar')
@@ -1090,6 +1090,7 @@ class CiclicoSkuEditarView(RequerEscritaInventarioMixin, View):
         return render(request, self.template_name, {
             'sku': sku,
             'posicoes_ativas': posicoes_ativas,
+            'contagem_inicial': sku.quantidade_fisica is None,
         })
 
     def post(self, request, sku_id):
@@ -1097,17 +1098,20 @@ class CiclicoSkuEditarView(RequerEscritaInventarioMixin, View):
         motivo = request.POST.get('motivo_edicao', '').strip()
         ajax = _requisicao_ajax(request)
         try:
-            if not motivo:
-                raise CiclicoError('Informe o motivo da alteração.')
             edicoes = _montar_edicoes_contagem(request, sku_model)
             dto = editar_contagem_ciclico(sku_id, edicoes, motivo, request.user)
+            mensagem = (
+                'Contagem manual registrada.'
+                if sku_model.quantidade_fisica is None
+                else 'Contagem atualizada com histórico registrado.'
+            )
             if ajax:
                 return JsonResponse({
                     'ok': True,
-                    'message': 'Contagem atualizada com histórico registrado.',
+                    'message': mensagem,
                     'sku': _serializar_sku_linha_execucao(dto),
                 })
-            messages.success(request, 'Contagem atualizada com histórico registrado.')
+            messages.success(request, mensagem)
         except CiclicoError as exc:
             if ajax:
                 return JsonResponse({'ok': False, 'message': str(exc)}, status=400)

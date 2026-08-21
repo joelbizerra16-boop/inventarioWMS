@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+import logging
 import re
 import unicodedata
 
@@ -11,27 +12,20 @@ from core.services.importacao_excel import (
     ResultadoImportacao,
     ResultadoPreview,
     limpar_valor,
-    validar_colunas_obrigatorias,
 )
 from core.services.perf_diagnostico import medir_etapa
 from estoque_sap.models import EstoqueSAP
 from produtos.models import Produto
 
+logger = logging.getLogger(__name__)
+
 BATCH_SIZE_IMPORTACAO = 500
 LOCK_SNAPSHOT_SAP = 73924501
+MAX_LINHAS_CABECALHO = 20
 
 COLUNAS_OBRIGATORIAS = [
     'codigo_produto',
     'descricao',
-    'canal_0',
-    'canal_1',
-    'canal_2',
-    'canal_66',
-    'canal_80',
-    'canal_81',
-    'canal_82',
-    'canal_99',
-    'canal_110',
 ]
 
 CAMPOS_CANAIS = [
@@ -51,25 +45,37 @@ MAPEAMENTO_COLUNAS = {
     'cod produto': 'codigo_produto',
     'codigo produto': 'codigo_produto',
     'codigo_produto': 'codigo_produto',
+    'sku': 'codigo_produto',
     'descricao': 'descricao',
     '0': 'canal_0',
+    'canal 0': 'canal_0',
     'canal_0': 'canal_0',
     '1': 'canal_1',
+    'canal 1': 'canal_1',
     'canal_1': 'canal_1',
+    'brida': 'canal_1',
     '2': 'canal_2',
+    'canal 2': 'canal_2',
     'canal_2': 'canal_2',
     '66': 'canal_66',
+    'canal 66': 'canal_66',
     'canal_66': 'canal_66',
     '80': 'canal_80',
+    'canal 80': 'canal_80',
     'canal_80': 'canal_80',
     '81': 'canal_81',
+    'canal 81': 'canal_81',
     'canal_81': 'canal_81',
     '82': 'canal_82',
+    'canal 82': 'canal_82',
     'canal_82': 'canal_82',
     '99': 'canal_99',
+    'canal 99': 'canal_99',
     'canal_99': 'canal_99',
     '110': 'canal_110',
+    'canal 110': 'canal_110',
     'canal_110': 'canal_110',
+    'cosan': 'canal_110',
     'total': 'total',
 }
 
@@ -91,30 +97,121 @@ class LinhaImportacao:
 class ResultadoPreviewSAP(ResultadoPreview):
     colunas_detectadas: list[str] = field(default_factory=list)
     colunas_normalizadas: list[str] = field(default_factory=list)
+    aba: str = ''
 
 
 def _normalizar_nome_coluna(nome) -> str:
     texto = str(nome).strip().lower()
+    if texto.lower() in ('nan', 'none', 'unnamed: 0'):
+        return ''
     texto = unicodedata.normalize('NFKD', texto)
     texto = ''.join(caractere for caractere in texto if not unicodedata.combining(caractere))
     texto = re.sub(r'\s+', ' ', texto).strip()
+    if texto.endswith('.0') and texto[:-2].isdigit():
+        texto = texto[:-2]
     return texto
+
+
+def normalizar_codigo_produto(valor) -> str:
+    texto = limpar_valor(valor).replace('\xa0', ' ').strip()
+    if texto.lower() in ('nan', 'none'):
+        return ''
+    if texto.endswith('.0') and texto[:-2].lstrip('-').isdigit():
+        texto = texto[:-2]
+    try:
+        if 'e' in texto.lower():
+            numero = float(texto)
+            if numero.is_integer():
+                texto = str(int(numero))
+    except ValueError:
+        pass
+    return texto.strip()
 
 
 def normalizar_colunas_importacao(dataframe: pd.DataFrame) -> pd.DataFrame:
     renomear = {}
+    usados = set()
     for coluna in dataframe.columns:
         chave = _normalizar_nome_coluna(coluna)
-        renomear[coluna] = MAPEAMENTO_COLUNAS.get(chave, chave)
+        destino = MAPEAMENTO_COLUNAS.get(chave, chave)
+        if destino in usados:
+            continue
+        renomear[coluna] = destino
+        if destino:
+            usados.add(destino)
     return dataframe.rename(columns=renomear)
 
 
-def _ler_planilha(arquivo) -> tuple[pd.DataFrame, list[str], list[str]]:
-    dataframe = pd.read_excel(arquivo, dtype=str)
+def _tem_layout_sap(colunas: list[str]) -> bool:
+    normalizadas = set(colunas)
+    return 'codigo_produto' in normalizadas and any(
+        campo in normalizadas for campo in CAMPOS_CANAIS
+    )
+
+
+def _detectar_linha_cabecalho(bruto: pd.DataFrame) -> int | None:
+    limite = min(len(bruto), MAX_LINHAS_CABECALHO)
+    for indice in range(limite):
+        valores = [_normalizar_nome_coluna(valor) for valor in bruto.iloc[indice].tolist()]
+        mapeadas = [MAPEAMENTO_COLUNAS.get(valor, valor) for valor in valores]
+        if _tem_layout_sap(mapeadas):
+            return indice
+    return None
+
+
+def _dataframe_da_aba(excel: pd.ExcelFile, sheet_name: str) -> tuple[pd.DataFrame, list[str]] | None:
+    bruto = pd.read_excel(excel, sheet_name=sheet_name, dtype=str, header=None)
+    if bruto.empty:
+        return None
+    indice_cabecalho = _detectar_linha_cabecalho(bruto)
+    if indice_cabecalho is None:
+        return None
+    cabecalho = [str(valor).strip() if not pd.isna(valor) else '' for valor in bruto.iloc[indice_cabecalho].tolist()]
+    dataframe = bruto.iloc[indice_cabecalho + 1:].copy()
+    dataframe.columns = cabecalho
+    dataframe = dataframe.reset_index(drop=True)
     colunas_detectadas = [str(coluna) for coluna in dataframe.columns]
     dataframe = normalizar_colunas_importacao(dataframe)
-    colunas_normalizadas = list(dataframe.columns)
-    return dataframe.fillna(''), colunas_detectadas, colunas_normalizadas
+    if not _tem_layout_sap(list(dataframe.columns)):
+        return None
+    for campo in CAMPOS_CANAIS:
+        if campo not in dataframe.columns:
+            dataframe[campo] = ''
+    if 'descricao' not in dataframe.columns:
+        dataframe['descricao'] = ''
+    return dataframe.fillna(''), colunas_detectadas
+
+
+def _ler_planilha(arquivo) -> tuple[pd.DataFrame, list[str], list[str], str]:
+    excel = pd.ExcelFile(arquivo)
+    melhor = None
+    for sheet_name in excel.sheet_names:
+        lido = _dataframe_da_aba(excel, sheet_name)
+        if lido is None:
+            continue
+        dataframe, colunas_detectadas = lido
+        linhas_com_codigo = sum(
+            1
+            for valor in dataframe.get('codigo_produto', [])
+            if normalizar_codigo_produto(valor)
+        )
+        candidato = (linhas_com_codigo, sheet_name, dataframe, colunas_detectadas)
+        if melhor is None or linhas_com_codigo > melhor[0]:
+            melhor = candidato
+
+    if melhor is None:
+        raise ValueError(
+            'Não foi possível localizar as colunas do SAP (CodProduto e canais) em nenhuma aba.'
+        )
+
+    linhas_com_codigo, sheet_name, dataframe, colunas_detectadas = melhor
+    logger.info(
+        'IMPORTACAO_SAP_ABA aba=%s linhas_com_codigo=%s total_linhas=%s',
+        sheet_name,
+        linhas_com_codigo,
+        len(dataframe),
+    )
+    return dataframe, colunas_detectadas, list(dataframe.columns), str(sheet_name)
 
 
 def _converter_decimal(valor, nome_campo: str) -> tuple[Decimal | None, str | None]:
@@ -158,7 +255,7 @@ def _validar_linha_dict(linha: dict, produtos_existentes: set[str]) -> dict:
 
     if not linha.get('codigo_produto'):
         erros.append('Código do produto é obrigatório.')
-    elif linha['codigo_produto'] not in produtos_existentes:
+    elif not _produto_cadastrado(linha['codigo_produto'], produtos_existentes):
         erros.append('Produto não cadastrado.')
 
     linha['erros'] = erros
@@ -176,7 +273,7 @@ def _validar_linha(linha: LinhaImportacao, produtos_existentes: set[str]) -> Lin
 
     if not linha.codigo_produto:
         erros.append('Código do produto é obrigatório.')
-    elif linha.codigo_produto not in produtos_existentes:
+    elif not _produto_cadastrado(linha.codigo_produto, produtos_existentes):
         erros.append('Produto não cadastrado.')
 
     linha.valida = not erros
@@ -205,23 +302,46 @@ def serializar_preview_sessao(preview: ResultadoPreviewSAP) -> list[dict]:
     return [serializar_linha_preview(linha) for linha in preview.linhas]
 
 
-def _carregar_produtos_existentes(linhas: list[dict]) -> set[str]:
-    codigos = [
-        linha['codigo_produto']
-        for linha in linhas
-        if linha.get('codigo_produto') and not linha.get('ignorada')
-    ]
-    return set(
-        Produto.objects.filter(
-            codigo_produto__in=codigos,
-        ).values_list('codigo_produto', flat=True)
-    )
+def _chave_codigo(codigo: str) -> str:
+    return normalizar_codigo_produto(codigo).upper()
+
+
+def _produto_cadastrado(codigo: str, existentes: set[str]) -> bool:
+    if not codigo:
+        return False
+    if codigo in existentes:
+        return True
+    chave = _chave_codigo(codigo)
+    return chave in existentes
+
+
+def _mapa_codigos_produto() -> dict[str, str]:
+    mapa: dict[str, str] = {}
+    for codigo in Produto.objects.values_list('codigo_produto', flat=True):
+        chave = _chave_codigo(codigo)
+        if chave and chave not in mapa:
+            mapa[chave] = codigo
+    return mapa
+
+
+def _carregar_produtos_existentes(linhas: list[dict] | None = None) -> set[str]:
+    mapa = _mapa_codigos_produto()
+    return set(mapa.keys()) | set(mapa.values())
+
+
+def _codigo_canonico(codigo: str, mapa: dict[str, str] | None = None) -> str:
+    normalizado = normalizar_codigo_produto(codigo)
+    if not normalizado:
+        return ''
+    mapa = mapa if mapa is not None else _mapa_codigos_produto()
+    return mapa.get(_chave_codigo(normalizado), normalizado)
 
 
 def montar_preview_sessao(
     linhas: list[dict],
     colunas_detectadas: list[str] | None = None,
     colunas_normalizadas: list[str] | None = None,
+    aba: str = '',
 ) -> ResultadoPreviewSAP:
     linhas_visiveis = [linha for linha in linhas if not linha.get('ignorada')]
     linhas_exibicao = []
@@ -233,7 +353,7 @@ def montar_preview_sessao(
                 codigo_produto=linha.get('codigo_produto', ''),
                 descricao=linha.get('descricao', ''),
                 canais={
-                    campo: Decimal(linha['canais'][campo])
+                    campo: Decimal(str((linha.get('canais') or {}).get(campo, '0') or '0'))
                     for campo in CAMPOS_CANAIS
                 },
                 total=Decimal(linha['total']),
@@ -261,6 +381,7 @@ def montar_preview_sessao(
         linhas=linhas_exibicao,
         colunas_detectadas=colunas_detectadas or [],
         colunas_normalizadas=colunas_normalizadas or [],
+        aba=aba,
     )
 
 
@@ -289,6 +410,20 @@ def criar_precadastro_produto(codigo_produto: str, descricao: str) -> Produto:
     )
 
 
+def _criar_precadastro_linha(linha: dict) -> None:
+    from produtos.services.homologacao import HomologacaoError
+
+    codigo = normalizar_codigo_produto(linha.get('codigo_produto', ''))
+    descricao = limpar_valor(linha.get('descricao', ''))
+    if not codigo or not descricao:
+        return
+    try:
+        criar_precadastro_produto(codigo, descricao)
+    except HomologacaoError:
+        return
+    linha['codigo_produto'] = codigo
+
+
 def validar_produto_preview(linhas: list[dict], numero_linha: int) -> list[dict]:
     for linha in linhas:
         if linha['linha'] != numero_linha or linha.get('ignorada'):
@@ -297,8 +432,9 @@ def validar_produto_preview(linhas: list[dict], numero_linha: int) -> list[dict]
         if not any('Produto não cadastrado' in erro for erro in linha.get('erros', [])):
             break
 
-        criar_precadastro_produto(linha['codigo_produto'], linha['descricao'])
-        produtos_existentes = _carregar_produtos_existentes(linhas)
+        _criar_precadastro_linha(linha)
+        linha['codigo_produto'] = _codigo_canonico(linha.get('codigo_produto', ''))
+        produtos_existentes = _carregar_produtos_existentes()
         linha['erros'] = [
             erro for erro in linha.get('erros', [])
             if 'numérico inválido' in erro
@@ -307,6 +443,35 @@ def validar_produto_preview(linhas: list[dict], numero_linha: int) -> list[dict]
         break
 
     return linhas
+
+
+def garantir_produtos_das_linhas(linhas: list[dict]) -> int:
+    criados = 0
+    for linha in linhas:
+        if linha.get('ignorada'):
+            continue
+        if not any('Produto não cadastrado' in erro for erro in linha.get('erros', [])):
+            continue
+        codigo = normalizar_codigo_produto(linha.get('codigo_produto', ''))
+        if not codigo:
+            continue
+        existia = Produto.objects.filter(codigo_produto=codigo).exists()
+        _criar_precadastro_linha(linha)
+        if not existia and Produto.objects.filter(codigo_produto=codigo).exists():
+            criados += 1
+
+    mapa = _mapa_codigos_produto()
+    existentes = set(mapa.keys()) | set(mapa.values())
+    for linha in linhas:
+        if linha.get('ignorada'):
+            continue
+        linha['codigo_produto'] = _codigo_canonico(linha.get('codigo_produto', ''), mapa)
+        linha['erros'] = [
+            erro for erro in linha.get('erros', [])
+            if 'numérico inválido' in erro
+        ]
+        _validar_linha_dict(linha, existentes)
+    return criados
 
 
 def excluir_linha_preview(linhas: list[dict], numero_linha: int) -> list[dict]:
@@ -352,11 +517,11 @@ def linha_permite_validar_produto(linha: LinhaImportacao) -> bool:
 
 
 def processar_arquivo(arquivo) -> ResultadoPreviewSAP:
-    dataframe, colunas_detectadas, colunas_normalizadas = _ler_planilha(arquivo)
-    validar_colunas_obrigatorias(dataframe, COLUNAS_OBRIGATORIAS)
+    dataframe, colunas_detectadas, colunas_normalizadas, aba = _ler_planilha(arquivo)
 
     linhas_parciais = []
-    codigos_produto = []
+    mapa_produtos = _mapa_codigos_produto()
+    produtos_existentes = set(mapa_produtos.keys()) | set(mapa_produtos.values())
 
     for indice, registro in dataframe.iterrows():
         erros_numericos = []
@@ -370,24 +535,19 @@ def processar_arquivo(arquivo) -> ResultadoPreviewSAP:
             else:
                 canais[campo] = valor
 
-        codigo_produto = limpar_valor(registro.get('codigo_produto'))
-        if codigo_produto:
-            codigos_produto.append(codigo_produto)
+        codigo_produto = _codigo_canonico(registro.get('codigo_produto'), mapa_produtos)
+        descricao = limpar_valor(registro.get('descricao'))
+        if not codigo_produto and not descricao and all(valor == 0 for valor in canais.values()):
+            continue
 
         linhas_parciais.append({
             'linha': int(indice) + 2,
             'codigo_produto': codigo_produto,
-            'descricao': limpar_valor(registro.get('descricao')),
+            'descricao': descricao,
             'canais': canais,
             'total': _calcular_total(canais),
             'erros_numericos': erros_numericos,
         })
-
-    produtos_existentes = set(
-        Produto.objects.filter(
-            codigo_produto__in=codigos_produto
-        ).values_list('codigo_produto', flat=True)
-    )
 
     linhas = []
     for dados in linhas_parciais:
@@ -420,6 +580,7 @@ def processar_arquivo(arquivo) -> ResultadoPreviewSAP:
         linhas=linhas,
         colunas_detectadas=colunas_detectadas,
         colunas_normalizadas=colunas_normalizadas,
+        aba=aba,
     )
 
 
@@ -495,6 +656,9 @@ def importar_dados(
     _adquirir_lock_snapshot_sap()
 
     agora = timezone.now()
+    mapa = _mapa_codigos_produto()
+    for dados in linhas_validas:
+        dados['codigo_produto'] = _codigo_canonico(dados['codigo_produto'], mapa)
     codigos_unicos = {dados['codigo_produto'] for dados in linhas_validas}
     produtos_por_codigo = {
         produto.codigo_produto: produto

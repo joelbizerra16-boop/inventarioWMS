@@ -1135,11 +1135,17 @@ def _sku_para_dto(
     incluir_historico: bool = False,
     usuario=None,
     canais_por_produto: dict[int, tuple[Decimal | None, Decimal | None]] | None = None,
+    incluir_posicoes_sem_contagem: bool = False,
 ) -> SkuCicloDetalhe:
     posicoes_dto: list[PosicaoCicloDetalhe] = []
     historico_dto: list[HistoricoCicloLinha] = []
     if incluir_posicoes:
-        posicoes_visiveis = _filtrar_posicoes_ui(_posicoes_sku_ordenadas(sku))
+        posicoes_base = _posicoes_sku_ordenadas(sku)
+        posicoes_visiveis = (
+            posicoes_base
+            if incluir_posicoes_sem_contagem
+            else _filtrar_posicoes_ui(posicoes_base)
+        )
         for posicao in posicoes_visiveis:
             posicoes_dto.append(PosicaoCicloDetalhe(
                 pk=posicao.pk,
@@ -1934,7 +1940,11 @@ def obter_skus_ciclo(
     ]
 
 
-def obter_sku_detalhe(sku_id: int, ciclo_id: int | None = None) -> SkuCicloDetalhe:
+def obter_sku_detalhe(
+    sku_id: int,
+    ciclo_id: int | None = None,
+    incluir_posicoes_sem_contagem: bool = False,
+) -> SkuCicloDetalhe:
     try:
         if ciclo_id:
             sku = CicloInventarioSku.objects.get(pk=sku_id, ciclo_id=ciclo_id)
@@ -1943,7 +1953,12 @@ def obter_sku_detalhe(sku_id: int, ciclo_id: int | None = None) -> SkuCicloDetal
     except CicloInventarioSku.DoesNotExist as exc:
         raise CiclicoError('SKU não encontrado no ciclo cíclico.') from exc
 
-    return _sku_para_dto(sku, incluir_posicoes=True, incluir_historico=True)
+    return _sku_para_dto(
+        sku,
+        incluir_posicoes=True,
+        incluir_historico=True,
+        incluir_posicoes_sem_contagem=incluir_posicoes_sem_contagem,
+    )
 
 
 MSG_CICLO_ENCERRADO = (
@@ -1974,14 +1989,17 @@ def usuario_pode_editar_contagem_ciclico(usuario, sku: CicloInventarioSku) -> bo
         return False
 
     perfil = obter_perfil_usuario(usuario)
+    if perfil not in (Usuario.Perfil.ADMINISTRADOR, Usuario.Perfil.INVENTARIO):
+        return False
+
+    if not sku.posicoes.filter(quantidade_fisica__isnull=False).exists():
+        return True
     if perfil == Usuario.Perfil.ADMINISTRADOR:
-        return sku.posicoes.filter(quantidade_fisica__isnull=False).exists()
-    if perfil == Usuario.Perfil.INVENTARIO:
-        return sku.posicoes.filter(
-            quantidade_fisica__isnull=False,
-            usuario_contagem=usuario,
-        ).exists()
-    return False
+        return True
+    return sku.posicoes.filter(
+        quantidade_fisica__isnull=False,
+        usuario_contagem=usuario,
+    ).exists()
 
 
 def usuario_pode_excluir_sku_ciclico(usuario, sku: CicloInventarioSku) -> bool:
@@ -2007,9 +2025,7 @@ def editar_contagem_ciclico(
     motivo: str,
     usuario,
 ) -> SkuCicloDetalhe:
-    motivo = motivo.strip()
-    if not motivo:
-        raise CiclicoError('Informe o motivo da alteração.')
+    motivo = (motivo or '').strip()
 
     sku = CicloInventarioSku.objects.prefetch_related(
         'posicoes',
@@ -2019,6 +2035,41 @@ def editar_contagem_ciclico(
 
     if not usuario_pode_editar_contagem_ciclico(usuario, sku):
         raise CiclicoError('Sem permissão para editar esta contagem.')
+
+    posicoes_por_id = {item.pk: item for item in sku.posicoes.all()}
+    if not posicoes_por_id:
+        raise CiclicoError('SKU sem posições para contar.')
+
+    contagem_inicial = all(
+        item.quantidade_fisica is None for item in posicoes_por_id.values()
+    )
+    if not motivo:
+        if contagem_inicial:
+            motivo = 'Contagem manual'
+        else:
+            raise CiclicoError('Informe o motivo da alteração.')
+
+    if contagem_inicial:
+        if set(int(item_id) for item_id in edicoes) != set(posicoes_por_id):
+            raise CiclicoError('Informe a quantidade de todas as posições do SKU.')
+        for item_id_raw, dados in edicoes.items():
+            item = posicoes_por_id[int(item_id_raw)]
+            nova_posicao = Posicao.objects.get(pk=int(dados['posicao_id']), ativo=True)
+            if item.posicao_id != nova_posicao.pk:
+                item.posicao = nova_posicao
+                item.codigo_posicao = nova_posicao.codigo
+                item.alocacao = nova_posicao.posicao
+                item.save(update_fields=['posicao', 'codigo_posicao', 'alocacao'])
+        contagens = {
+            int(item_id): _decimal(dados['quantidade'])
+            for item_id, dados in edicoes.items()
+        }
+        return salvar_contagem_sku(
+            sku_id,
+            contagens,
+            usuario,
+            origem_contagem=OrigemContagem.WEB,
+        )
 
     from accounts.models import Usuario
 
