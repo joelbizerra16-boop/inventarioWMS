@@ -1,0 +1,55 @@
+# InventarioWMS — produção na VPS
+# Banco: PostgreSQL externo (Supabase). Não sobe Postgres local.
+# Nginx escuta em 80; Gunicorn só na rede interna.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: inventariowms-web:local
+    container_name: inventariowms-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=core.settings
+    volumes:
+      - inventariowms_media:/app/media
+      - inventariowms_logs:/app/logs
+    expose:
+      - "8000"
+    networks:
+      - inventariowms_net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/accounts/login/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: inventariowms-nginx
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - inventariowms_media:/var/www/media:ro
+    networks:
+      - inventariowms_net
+
+networks:
+  inventariowms_net:
+    name: inventariowms_net
+    driver: bridge
+
+volumes:
+  inventariowms_media:
+    name: inventariowms_media
+  inventariowms_logs:
+    name: inventariowms_logs

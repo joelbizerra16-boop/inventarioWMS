@@ -250,15 +250,23 @@ if not DEBUG and not TESTING:
     LOGGING['loggers']['inventario.auditoria']['handlers'].append('arquivo')
 
 if not DEBUG:
+    # Com proxy (Nginx), o protocolo real chega em X-Forwarded-Proto.
+    # Em validação temporária por IP/HTTP, defina SECURE_SSL_REDIRECT=False
+    # para não forçar HTTPS inexistente nem bloquear cookies de sessão.
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True').lower() in ('true', '1', 'yes')
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000'))
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = SECURE_SSL_REDIRECT
+    CSRF_COOKIE_SECURE = SECURE_SSL_REDIRECT
+    SECURE_HSTS_SECONDS = (
+        int(os.environ.get('SECURE_HSTS_SECONDS', '31536000'))
+        if SECURE_SSL_REDIRECT
+        else 0
+    )
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_SSL_REDIRECT
+    SECURE_HSTS_PRELOAD = SECURE_SSL_REDIRECT
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = 'same-origin'
     X_FRAME_OPTIONS = 'DENY'
     SESSION_COOKIE_HTTPONLY = True
     CSRF_COOKIE_HTTPONLY = True
+    USE_X_FORWARDED_HOST = True
