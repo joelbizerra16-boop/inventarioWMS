@@ -181,3 +181,45 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertNotIn('focarCampo', sync)
         self.assertNotIn('.focus(', sync)
         self.assertIn('focarCampo(opcoes.posicaoInput)', js)
+
+    def test_leitura_de_posicao_e_produto_espera_sem_salvar_quantidade(self):
+        from pathlib import Path
+
+        settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261001d')", settings_src)
+
+        js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
+        self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 800'), 1)
+        controle = js.split('function criarControleValidacaoLeitura', 1)[1].split(
+            'function registrarLeituraCampo', 1
+        )[0]
+        self.assertNotIn('setInterval', controle)
+        self.assertNotIn('enviarContagem', controle)
+        self.assertNotIn('alert(', controle)
+        self.assertNotIn('parseInt', controle)
+        self.assertNotIn('Number(', controle)
+        self.assertIn('compositionstart', js)
+        self.assertIn('compositionend', js)
+        self.assertNotIn("addEventListener('blur'", js)
+        self.assertEqual(js.count('setInterval('), 1)
+        self.assertIn('MESTRES_SYNC_MS', js)
+        self.assertEqual(js.count('registrarEnter(quantidadeInput, enviarContagem)'), 2)
+        self.assertNotIn('registrarLeituraCampo(quantidadeInput', js)
+        self.assertEqual(js.count('registrarLeituraCampo('), 5)
+        self.assertIn("_envioEmAndamento", js)
+
+        css = Path(finders.find('css/pocket.css')).read_text(encoding='utf-8')
+        self.assertIn('.pocket-campo-erro', css)
+
+        ciclico = Path(
+            settings.BASE_DIR,
+            'inventario',
+            'templates',
+            'inventario',
+            'pocket',
+            'contagem_ciclico.html',
+        ).read_text(encoding='utf-8')
+        self.assertIn(
+            "js/pocket-bipagem.js' %}?v={{ POCKET_STATIC_VERSION }}",
+            ciclico,
+        )

@@ -7,6 +7,8 @@
     var audioCtx = null;
     var toastTimer = null;
     var TOAST_MS = 2600;
+    // Único atraso da validação de Posição e Produto/EAN. Não vale para Quantidade.
+    var POCKET_VALIDACAO_ATRASO_MS = 800;
 
     function opcoesFetchPocket(csrfToken) {
         return {
@@ -145,6 +147,89 @@
         }
     }
 
+    function focoNoCampo(input) {
+        return !!input && global.document.activeElement === input;
+    }
+
+    function selecionarCampo(input) {
+        if (!focoNoCampo(input) || typeof input.select !== 'function') return;
+        try {
+            input.select();
+        } catch (_e) { /* campo sem seleção */ }
+    }
+
+    function leituraAindaAtual(input, codigo) {
+        return !!input && input.value.trim() === codigo;
+    }
+
+    function envoltorioCampo(input) {
+        if (input.closest) {
+            var achado = input.closest('.pocket-scan-input-wrap');
+            if (achado) return achado;
+        }
+        return input.parentNode;
+    }
+
+    function obterMensagemCampo(input, criar) {
+        if (!input) return null;
+        var chave = input.id || input.name || '';
+        var wrap = envoltorioCampo(input);
+        if (!wrap || !wrap.parentNode) return null;
+        var el = wrap.parentNode.querySelector(
+            '.pocket-campo-erro[data-for="' + chave + '"]'
+        );
+        if (!el && criar) {
+            el = global.document.createElement('p');
+            el.className = 'pocket-campo-erro';
+            el.setAttribute('data-for', chave);
+            el.setAttribute('role', 'status');
+            el.hidden = true;
+            wrap.insertAdjacentElement('afterend', el);
+        }
+        return el;
+    }
+
+    function mostrarMensagemCampo(input, texto) {
+        var el = obterMensagemCampo(input, true);
+        if (!el) return;
+        el.textContent = texto;
+        el.hidden = false;
+    }
+
+    function limparMensagemCampo(input) {
+        var el = obterMensagemCampo(input, false);
+        if (!el) return;
+        el.textContent = '';
+        el.hidden = true;
+    }
+
+    function sinalizarCodigoInvalido(input, mensagem, som) {
+        marcarErro(input, true);
+        mostrarMensagemCampo(input, mensagem);
+        if (som) som();
+        selecionarCampo(input);
+    }
+
+    function mensagemEhFalhaRede(msg) {
+        if (!msg) return false;
+        var m = String(msg).toLowerCase();
+        return m.indexOf('sem conexão') >= 0 ||
+            m.indexOf('sem conexao') >= 0 ||
+            m.indexOf('falha na comunicação') >= 0 ||
+            m.indexOf('falha na comunicacao') >= 0 ||
+            m.indexOf('failed to fetch') >= 0 ||
+            m.indexOf('networkerror') >= 0 ||
+            m.indexOf('load failed') >= 0 ||
+            m.indexOf('resposta inválida') >= 0 ||
+            m.indexOf('resposta invalida') >= 0 ||
+            m.indexOf('redirect') >= 0;
+    }
+
+    function avisarFalhaRede() {
+        Sons.erro();
+        toast('Falha na comunicação com o servidor.', 'erro');
+    }
+
     function marcarErro(input, ativo) {
         if (!input) return;
         input.classList.toggle('pocket-input--erro', !!ativo);
@@ -224,21 +309,110 @@
         });
     }
 
-    function registrarFinalLeitura(campo, callback) {
-        if (!campo) return;
+    function criarControleValidacaoLeitura(opcoes) {
+        var timer = null;
+        var compondo = false;
+        var emVoo = '';
+        var ultimoInvalido = '';
+        var seq = 0;
+
+        function cancelarTimer() {
+            if (timer !== null) {
+                opcoes.cancelarTimer(timer);
+                timer = null;
+            }
+        }
+
+        function valorLimpo() {
+            return opcoes.lerValor();
+        }
+
+        function disparar() {
+            cancelarTimer();
+            if (compondo) return;
+            var valor = valorLimpo();
+            if (!valor) return;
+            if (valor === ultimoInvalido) return;
+            if (emVoo === valor) return;
+            var minhaSeq = ++seq;
+            emVoo = valor;
+            opcoes.validar(valor, function (resultado) {
+                if (minhaSeq !== seq) return;
+                if (valorLimpo() !== valor) {
+                    if (emVoo === valor) emVoo = '';
+                    return;
+                }
+                if (emVoo === valor) emVoo = '';
+                if (resultado === 'invalido') ultimoInvalido = valor;
+            });
+        }
+
+        function agendar() {
+            cancelarTimer();
+            if (compondo) return;
+            if (!valorLimpo()) return;
+            timer = opcoes.agendar(function () {
+                timer = null;
+                disparar();
+            }, opcoes.atrasoMs);
+        }
+
+        return {
+            cancelar: cancelarTimer,
+            emComposicao: function () { return compondo; },
+            aoDigitar: function () {
+                seq += 1;
+                emVoo = '';
+                ultimoInvalido = '';
+                if (opcoes.aoAlterar) opcoes.aoAlterar();
+                agendar();
+            },
+            aoEnter: function () {
+                if (compondo) return;
+                disparar();
+            },
+            aoCompositionStart: function () {
+                compondo = true;
+                cancelarTimer();
+            },
+            aoCompositionEnd: function () {
+                compondo = false;
+                ultimoInvalido = '';
+                agendar();
+            },
+        };
+    }
+
+    function registrarLeituraCampo(campo, opcoes) {
+        if (!campo) {
+            return { cancelar: function () {} };
+        }
+        var controle = criarControleValidacaoLeitura({
+            atrasoMs: POCKET_VALIDACAO_ATRASO_MS,
+            lerValor: function () { return (campo.value || '').trim(); },
+            agendar: function (fn, ms) { return global.setTimeout(fn, ms); },
+            cancelarTimer: function (id) { global.clearTimeout(id); },
+            aoAlterar: opcoes.aoAlterar,
+            validar: function (_valor, done) { opcoes.validar(done); },
+        });
+        campo.addEventListener('input', function () {
+            controle.aoDigitar();
+        });
+        campo.addEventListener('compositionstart', function () {
+            controle.aoCompositionStart();
+        });
+        campo.addEventListener('compositionend', function () {
+            controle.aoCompositionEnd();
+        });
         campo.addEventListener('keydown', function (evento) {
-            if (teclaConfirma(evento) || evento.key === 'Tab') {
-                // Impede submit nativo do <form> (Enter em campo único).
-                evento.preventDefault();
-                evento.stopPropagation();
-                callback();
-            }
+            var confirma = teclaConfirma(evento) || (opcoes.tabConfirma && evento.key === 'Tab');
+            if (!confirma) return;
+            evento.preventDefault();
+            evento.stopPropagation();
+            if (controle.emComposicao()) return;
+            controle.aoEnter();
         });
-        campo.addEventListener('blur', function () {
-            if (campo.value && campo.value.trim()) {
-                callback();
-            }
-        });
+        return { cancelar: controle.cancelar };
     }
 
     function initAudioTouch() {
@@ -336,8 +510,12 @@
             return;
         }
         sincronizarDadosMestres(config).then(function (sync) {
+            if (!sync.ok) {
+                callback(false, null, false, true);
+                return;
+            }
             var ok = !!config.mapaPosicoes[codigo];
-            callback(ok, ok ? config.mapaPosicoes[codigo] : null, sync.alterado && ok);
+            callback(ok, ok ? config.mapaPosicoes[codigo] : null, sync.alterado && ok, false);
         });
     }
 
@@ -532,44 +710,67 @@
             return null;
         }
 
+        var leituraPosicao = null;
+        var leituraProduto = null;
+
+        function cancelarLeiturasPendentes() {
+            if (leituraPosicao) leituraPosicao.cancelar();
+            if (leituraProduto) leituraProduto.cancelar();
+        }
+
+        function responderValidacao(callback, ok, detalhe) {
+            if (callback) callback(ok, detalhe || null);
+        }
+
         function validarPosicao(silencioso, callback) {
             var codigo = posicaoInput.value.trim();
             if (!codigo) {
                 ocultarPosicao(posicaoConfirm, posicaoLabel);
                 marcarErro(posicaoInput, false);
-                if (callback) callback(false);
+                limparMensagemCampo(posicaoInput);
+                responderValidacao(callback, false, { vazia: true });
                 return false;
             }
             if (config.mapaPosicoes[codigo]) {
                 exibirPosicao(config.mapaPosicoes[codigo], posicaoConfirm, posicaoLabel);
                 marcarErro(posicaoInput, false);
+                limparMensagemCampo(posicaoInput);
                 if (!silencioso) {
                     Sons.ok();
                     toast('Posição válida', 'ok');
                 }
-                if (callback) callback(true);
+                responderValidacao(callback, true);
                 return true;
             }
             sincronizarDadosMestres(config).then(function (sync) {
+                if (!leituraAindaAtual(posicaoInput, codigo)) {
+                    responderValidacao(callback, false, { obsoleta: true });
+                    return;
+                }
+                if (!sync.ok) {
+                    responderValidacao(callback, false, { rede: true });
+                    return;
+                }
                 var ok = !!config.mapaPosicoes[codigo];
                 if (ok) {
                     notificarMestresAtualizados(sync);
                     exibirPosicao(config.mapaPosicoes[codigo], posicaoConfirm, posicaoLabel);
                     marcarErro(posicaoInput, false);
+                    limparMensagemCampo(posicaoInput);
                     if (!silencioso) {
                         Sons.ok();
                         toast('Posição válida', 'ok');
                     }
-                    if (callback) callback(true);
+                    responderValidacao(callback, true);
                     return;
                 }
                 ocultarPosicao(posicaoConfirm, posicaoLabel);
-                marcarErro(posicaoInput, true);
-                if (!silencioso) {
-                    Sons.posicaoInvalida();
-                    toast('Posição inválida', 'erro');
+                if (silencioso) {
+                    marcarErro(posicaoInput, true);
+                } else {
+                    sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
                 }
-                if (callback) callback(false);
+                responderValidacao(callback, false);
             });
             return false;
         }
@@ -579,58 +780,84 @@
             if (!codigo) {
                 ocultarDescricao(descricaoConfirm, produtoDescricao);
                 marcarErro(produtoInput, false);
-                if (callback) callback(false);
+                limparMensagemCampo(produtoInput);
+                responderValidacao(callback, false, { vazia: true });
                 return false;
             }
             var info = resolverProduto(codigo);
             if (info) {
                 exibirDescricao(info.descricao, descricaoConfirm, produtoDescricao);
                 marcarErro(produtoInput, false);
+                limparMensagemCampo(produtoInput);
                 if (!silencioso) {
                     Sons.ok();
                     toast('Produto/EAN válido', 'ok');
                 }
-                if (callback) callback(true);
+                responderValidacao(callback, true);
                 return true;
             }
             sincronizarDadosMestres(config).then(function (sync) {
+                if (!leituraAindaAtual(produtoInput, codigo)) {
+                    responderValidacao(callback, false, { obsoleta: true });
+                    return;
+                }
+                if (!sync.ok) {
+                    responderValidacao(callback, false, { rede: true });
+                    return;
+                }
                 info = resolverProduto(codigo);
                 if (info) {
                     notificarMestresAtualizados(sync);
                     exibirDescricao(info.descricao, descricaoConfirm, produtoDescricao);
                     marcarErro(produtoInput, false);
+                    limparMensagemCampo(produtoInput);
                     if (!silencioso) {
                         Sons.ok();
                         toast('Produto/EAN válido', 'ok');
                     }
-                    if (callback) callback(true);
+                    responderValidacao(callback, true);
                     return;
                 }
                 ocultarDescricao(descricaoConfirm, produtoDescricao);
-                marcarErro(produtoInput, true);
-                if (!silencioso) {
-                    Sons.produtoInvalido();
-                    toast('Produto/EAN não encontrado', 'erro');
+                if (silencioso) {
+                    marcarErro(produtoInput, true);
+                } else {
+                    sinalizarCodigoInvalido(
+                        produtoInput,
+                        'Produto/EAN não encontrado',
+                        Sons.produtoInvalido
+                    );
                 }
-                if (callback) callback(false);
+                responderValidacao(callback, false);
             });
             return false;
         }
 
-        function avancarPosicao() {
+        function avancarPosicao(aoTerminar) {
+            function terminar(resultado) {
+                if (aoTerminar) aoTerminar(resultado);
+            }
             var codigo = posicaoInput.value.trim();
             if (!codigo) {
-                validarPosicao(false);
-                focarCampo(posicaoInput);
+                limparMensagemCampo(posicaoInput);
+                marcarErro(posicaoInput, false);
+                terminar('vazio');
                 return;
             }
-            resolverPosicaoComSync(config, codigo, function (ok, alocacao, atualizado) {
+            resolverPosicaoComSync(config, codigo, function (ok, alocacao, atualizado, falhaRede) {
+                if (!leituraAindaAtual(posicaoInput, codigo)) {
+                    terminar('obsoleto');
+                    return;
+                }
+                if (falhaRede) {
+                    avisarFalhaRede();
+                    terminar('rede');
+                    return;
+                }
                 if (!ok) {
                     ocultarPosicao(posicaoConfirm, posicaoLabel);
-                    marcarErro(posicaoInput, true);
-                    Sons.posicaoInvalida();
-                    toast('Posição inválida', 'erro');
-                    focarCampo(posicaoInput);
+                    sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                    terminar('invalido');
                     return;
                 }
                 if (atualizado) {
@@ -638,45 +865,102 @@
                 }
                 exibirPosicao(alocacao, posicaoConfirm, posicaoLabel);
                 reservarLockPosicao(config, codigo, function (lockOk, msg) {
+                    if (!leituraAindaAtual(posicaoInput, codigo)) {
+                        if (lockOk) liberarLockPosicaoSilencioso(config, codigo);
+                        terminar('obsoleto');
+                        return;
+                    }
                     if (!lockOk) {
-                        if (msg.indexOf('outro operador') >= 0 || msg.indexOf('contagem') >= 0) {
+                        if (mensagemEhFalhaRede(msg)) {
+                            terminar('rede');
+                            return;
+                        }
+                        var texto = (msg || '').toLowerCase();
+                        if (texto.indexOf('inválida') >= 0 || texto.indexOf('invalida') >= 0) {
+                            ocultarPosicao(posicaoConfirm, posicaoLabel);
+                            sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                            terminar('invalido');
+                            return;
+                        }
+                        if (texto.indexOf('outro operador') >= 0 || texto.indexOf('contagem') >= 0) {
                             Sons.bloqueado();
                         } else {
                             Sons.posicaoInvalida();
                         }
                         toast(msg || 'Posição em contagem por outro operador', 'erro');
                         marcarErro(posicaoInput, true);
-                        focarCampo(posicaoInput);
+                        selecionarCampo(posicaoInput);
+                        terminar('bloqueado');
                         return;
                     }
                     config.posicaoComLock = codigo;
                     Sons.ok();
                     toast('Posição válida', 'ok');
                     marcarErro(posicaoInput, false);
-                    focarCampo(produtoInput);
+                    limparMensagemCampo(posicaoInput);
+                    if (focoNoCampo(posicaoInput)) focarCampo(produtoInput);
+                    terminar('valido');
                 });
             });
         }
 
-        function avancarProduto() {
-            validarPosicao(true, function (posOk) {
-                if (!posOk) {
-                    Sons.posicaoInvalida();
-                    toast('Posição inválida', 'erro');
-                    focarCampo(posicaoInput);
+        function avancarProduto(aoTerminar) {
+            function terminar(resultado) {
+                if (aoTerminar) aoTerminar(resultado);
+            }
+            var codigoProduto = produtoInput.value.trim();
+            if (!codigoProduto) {
+                limparMensagemCampo(produtoInput);
+                marcarErro(produtoInput, false);
+                terminar('vazio');
+                return;
+            }
+            validarPosicao(true, function (posOk, detalhe) {
+                if (!leituraAindaAtual(produtoInput, codigoProduto)) {
+                    terminar('obsoleto');
                     return;
                 }
-                validarProduto(false, function (prodOk) {
-                    if (!prodOk) {
-                        focarCampo(produtoInput);
+                if (!posOk) {
+                    if (detalhe && detalhe.rede) {
+                        avisarFalhaRede();
+                        terminar('rede');
                         return;
                     }
-                    focarCampo(quantidadeInput);
+                    if (detalhe && detalhe.obsoleta) {
+                        terminar('obsoleto');
+                        return;
+                    }
+                    sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                    if (focoNoCampo(produtoInput)) focarCampo(posicaoInput);
+                    terminar('dependencia');
+                    return;
+                }
+                validarProduto(false, function (prodOk, detalheProd) {
+                    if (!leituraAindaAtual(produtoInput, codigoProduto)) {
+                        terminar('obsoleto');
+                        return;
+                    }
+                    if (!prodOk) {
+                        if (detalheProd && detalheProd.rede) {
+                            avisarFalhaRede();
+                            terminar('rede');
+                            return;
+                        }
+                        if (detalheProd && detalheProd.obsoleta) {
+                            terminar('obsoleto');
+                            return;
+                        }
+                        terminar('invalido');
+                        return;
+                    }
+                    if (focoNoCampo(produtoInput)) focarCampo(quantidadeInput);
+                    terminar('valido');
                 });
             });
         }
 
         function limparTudoPosSalvar() {
+            cancelarLeiturasPendentes();
             limparTelaCompleta(telaLimpaOpts());
         }
 
@@ -686,21 +970,34 @@
         }
 
         function enviarContagem() {
+            cancelarLeiturasPendentes();
             if (config._envioEmAndamento) return;
             config._envioEmAndamento = true;
-            validarPosicao(true, function (posOk) {
+            validarPosicao(true, function (posOk, detalhe) {
                 if (!posOk) {
                     liberarEnvio();
+                    if (detalhe && detalhe.rede) {
+                        avisarFalhaRede();
+                        return;
+                    }
+                    if (detalhe && detalhe.obsoleta) return;
                     Sons.posicaoInvalida();
                     toast('Posição inválida', 'erro');
+                    mostrarMensagemCampo(posicaoInput, 'Posição inválida');
                     focarCampo(posicaoInput);
                     return;
                 }
-                validarProduto(true, function (prodOk) {
+                validarProduto(true, function (prodOk, detalheProd) {
                     if (!prodOk) {
                         liberarEnvio();
+                        if (detalheProd && detalheProd.rede) {
+                            avisarFalhaRede();
+                            return;
+                        }
+                        if (detalheProd && detalheProd.obsoleta) return;
                         Sons.produtoInvalido();
                         toast('Produto/EAN não encontrado', 'erro');
+                        mostrarMensagemCampo(produtoInput, 'Produto/EAN não encontrado');
                         focarCampo(produtoInput);
                         return;
                     }
@@ -755,23 +1052,30 @@
             });
         }
 
-        registrarEnter(posicaoInput, avancarPosicao);
-        registrarEnter(produtoInput, avancarProduto);
-        registrarEnter(quantidadeInput, enviarContagem);
-        posicaoInput.addEventListener('input', function () {
-            if (!posicaoInput.value.trim()) {
-                ocultarPosicao(posicaoConfirm, posicaoLabel);
-            } else {
-                validarPosicao(true);
-            }
+        leituraPosicao = registrarLeituraCampo(posicaoInput, {
+            validar: avancarPosicao,
+            aoAlterar: function () {
+                limparMensagemCampo(posicaoInput);
+                marcarErro(posicaoInput, false);
+                var codigo = posicaoInput.value.trim();
+                if (config.posicaoComLock && config.posicaoComLock !== codigo) {
+                    liberarLockPosicaoSilencioso(config, config.posicaoComLock);
+                    config.posicaoComLock = '';
+                }
+                if (config.posicaoComLock !== codigo) {
+                    ocultarPosicao(posicaoConfirm, posicaoLabel);
+                }
+            },
         });
-        produtoInput.addEventListener('input', function () {
-            if (!produtoInput.value.trim()) {
+        leituraProduto = registrarLeituraCampo(produtoInput, {
+            validar: avancarProduto,
+            aoAlterar: function () {
+                limparMensagemCampo(produtoInput);
+                marcarErro(produtoInput, false);
                 ocultarDescricao(descricaoConfirm, produtoDescricao);
-            } else {
-                validarProduto(true);
-            }
+            },
         });
+        registrarEnter(quantidadeInput, enviarContagem);
 
         if (form) {
             form.addEventListener('submit', function (e) {
@@ -780,6 +1084,7 @@
                 enviarContagem();
             });
         }
+        global.addEventListener('pagehide', cancelarLeiturasPendentes);
 
         limparTelaCompleta(telaLimpaOpts());
         iniciarSincronizacaoPeriodica(config);
@@ -803,6 +1108,8 @@
         config.posicaoValidada = false;
         config.produtoValidado = false;
         config._lockPosicaoEmAndamento = '';
+        var leituraPosicao = null;
+        var leituraProduto = null;
 
         function habilitarCampo(input, ativo, placeholderAtivo, placeholderInativo) {
             if (!input) return;
@@ -829,9 +1136,16 @@
             config.produtoValidado = false;
             habilitarProduto(false);
             habilitarQuantidade(false);
+            if (leituraProduto) leituraProduto.cancelar();
             if (produtoInput) produtoInput.value = '';
+            limparMensagemCampo(produtoInput);
             marcarErro(produtoInput, false);
             marcarErro(quantidadeInput, false);
+        }
+
+        function cancelarLeiturasPendentes() {
+            if (leituraPosicao) leituraPosicao.cancelar();
+            if (leituraProduto) leituraProduto.cancelar();
         }
 
         global.PocketBipagem.resetEstadoCiclico = resetEstadoCampos;
@@ -867,6 +1181,7 @@
         }
 
         function limparTudoPosSalvar() {
+            cancelarLeiturasPendentes();
             limparTelaCompleta(telaLimpaOpts());
             resetEstadoCampos();
             if (callbacks.onLimparConfirmacao) {
@@ -896,10 +1211,19 @@
                 return true;
             }
             sincronizarDadosMestres(config).then(function (sync) {
+                if (!leituraAindaAtual(posicaoInput, codigo)) {
+                    if (callback) callback(false, { obsoleta: true });
+                    return;
+                }
+                if (!sync.ok) {
+                    if (callback) callback(false, { rede: true });
+                    return;
+                }
                 var ok = !!config.mapaPosicoes[codigo];
                 if (ok) {
                     notificarMestresAtualizados(sync);
                     marcarErro(posicaoInput, false);
+                    limparMensagemCampo(posicaoInput);
                     if (!silencioso) {
                         Sons.ok();
                         toast('Posição válida', 'ok');
@@ -912,10 +1236,10 @@
                 if (callbacks.onLimparConfirmacao) {
                     callbacks.onLimparConfirmacao();
                 }
-                marcarErro(posicaoInput, true);
-                if (!silencioso) {
-                    Sons.posicaoInvalida();
-                    toast('Posição inválida', 'erro');
+                if (silencioso) {
+                    marcarErro(posicaoInput, true);
+                } else {
+                    sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
                 }
                 if (callback) callback(false);
             });
@@ -948,11 +1272,20 @@
                 return true;
             }
             sincronizarDadosMestres(config).then(function (sync) {
+                if (!leituraAindaAtual(produtoInput, codigo)) {
+                    if (callback) callback(false, { obsoleta: true });
+                    return;
+                }
+                if (!sync.ok) {
+                    if (callback) callback(false, { rede: true });
+                    return;
+                }
                 var ok = produtoCorrespondeLote(sku, codigo);
                 if (ok) {
                     notificarMestresAtualizados(sync);
                     config.produtoValidado = true;
                     marcarErro(produtoInput, false);
+                    limparMensagemCampo(produtoInput);
                     habilitarQuantidade(true);
                     if (!silencioso) {
                         Sons.ok();
@@ -963,10 +1296,14 @@
                 }
                 config.produtoValidado = false;
                 habilitarQuantidade(false);
-                marcarErro(produtoInput, true);
-                if (!silencioso) {
-                    Sons.produtoInvalido();
-                    toast('Produto divergente do SKU selecionado.', 'erro');
+                if (silencioso) {
+                    marcarErro(produtoInput, true);
+                } else {
+                    sinalizarCodigoInvalido(
+                        produtoInput,
+                        'Produto divergente do SKU selecionado.',
+                        Sons.produtoInvalido
+                    );
                 }
                 if (callback) callback(false);
             });
@@ -977,11 +1314,17 @@
             return config.posicaoValidada && config.posicaoComLock === codigo;
         }
 
-        function confirmarPosicaoComLock(codigo) {
+        function confirmarPosicaoComLock(codigo, aoTerminar) {
+            function terminar(resultado) {
+                if (aoTerminar) aoTerminar(resultado);
+            }
             if (!codigo) {
+                terminar('vazio');
                 return;
             }
             if (posicaoJaConfirmadaComLock(codigo)) {
+                if (focoNoCampo(posicaoInput)) focarCampo(produtoInput);
+                terminar('valido');
                 return;
             }
             if (config._lockPosicaoEmAndamento === codigo) {
@@ -997,7 +1340,18 @@
                 }
             }
             config._lockPosicaoEmAndamento = codigo;
-            resolverPosicaoComSync(config, codigo, function (ok, alocacao, atualizado) {
+            resolverPosicaoComSync(config, codigo, function (ok, alocacao, atualizado, falhaRede) {
+                if (!leituraAindaAtual(posicaoInput, codigo)) {
+                    config._lockPosicaoEmAndamento = '';
+                    terminar('obsoleto');
+                    return;
+                }
+                if (falhaRede) {
+                    config._lockPosicaoEmAndamento = '';
+                    avisarFalhaRede();
+                    terminar('rede');
+                    return;
+                }
                 if (!ok) {
                     config._lockPosicaoEmAndamento = '';
                     config.posicaoValidada = false;
@@ -1005,10 +1359,8 @@
                     if (callbacks.onLimparConfirmacao) {
                         callbacks.onLimparConfirmacao();
                     }
-                    marcarErro(posicaoInput, true);
-                    Sons.posicaoInvalida();
-                    toast('Posição inválida', 'erro');
-                    focarCampo(posicaoInput);
+                    sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                    terminar('invalido');
                     return;
                 }
                 if (atualizado) {
@@ -1016,20 +1368,41 @@
                 }
                 reservarLockPosicao(config, codigo, function (lockOk, msg, payload) {
                     config._lockPosicaoEmAndamento = '';
+                    if (!leituraAindaAtual(posicaoInput, codigo)) {
+                        if (lockOk) liberarLockPosicaoSilencioso(config, codigo);
+                        terminar('obsoleto');
+                        return;
+                    }
                     if (!lockOk) {
+                        if (mensagemEhFalhaRede(msg)) {
+                            terminar('rede');
+                            return;
+                        }
+                        var texto = (msg || '').toLowerCase();
+                        if (texto.indexOf('inválida') >= 0 || texto.indexOf('invalida') >= 0) {
+                            config.posicaoValidada = false;
+                            resetEstadoCampos();
+                            if (callbacks.onLimparConfirmacao) {
+                                callbacks.onLimparConfirmacao();
+                            }
+                            sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                            terminar('invalido');
+                            return;
+                        }
                         config.posicaoValidada = false;
                         resetEstadoCampos();
-                        if (msg.indexOf('outro operador') >= 0 || msg.indexOf('contagem') >= 0) {
+                        if (texto.indexOf('outro operador') >= 0 || texto.indexOf('contagem') >= 0) {
                             Sons.bloqueado();
                         } else {
                             Sons.posicaoInvalida();
                         }
                         toast(msg || 'Posição em contagem por outro operador', 'erro');
                         marcarErro(posicaoInput, true);
+                        selecionarCampo(posicaoInput);
                         if (callbacks.onLimparConfirmacao) {
                             callbacks.onLimparConfirmacao();
                         }
-                        focarCampo(posicaoInput);
+                        terminar('bloqueado');
                         return;
                     }
                     if (callbacks.onPosicaoConfirmada) {
@@ -1041,45 +1414,67 @@
                     Sons.ok();
                     toast('Posição válida', 'ok');
                     marcarErro(posicaoInput, false);
+                    limparMensagemCampo(posicaoInput);
                     habilitarProduto(true);
                     habilitarQuantidade(false);
-                    if (produtoInput) produtoInput.value = '';
-                    focarCampo(produtoInput);
+                    if (focoNoCampo(posicaoInput)) {
+                        if (leituraProduto) leituraProduto.cancelar();
+                        if (produtoInput) produtoInput.value = '';
+                        limparMensagemCampo(produtoInput);
+                        focarCampo(produtoInput);
+                    }
+                    terminar('valido');
                 });
             });
         }
 
-        function avancarPosicao() {
+        function avancarPosicao(aoTerminar) {
             var codigo = posicaoInput ? posicaoInput.value.trim() : '';
-            if (!codigo) {
-                validarPosicao(false);
-                focarCampo(posicaoInput);
-                return;
-            }
-            if (posicaoJaConfirmadaComLock(codigo)) {
-                focarCampo(produtoInput);
-                return;
-            }
-            confirmarPosicaoComLock(codigo);
+            confirmarPosicaoComLock(codigo, aoTerminar);
         }
 
-        function avancarProduto() {
+        function avancarProduto(aoTerminar) {
+            function terminar(resultado) {
+                if (aoTerminar) aoTerminar(resultado);
+            }
+            var codigoProduto = produtoInput ? produtoInput.value.trim() : '';
+            if (!codigoProduto) {
+                limparMensagemCampo(produtoInput);
+                marcarErro(produtoInput, false);
+                terminar('vazio');
+                return;
+            }
             if (!config.posicaoValidada) {
-                Sons.posicaoInvalida();
-                toast('Posição inválida', 'erro');
-                focarCampo(posicaoInput);
+                sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                if (focoNoCampo(produtoInput)) focarCampo(posicaoInput);
+                terminar('dependencia');
                 return;
             }
-            if (config.produtoValidado) {
-                focarCampo(quantidadeInput);
+            if (config.produtoValidado && produtoInput.value.trim() === codigoProduto) {
+                if (focoNoCampo(produtoInput)) focarCampo(quantidadeInput);
+                terminar('valido');
                 return;
             }
-            validarProdutoLote(false, function (prodOk) {
-                if (!prodOk) {
-                    focarCampo(produtoInput);
+            validarProdutoLote(false, function (prodOk, detalhe) {
+                if (!leituraAindaAtual(produtoInput, codigoProduto)) {
+                    terminar('obsoleto');
                     return;
                 }
-                focarCampo(quantidadeInput);
+                if (!prodOk) {
+                    if (detalhe && detalhe.rede) {
+                        avisarFalhaRede();
+                        terminar('rede');
+                        return;
+                    }
+                    if (detalhe && detalhe.obsoleta) {
+                        terminar('obsoleto');
+                        return;
+                    }
+                    terminar('invalido');
+                    return;
+                }
+                if (focoNoCampo(produtoInput)) focarCampo(quantidadeInput);
+                terminar('valido');
             });
         }
 
@@ -1093,19 +1488,28 @@
             // FINALIZAR SKU / PRODUTO NÃO ENCONTRADO usam fluxo próprio fora deste form.
             // Um segundo Enter enquanto o POST está em voo é reenvio acidental.
             // Na recontagem o servidor soma a quantidade; o reenvio dobraria o contado.
+            cancelarLeiturasPendentes();
             if (config._envioEmAndamento) return;
-            if (!config.posicaoValidada || !config.posicaoComLock) {
+            var codigoPosicaoAtual = posicaoInput ? posicaoInput.value.trim() : '';
+            if (!config.posicaoValidada || !config.posicaoComLock ||
+                config.posicaoComLock !== codigoPosicaoAtual) {
                 Sons.posicaoInvalida();
                 toast('Confirme a posição antes de salvar.', 'erro');
                 focarCampo(posicaoInput);
                 return;
             }
             config._envioEmAndamento = true;
-            validarProdutoLote(true, function (prodOk) {
+            validarProdutoLote(true, function (prodOk, detalheProd) {
                 if (!prodOk) {
                     liberarEnvio();
+                    if (detalheProd && detalheProd.rede) {
+                        avisarFalhaRede();
+                        return;
+                    }
+                    if (detalheProd && detalheProd.obsoleta) return;
                     Sons.produtoInvalido();
                     toast('Produto divergente do SKU selecionado.', 'erro');
+                    mostrarMensagemCampo(produtoInput, 'Produto divergente do SKU selecionado.');
                     focarCampo(produtoInput);
                     return;
                 }
@@ -1166,11 +1570,13 @@
             });
         }
 
-        registrarFinalLeitura(posicaoInput, avancarPosicao);
-        registrarFinalLeitura(produtoInput, avancarProduto);
-        registrarEnter(quantidadeInput, enviarContagem);
-        if (posicaoInput) {
-            posicaoInput.addEventListener('input', function () {
+        leituraPosicao = registrarLeituraCampo(posicaoInput, {
+            tabConfirma: true,
+            validar: avancarPosicao,
+            aoAlterar: function () {
+                if (!posicaoInput) return;
+                limparMensagemCampo(posicaoInput);
+                marcarErro(posicaoInput, false);
                 var codigo = posicaoInput.value.trim();
                 if (!codigo) {
                     if (config.posicaoComLock) {
@@ -1193,15 +1599,19 @@
                         callbacks.onLimparConfirmacao();
                     }
                 }
-            });
-        }
-        if (produtoInput) {
-            produtoInput.addEventListener('input', function () {
+            },
+        });
+        leituraProduto = registrarLeituraCampo(produtoInput, {
+            tabConfirma: true,
+            validar: avancarProduto,
+            aoAlterar: function () {
                 config.produtoValidado = false;
                 habilitarQuantidade(false);
                 marcarErro(produtoInput, false);
-            });
-        }
+                limparMensagemCampo(produtoInput);
+            },
+        });
+        registrarEnter(quantidadeInput, enviarContagem);
         if (form) {
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
@@ -1210,8 +1620,10 @@
                 enviarContagem();
             });
         }
+        global.addEventListener('pagehide', cancelarLeiturasPendentes);
         if (skuSelect) {
             skuSelect.addEventListener('change', function () {
+                cancelarLeiturasPendentes();
                 if (callbacks.atualizarSku) {
                     callbacks.atualizarSku(config.mapaSkus[skuSelect.value]);
                 }
@@ -1240,5 +1652,7 @@
         parsearRespostaPocket: parsearRespostaPocket,
         opcoesFetchPocket: opcoesFetchPocket,
         tratarErroFetchPocket: function (err) { tratarErroFetchPocket(err, toast); },
+        criarControleValidacaoLeitura: criarControleValidacaoLeitura,
+        POCKET_VALIDACAO_ATRASO_MS: POCKET_VALIDACAO_ATRASO_MS,
     };
 }(window));

@@ -596,6 +596,19 @@
     padding: 0.2rem 0 0;
 }
 
+.pocket-campo-erro {
+    display: block;
+    margin: 0.2rem 0 0;
+    font-size: var(--pocket-fs-hint);
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--pocket-erro);
+}
+
+.pocket-campo-erro[hidden] {
+    display: none !important;
+}
+
 .pocket-compat-hidden {
     display: none !important;
 }
