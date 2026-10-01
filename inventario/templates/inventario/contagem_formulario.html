@@ -12,7 +12,7 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-4">
-        <form method="post" novalidate>
+        <form method="post" novalidate onsubmit="var botao=this.querySelector('[type=submit]'); if (botao) botao.disabled=true;">
             {% csrf_token %}
 
             {% if form.non_field_errors %}

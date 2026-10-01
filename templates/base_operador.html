@@ -4,6 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1E293B">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="{% url 'pwa_manifest' %}">
+    <link rel="icon" href="{% static 'img/pwa/favicon.ico' %}" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/pwa/favicon-32.png' %}">
     <title>{% block title %}Pocket | Sistema de Inventário{% endblock %}</title>
 
     <link
@@ -40,5 +45,10 @@
     ></script>
 
     {% block extra_js %}{% endblock %}
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register("{% url 'pwa_service_worker' %}", { scope: '/' }).catch(function () {});
+        }
+    </script>
 </body>
 </html>

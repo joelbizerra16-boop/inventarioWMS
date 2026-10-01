@@ -10,7 +10,7 @@
 
 {% block extra_css %}
 
-<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}?v={{ POCKET_STATIC_VERSION }}">
 
 {% endblock %}
 
@@ -27,6 +27,8 @@
     <header class="pocket-header">
 
         <span class="pocket-header-title">CÍCLICO #{{ ciclo.pk }}</span>
+
+        <button type="button" class="pocket-vk-toggle" id="pocket-vk-toggle" aria-pressed="false">Teclado</button>
 
     </header>
 

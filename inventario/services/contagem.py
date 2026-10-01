@@ -184,18 +184,38 @@ def salvar_contagem(
             )
 
         item = item_existente
+        item.posicao = posicao
+        item.produto = produto
         item.quantidade_fisica = quantidade_fisica
         item.data_contagem = agora
         if usuario_contagem is not None:
             item.usuario_contagem = usuario_contagem
         if origem_contagem:
             item.origem_contagem = origem_contagem
-        item.save(update_fields=[
-            'quantidade_fisica',
-            'data_contagem',
-            'usuario_contagem',
-            'origem_contagem',
-        ])
+        try:
+            item.save(update_fields=[
+                'posicao',
+                'produto',
+                'quantidade_fisica',
+                'data_contagem',
+                'usuario_contagem',
+                'origem_contagem',
+            ])
+        except IntegrityError as exc:
+            raise ContagemDuplicadaError(
+                contexto_auditoria=_contexto_rejeicao_duplicidade(
+                    inventario=inventario,
+                    posicao=posicao,
+                    produto=produto,
+                    quantidade_fisica=quantidade_fisica,
+                    usuario_contagem=usuario_contagem,
+                    origem_contagem=origem_contagem,
+                    dispositivo=dispositivo,
+                    ip=ip,
+                    tarefa=tarefa,
+                    lock=lock,
+                ),
+            ) from exc
     elif registro is not None:
         raise ContagemDuplicadaError(
             contexto_auditoria=_contexto_rejeicao_duplicidade(

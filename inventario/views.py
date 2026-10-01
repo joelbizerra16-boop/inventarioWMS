@@ -1,5 +1,7 @@
-from django.contrib import messages
 from decimal import Decimal, InvalidOperation
+
+from django.contrib import messages
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponseNotFound, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -26,10 +28,12 @@ from inventario.forms import ContagemForm, InventarioForm
 from inventario.models import CicloInventarioSku, Inventario, InventarioItem
 from inventario.services.contagem import (
     ContagemDuplicadaError,
+    ContagemError,
     excluir_contagem,
     persistir_auditoria_contagem_rejeitada,
     salvar_contagem,
 )
+from inventario.services.tarefas import TarefaError
 from inventario.services.confronto import executar_confronto
 from inventario.services.aprovacao import (
     AprovacaoError,
@@ -49,8 +53,6 @@ from inventario.services.consolidacao import (
     obter_preview_consolidacao,
     publicar_estoque_fisico,
 )
-from decimal import Decimal, InvalidOperation
-
 from inventario.constants_ciclico import (
     METAS_DIARIAS_SUGERIDAS,
     MOTIVOS_EXCLUSAO_SKU,
@@ -97,6 +99,27 @@ from inventario.services.ciclico_historico import (
 )
 from inventario.services.ciclico_exportacao import exportar_ciclo_excel
 from posicoes.models import Posicao
+
+
+def _salvar_contagem_pelo_formulario(request, inventario, form, item_existente=None) -> bool:
+    try:
+        salvar_contagem(
+            inventario=inventario,
+            posicao=form.cleaned_data['posicao'],
+            produto=form.cleaned_data['produto'],
+            quantidade_fisica=form.cleaned_data['quantidade_fisica'],
+            item_existente=item_existente,
+            usuario_contagem=request.user,
+            origem_contagem=InventarioItem.OrigemContagem.WEB,
+        )
+    except ContagemDuplicadaError as exc:
+        persistir_auditoria_contagem_rejeitada(exc)
+        form.add_error(None, str(exc))
+        return False
+    except (ContagemError, TarefaError) as exc:
+        form.add_error(None, str(exc))
+        return False
+    return True
 
 
 class InventarioListView(AcessoOperacionalMixin, PaginacaoMixin, PaginacaoContextMixin, ListView):
@@ -233,19 +256,23 @@ class InventarioFinalizarView(RequerNaoOperadorMixin, RequerEscritaInventarioMix
 
     def post(self, request, pk):
         inventario = get_object_or_404(Inventario, pk=pk)
-
-        if inventario.status == Inventario.Status.FINALIZADO:
-            messages.error(
-                request,
-                'Inventário finalizado não pode ser alterado.',
-            )
-            return redirect('inventario:lista')
-
-        inventario.status = Inventario.Status.FINALIZADO
-        inventario.save(update_fields=['status'])
-
         from inventario.services.inventario_snapshot import congelar_snapshot_inventario
-        congelar_snapshot_inventario(inventario, obter_usuario_operacional(request.user))
+
+        with transaction.atomic():
+            inventario = Inventario.objects.select_for_update().get(pk=inventario.pk)
+            if inventario.status == Inventario.Status.FINALIZADO:
+                messages.error(
+                    request,
+                    'Inventário finalizado não pode ser alterado.',
+                )
+                return redirect('inventario:lista')
+
+            inventario.status = Inventario.Status.FINALIZADO
+            inventario.save(update_fields=['status'])
+            congelar_snapshot_inventario(
+                inventario,
+                obter_usuario_operacional(request.user),
+            )
 
         try:
             resultado = publicar_estoque_fisico(inventario)
@@ -354,18 +381,7 @@ class ContagemCreateView(RequerEscritaInventarioMixin, InventarioContagemMixin, 
 
     def form_valid(self, form):
         inventario = self.get_inventario()
-        try:
-            salvar_contagem(
-                inventario=inventario,
-                posicao=form.cleaned_data['posicao'],
-                produto=form.cleaned_data['produto'],
-                quantidade_fisica=form.cleaned_data['quantidade_fisica'],
-                usuario_contagem=self.request.user,
-                origem_contagem=InventarioItem.OrigemContagem.WEB,
-            )
-        except ContagemDuplicadaError as exc:
-            persistir_auditoria_contagem_rejeitada(exc)
-            form.add_error(None, str(exc))
+        if not _salvar_contagem_pelo_formulario(self.request, inventario, form):
             return self.form_invalid(form)
         messages.success(self.request, 'Contagem registrada.')
         return redirect('inventario:contagem_lista', pk=inventario.pk)
@@ -404,15 +420,13 @@ class ContagemUpdateView(RequerEscritaInventarioMixin, InventarioContagemMixin, 
 
     def form_valid(self, form):
         inventario = self.get_inventario()
-        salvar_contagem(
-            inventario=inventario,
-            posicao=form.cleaned_data['posicao'],
-            produto=form.cleaned_data['produto'],
-            quantidade_fisica=form.cleaned_data['quantidade_fisica'],
+        if not _salvar_contagem_pelo_formulario(
+            self.request,
+            inventario,
+            form,
             item_existente=self.object,
-            usuario_contagem=self.request.user,
-            origem_contagem=InventarioItem.OrigemContagem.WEB,
-        )
+        ):
+            return self.form_invalid(form)
         messages.success(self.request, 'Contagem alterada.')
         return redirect('inventario:contagem_lista', pk=inventario.pk)
 
@@ -1041,6 +1055,8 @@ class CiclicoExecutarView(RequerNaoOperadorMixin, AcessoOperacionalMixin, View):
                 messages.success(request, 'Recontagem registrada e consolidada.')
             else:
                 messages.error(request, 'Ação inválida.')
+        except CicloInventarioSku.DoesNotExist:
+            messages.error(request, 'SKU não encontrado.')
         except CiclicoError as exc:
             messages.error(request, str(exc))
 

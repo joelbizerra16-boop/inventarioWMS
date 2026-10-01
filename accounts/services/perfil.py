@@ -75,6 +75,6 @@ PREFIXOS_URL_PERMITIDOS_OPERADOR = (
 def url_permitida_para_operador(path: str) -> bool:
     if not path:
         return False
-    if path == '/favicon.ico':
+    if path in ('/favicon.ico', '/manifest.webmanifest', '/sw.js'):
         return True
     return any(path.startswith(prefixo) for prefixo in PREFIXOS_URL_PERMITIDOS_OPERADOR)

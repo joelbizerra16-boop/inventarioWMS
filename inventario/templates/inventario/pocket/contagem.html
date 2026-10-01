@@ -4,7 +4,7 @@
 {% block title %}Pocket #{{ inventario.pk }} | Inventário{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/pocket.css' %}">
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}?v={{ POCKET_STATIC_VERSION }}">
 {% endblock %}
 
 {% block content %}
@@ -13,6 +13,7 @@
 
     <header class="pocket-header">
         <span class="pocket-header-title">INVENTÁRIO #{{ inventario.pk }}</span>
+        <button type="button" class="pocket-vk-toggle" id="pocket-vk-toggle" aria-pressed="false">Teclado</button>
     </header>
 
     <div class="pocket-scan-panel">
@@ -102,7 +103,7 @@
 {{ form.mapa_posicoes|json_script:"pocket-posicoes-data" }}
 {{ form.mapa_produtos|json_script:"pocket-produtos-data" }}
 {{ form.mapa_ean|json_script:"pocket-ean-data" }}
-<script src="{% static 'js/pocket-bipagem.js' %}"></script>
+<script src="{% static 'js/pocket-bipagem.js' %}?v={{ POCKET_STATIC_VERSION }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var form = document.getElementById('pocket-contagem-form');

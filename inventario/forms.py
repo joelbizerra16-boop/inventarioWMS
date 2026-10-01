@@ -54,6 +54,12 @@ class ContagemForm(forms.ModelForm):
             ativo=True,
         ).order_by('codigo_produto')
 
+    def clean_quantidade_fisica(self):
+        quantidade = self.cleaned_data.get('quantidade_fisica')
+        if quantidade is not None and quantidade < 0:
+            raise forms.ValidationError('Quantidade não pode ser negativa.')
+        return quantidade
+
 
 class PocketContagemForm(forms.Form):
     codigo_posicao = forms.CharField(
@@ -65,7 +71,8 @@ class PocketContagemForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'text',
+            'inputmode': 'none',
+            'data-vk-mode': 'text',
             'placeholder': 'Bipar posição',
         }),
     )
@@ -79,7 +86,8 @@ class PocketContagemForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'text',
+            'inputmode': 'none',
+            'data-vk-mode': 'text',
             'placeholder': 'Bipar produto ou EAN',
         }),
     )
@@ -91,11 +99,13 @@ class PocketContagemForm(forms.Form):
             'invalid': 'Quantidade inválida.',
             'min_value': 'Quantidade deve ser maior que zero.',
         },
-        widget=forms.NumberInput(attrs={
+        widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input',
-            'step': '1',
-            'min': '1',
-            'inputmode': 'numeric',
+            'autocomplete': 'off',
+            'autocorrect': 'off',
+            'spellcheck': 'false',
+            'inputmode': 'none',
+            'data-vk-mode': 'numeric',
         }),
     )
     dispositivo = forms.CharField(
@@ -142,7 +152,8 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'text',
+            'inputmode': 'none',
+            'data-vk-mode': 'text',
             'placeholder': 'Bipar posição',
         }),
     )
@@ -154,11 +165,13 @@ class PocketContagemCiclicoForm(forms.Form):
             'invalid': 'Quantidade inválida.',
             'min_value': 'Quantidade deve ser maior que zero.',
         },
-        widget=forms.NumberInput(attrs={
+        widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input',
-            'step': '1',
-            'min': '1',
-            'inputmode': 'numeric',
+            'autocomplete': 'off',
+            'autocorrect': 'off',
+            'spellcheck': 'false',
+            'inputmode': 'none',
+            'data-vk-mode': 'numeric',
             'disabled': 'disabled',
         }),
     )
@@ -173,7 +186,8 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'text',
+            'inputmode': 'none',
+            'data-vk-mode': 'text',
             'placeholder': 'Confirmado após a posição',
             'disabled': 'disabled',
         }),

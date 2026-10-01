@@ -200,10 +200,15 @@
         return { titulo: msg, tipo: 'erro' };
     }
 
+    function teclaConfirma(evento) {
+        return evento.key === 'Enter' || evento.key === 'NumpadEnter' ||
+            evento.keyCode === 13 || evento.which === 13;
+    }
+
     function registrarEnter(campo, callback) {
         if (!campo) return;
         campo.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Enter') {
+            if (teclaConfirma(evento)) {
                 evento.preventDefault();
                 evento.stopPropagation();
                 callback();
@@ -214,7 +219,7 @@
     function registrarFinalLeitura(campo, callback) {
         if (!campo) return;
         campo.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Enter' || evento.key === 'Tab') {
+            if (teclaConfirma(evento) || evento.key === 'Tab') {
                 // Impede submit nativo do <form> (Enter em campo único).
                 evento.preventDefault();
                 evento.stopPropagation();
@@ -377,6 +382,67 @@
 
     function resetarQuantidade(input) {
         if (input) input.value = '';
+    }
+
+    function focarErroServidor(form, errors) {
+        if (!form || !errors) return;
+        var ordem = ['codigo_posicao', 'codigo_produto', 'codigo_produto_lido', 'quantidade_fisica'];
+        var alvo = '';
+        var i;
+        for (i = 0; i < ordem.length; i++) {
+            if (errors[ordem[i]]) {
+                alvo = ordem[i];
+                break;
+            }
+        }
+        if (!alvo) {
+            var chaves = Object.keys(errors);
+            if (chaves.length) alvo = chaves[0];
+        }
+        if (!alvo) return;
+        focarCampo(form.querySelector('[name="' + alvo + '"]'));
+    }
+
+    var TECLADO_CHAVE = 'pocket-teclado-virtual';
+
+    function tecladoVirtualLigado() {
+        try {
+            return global.sessionStorage.getItem(TECLADO_CHAVE) === '1';
+        } catch (_e) {
+            return false;
+        }
+    }
+
+    function aplicarModoTeclado(ligado) {
+        var campos = global.document.querySelectorAll('input[data-vk-mode]');
+        var i;
+        for (i = 0; i < campos.length; i++) {
+            var modo = campos[i].getAttribute('data-vk-mode') || 'text';
+            campos[i].setAttribute('inputmode', ligado ? modo : 'none');
+        }
+    }
+
+    function atualizarBotaoTeclado(botao, ligado) {
+        if (!botao) return;
+        botao.setAttribute('aria-pressed', ligado ? 'true' : 'false');
+        botao.textContent = ligado ? 'Teclado ligado' : 'Teclado';
+    }
+
+    function initTecladoColetor() {
+        var ligado = tecladoVirtualLigado();
+        aplicarModoTeclado(ligado);
+        var botao = global.document.getElementById('pocket-vk-toggle');
+        atualizarBotaoTeclado(botao, ligado);
+        if (!botao || botao.getAttribute('data-vk-bound') === '1') return;
+        botao.setAttribute('data-vk-bound', '1');
+        botao.addEventListener('click', function () {
+            var proximo = !tecladoVirtualLigado();
+            try {
+                global.sessionStorage.setItem(TECLADO_CHAVE, proximo ? '1' : '0');
+            } catch (_e) { /* sessão indisponível */ }
+            aplicarModoTeclado(proximo);
+            atualizarBotaoTeclado(botao, proximo);
+        });
     }
 
     function limparTelaCompleta(opcoes) {
@@ -648,9 +714,17 @@
             limparTelaCompleta(telaLimpaOpts());
         }
 
+        function liberarEnvio() {
+            config._envioEmAndamento = false;
+            if (btnSalvar) btnSalvar.disabled = false;
+        }
+
         function enviarContagem() {
+            if (config._envioEmAndamento) return;
+            config._envioEmAndamento = true;
             validarPosicao(true, function (posOk) {
                 if (!posOk) {
+                    liberarEnvio();
                     Sons.posicaoInvalida();
                     toast('Posição inválida', 'erro');
                     focarCampo(posicaoInput);
@@ -658,12 +732,14 @@
                 }
                 validarProduto(true, function (prodOk) {
                     if (!prodOk) {
+                        liberarEnvio();
                         Sons.produtoInvalido();
                         toast('Produto/EAN não encontrado', 'erro');
                         focarCampo(produtoInput);
                         return;
                     }
                     if (!validarQuantidade(quantidadeInput, false)) {
+                        liberarEnvio();
                         focarCampo(quantidadeInput);
                         return;
                     }
@@ -680,7 +756,7 @@
                         }, opcoesFetchPocket(csrfToken)))
                             .then(parsearRespostaPocket)
                             .then(function (resultado) {
-                                if (btnSalvar) btnSalvar.disabled = false;
+                                liberarEnvio();
                                 if (!resultado.ok) {
                                     var msg = resultado.body.message || 'Erro ao salvar.';
                                     if (resultado.body.errors) {
@@ -693,6 +769,7 @@
                                     if (info.titulo.indexOf('bloqueada') >= 0) Sons.bloqueado();
                                     else Sons.erro();
                                     toast(info.titulo, info.tipo);
+                                    focarErroServidor(form, resultado.body.errors);
                                     return;
                                 }
                                 Sons.ok();
@@ -700,13 +777,14 @@
                                 limparTudoPosSalvar();
                             })
                             .catch(function (err) {
-                                if (btnSalvar) btnSalvar.disabled = false;
+                                liberarEnvio();
                                 Sons.erro();
                                 tratarErroFetchPocket(err, toast);
                             });
                         return;
                     }
                     if (form) form.submit();
+                    else liberarEnvio();
                 });
             });
         }
@@ -1043,23 +1121,34 @@
             });
         }
 
+        function liberarEnvio() {
+            config._envioEmAndamento = false;
+            if (btnSalvar) btnSalvar.disabled = false;
+        }
+
         function enviarContagem() {
             // Validação exclusiva do SALVAR (contagem física).
             // FINALIZAR SKU / PRODUTO NÃO ENCONTRADO usam fluxo próprio fora deste form.
+            // Um segundo Enter enquanto o POST está em voo é reenvio acidental.
+            // Na recontagem o servidor soma a quantidade; o reenvio dobraria o contado.
+            if (config._envioEmAndamento) return;
             if (!config.posicaoValidada || !config.posicaoComLock) {
                 Sons.posicaoInvalida();
                 toast('Confirme a posição antes de salvar.', 'erro');
                 focarCampo(posicaoInput);
                 return;
             }
+            config._envioEmAndamento = true;
             validarProdutoLote(true, function (prodOk) {
                 if (!prodOk) {
+                    liberarEnvio();
                     Sons.produtoInvalido();
                     toast('Produto divergente do SKU selecionado.', 'erro');
                     focarCampo(produtoInput);
                     return;
                 }
                 if (!validarQuantidade(quantidadeInput, false)) {
+                    liberarEnvio();
                     focarCampo(quantidadeInput);
                     return;
                 }
@@ -1077,7 +1166,7 @@
                 }, opcoesFetchPocket(csrfToken)))
                     .then(parsearRespostaPocket)
                     .then(function (resultado) {
-                        if (btnSalvar) btnSalvar.disabled = false;
+                        liberarEnvio();
                         if (!resultado.ok) {
                             var msg = resultado.body.message || 'Erro ao salvar.';
                             if (resultado.body.errors) {
@@ -1092,6 +1181,7 @@
                                 Sons.produtoInvalido();
                             } else Sons.erro();
                             toast(info.titulo, info.tipo);
+                            focarErroServidor(form, resultado.body.errors);
                             return;
                         }
                         var b = resultado.body;
@@ -1109,7 +1199,7 @@
                         );
                     })
                     .catch(function (err) {
-                        if (btnSalvar) btnSalvar.disabled = false;
+                        liberarEnvio();
                         Sons.erro();
                         tratarErroFetchPocket(err, toast);
                     });
@@ -1187,8 +1277,15 @@
         initCiclico: initCiclico,
         toast: toast,
         focarCampo: focarCampo,
+        initTecladoColetor: initTecladoColetor,
         parsearRespostaPocket: parsearRespostaPocket,
         opcoesFetchPocket: opcoesFetchPocket,
         tratarErroFetchPocket: function (err) { tratarErroFetchPocket(err, toast); },
     };
+
+    if (global.document.readyState === 'loading') {
+        global.document.addEventListener('DOMContentLoaded', initTecladoColetor);
+    } else {
+        initTecladoColetor();
+    }
 }(window));

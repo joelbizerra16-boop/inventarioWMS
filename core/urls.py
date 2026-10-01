@@ -17,6 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from core.pwa import manifest_pwa, service_worker_pwa
 from dashboard.views import HomeView
 from dashboard.views_operacional import DashboardOperacionalApiView
 from inventario.views import (
@@ -44,6 +45,8 @@ from inventario.historico_views import (
 )
 
 urlpatterns = [
+    path('manifest.webmanifest', manifest_pwa, name='pwa_manifest'),
+    path('sw.js', service_worker_pwa, name='pwa_service_worker'),
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
     path('', HomeView.as_view(), name='home'),

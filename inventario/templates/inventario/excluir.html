@@ -48,7 +48,7 @@
             {% endif %}
         </dl>
 
-        <form method="post" class="mt-4">
+        <form method="post" class="mt-4" onsubmit="var botao=this.querySelector('[type=submit]'); if (botao) botao.disabled=true;">
             {% csrf_token %}
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-{% if finalizar %}success{% else %}danger{% endif %}">
