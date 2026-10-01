@@ -186,10 +186,10 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         from pathlib import Path
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261001d')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261001e')", settings_src)
 
         js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
-        self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 800'), 1)
+        self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
         controle = js.split('function criarControleValidacaoLeitura', 1)[1].split(
             'function registrarLeituraCampo', 1
         )[0]

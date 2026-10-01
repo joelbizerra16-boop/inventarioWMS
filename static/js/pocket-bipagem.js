@@ -8,7 +8,7 @@
     var toastTimer = null;
     var TOAST_MS = 2600;
     // Único atraso da validação de Posição e Produto/EAN. Não vale para Quantidade.
-    var POCKET_VALIDACAO_ATRASO_MS = 800;
+    var POCKET_VALIDACAO_ATRASO_MS = 2000;
 
     function opcoesFetchPocket(csrfToken) {
         return {
