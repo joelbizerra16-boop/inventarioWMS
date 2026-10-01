@@ -72,7 +72,7 @@ class PocketContagemForm(forms.Form):
             'autocapitalize': 'off',
             'spellcheck': 'false',
             'inputmode': 'none',
-            'data-vk-mode': 'text',
+            'autofocus': True,
             'placeholder': 'Bipar posição',
         }),
     )
@@ -87,7 +87,6 @@ class PocketContagemForm(forms.Form):
             'autocapitalize': 'off',
             'spellcheck': 'false',
             'inputmode': 'none',
-            'data-vk-mode': 'text',
             'placeholder': 'Bipar produto ou EAN',
         }),
     )
@@ -105,7 +104,6 @@ class PocketContagemForm(forms.Form):
             'autocorrect': 'off',
             'spellcheck': 'false',
             'inputmode': 'none',
-            'data-vk-mode': 'numeric',
         }),
     )
     dispositivo = forms.CharField(
@@ -153,7 +151,7 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocapitalize': 'off',
             'spellcheck': 'false',
             'inputmode': 'none',
-            'data-vk-mode': 'text',
+            'autofocus': True,
             'placeholder': 'Bipar posição',
         }),
     )
@@ -171,8 +169,6 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocorrect': 'off',
             'spellcheck': 'false',
             'inputmode': 'none',
-            'data-vk-mode': 'numeric',
-            'disabled': 'disabled',
         }),
     )
     codigo_produto_lido = forms.CharField(
@@ -180,16 +176,14 @@ class PocketContagemCiclicoForm(forms.Form):
         max_length=50,
         required=False,
         widget=forms.TextInput(attrs={
-            'class': 'form-control pocket-input pocket-input--readonly',
+            'class': 'form-control pocket-input',
             'id': 'pocket-produto-ciclico',
             'autocomplete': 'off',
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
             'inputmode': 'none',
-            'data-vk-mode': 'text',
-            'placeholder': 'Confirmado após a posição',
-            'disabled': 'disabled',
+            'placeholder': 'Bipar produto ou EAN',
         }),
     )
 

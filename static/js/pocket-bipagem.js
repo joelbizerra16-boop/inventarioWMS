@@ -131,10 +131,18 @@
 
     function focarCampo(el, selecionar) {
         if (!el || el.disabled || el.readOnly) return;
-        global.requestAnimationFrame(function () {
+        // Um disparo síncrono, no init ou no Enter.
+        // Adiar o foco para o frame seguinte sai do gesto e o Android descarta.
+        try {
+            el.focus({ preventScroll: true });
+        } catch (_e) {
             el.focus();
-            if (selecionar !== false && el.select) el.select();
-        });
+        }
+        if (selecionar !== false && typeof el.select === 'function') {
+            try {
+                el.select();
+            } catch (_e2) { /* campo sem seleção */ }
+        }
     }
 
     function marcarErro(input, ativo) {
@@ -401,48 +409,6 @@
         }
         if (!alvo) return;
         focarCampo(form.querySelector('[name="' + alvo + '"]'));
-    }
-
-    var TECLADO_CHAVE = 'pocket-teclado-virtual';
-
-    function tecladoVirtualLigado() {
-        try {
-            return global.sessionStorage.getItem(TECLADO_CHAVE) === '1';
-        } catch (_e) {
-            return false;
-        }
-    }
-
-    function aplicarModoTeclado(ligado) {
-        var campos = global.document.querySelectorAll('input[data-vk-mode]');
-        var i;
-        for (i = 0; i < campos.length; i++) {
-            var modo = campos[i].getAttribute('data-vk-mode') || 'text';
-            campos[i].setAttribute('inputmode', ligado ? modo : 'none');
-        }
-    }
-
-    function atualizarBotaoTeclado(botao, ligado) {
-        if (!botao) return;
-        botao.setAttribute('aria-pressed', ligado ? 'true' : 'false');
-        botao.textContent = ligado ? 'Teclado ligado' : 'Teclado';
-    }
-
-    function initTecladoColetor() {
-        var ligado = tecladoVirtualLigado();
-        aplicarModoTeclado(ligado);
-        var botao = global.document.getElementById('pocket-vk-toggle');
-        atualizarBotaoTeclado(botao, ligado);
-        if (!botao || botao.getAttribute('data-vk-bound') === '1') return;
-        botao.setAttribute('data-vk-bound', '1');
-        botao.addEventListener('click', function () {
-            var proximo = !tecladoVirtualLigado();
-            try {
-                global.sessionStorage.setItem(TECLADO_CHAVE, proximo ? '1' : '0');
-            } catch (_e) { /* sessão indisponível */ }
-            aplicarModoTeclado(proximo);
-            atualizarBotaoTeclado(botao, proximo);
-        });
     }
 
     function limparTelaCompleta(opcoes) {
@@ -840,10 +806,6 @@
 
         function habilitarCampo(input, ativo, placeholderAtivo, placeholderInativo) {
             if (!input) return;
-            input.disabled = !ativo;
-            input.readOnly = !ativo;
-            input.classList.toggle('pocket-input--readonly', !ativo);
-            input.tabIndex = ativo ? 0 : -1;
             if (placeholderAtivo || placeholderInativo) {
                 input.placeholder = ativo ? placeholderAtivo : placeholderInativo;
             }
@@ -1153,8 +1115,6 @@
                     return;
                 }
                 if (btnSalvar) btnSalvar.disabled = true;
-                if (produtoInput) produtoInput.disabled = false;
-                if (quantidadeInput) quantidadeInput.disabled = false;
 
                 var bodyContagem = new FormData(form);
                 if (!bodyContagem.get('pocket_ajax')) {
@@ -1277,15 +1237,8 @@
         initCiclico: initCiclico,
         toast: toast,
         focarCampo: focarCampo,
-        initTecladoColetor: initTecladoColetor,
         parsearRespostaPocket: parsearRespostaPocket,
         opcoesFetchPocket: opcoesFetchPocket,
         tratarErroFetchPocket: function (err) { tratarErroFetchPocket(err, toast); },
     };
-
-    if (global.document.readyState === 'loading') {
-        global.document.addEventListener('DOMContentLoaded', initTecladoColetor);
-    } else {
-        initTecladoColetor();
-    }
 }(window));

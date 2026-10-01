@@ -142,15 +142,42 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         )
 
     def test_contagem_inputmode_none_e_versao_estatica(self):
+        import re
+        from pathlib import Path
+
         response = self.client.get(reverse('pocket:contagem', args=[self.inventario.pk]))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
-        self.assertIn('inputmode="none"', html)
-        self.assertIn('data-vk-mode="text"', html)
-        self.assertIn('data-vk-mode="numeric"', html)
-        self.assertIn('id="pocket-vk-toggle"', html)
-        self.assertIn(f'pocket-bipagem.js?v={settings.POCKET_STATIC_VERSION}', html)
+        self.assertNotIn('id="pocket-vk-toggle"', html)
+        self.assertNotIn('sessionStorage', html)
+        self.assertNotIn('pocket-teclado-virtual', html)
         self.assertNotIn('type="number"', html)
-        self.assertIn('name="codigo_posicao"', html)
-        self.assertIn('name="quantidade_fisica"', html)
+        for nome in ('codigo_posicao', 'codigo_produto', 'quantidade_fisica'):
+            tag = re.search(rf'<input\b[^>]*\bname="{nome}"[^>]*>', html)
+            self.assertIsNotNone(tag, nome)
+            attrs = tag.group(0)
+            self.assertIn('type="text"', attrs, nome)
+            self.assertIn('inputmode="none"', attrs, nome)
+            self.assertNotIn('readonly', attrs, nome)
+            self.assertNotIn('disabled', attrs, nome)
+        posicao = re.search(r'<input\b[^>]*\bname="codigo_posicao"[^>]*>', html)
+        self.assertIn('autofocus', posicao.group(0))
+        self.assertIn(f'pocket-bipagem.js?v={settings.POCKET_STATIC_VERSION}', html)
+        self.assertIn(f'pocket.css?v={settings.POCKET_STATIC_VERSION}', html)
         self.assertIn('rel="manifest"', html)
+
+        js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
+        self.assertNotIn('sessionStorage', js)
+        self.assertNotIn('localStorage', js)
+        self.assertNotIn('pocket-teclado-virtual', js)
+        self.assertNotIn('initTecladoColetor', js)
+        foco = js.split('function focarCampo', 1)[1].split('function marcarErro', 1)[0]
+        self.assertIn('.focus(', foco)
+        self.assertNotIn('setInterval', foco)
+        self.assertNotIn('setTimeout', foco)
+        sync = js.split('function iniciarSincronizacaoPeriodica', 1)[1].split(
+            'function exibirPosicao', 1
+        )[0]
+        self.assertNotIn('focarCampo', sync)
+        self.assertNotIn('.focus(', sync)
+        self.assertIn('focarCampo(opcoes.posicaoInput)', js)
