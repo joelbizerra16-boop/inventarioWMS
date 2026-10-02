@@ -59,10 +59,13 @@ def criar_precadastro_produto(
         return existente
 
     agora = timezone.now()
+    embalagem_salva = embalagem or ''
+    if not str(embalagem_salva).strip():
+        embalagem_salva = ''
     produto = Produto.objects.create(
         codigo_produto=codigo,
         descricao=descricao.strip(),
-        embalagem=embalagem.strip(),
+        embalagem=embalagem_salva,
         setor='PRÉ-CADASTRO',
         codigo_ean=codigo_ean.strip() or None,
         ativo=True,
@@ -85,7 +88,7 @@ def criar_precadastro_produto(
             'codigo_produto': codigo,
             'descricao': descricao.strip(),
             'codigo_ean': codigo_ean.strip(),
-            'embalagem': embalagem.strip(),
+            'embalagem': embalagem_salva,
         },
     )
     return produto

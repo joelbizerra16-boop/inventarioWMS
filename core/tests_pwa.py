@@ -186,7 +186,7 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         from pathlib import Path
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261001f')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002a')", settings_src)
 
         js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
         self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)

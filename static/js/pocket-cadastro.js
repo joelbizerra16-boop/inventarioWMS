@@ -26,10 +26,26 @@
         return !!(campo && campoDeTexto(campo) && !campo.disabled && !campo.readOnly);
     }
 
+    function campoSelecao(campo) {
+        if (!campo) return false;
+        return (campo.tagName || '').toUpperCase() === 'SELECT' && !campo.disabled;
+    }
+
+    function campoNavegavel(campo) {
+        return editavel(campo) || campoSelecao(campo);
+    }
+
     function camposDoFormulario(form) {
         return Array.prototype.filter.call(
             form.querySelectorAll('input, textarea'),
             campoDeTexto
+        );
+    }
+
+    function camposNavegaveis(form) {
+        return Array.prototype.filter.call(
+            form.querySelectorAll('input, textarea, select'),
+            campoNavegavel
         );
     }
 
@@ -50,23 +66,23 @@
         var i;
         for (i = 0; i < grupos.length; i += 1) {
             if (!grupos[i].querySelector('.text-danger')) continue;
-            var campo = grupos[i].querySelector('input, textarea');
-            if (editavel(campo)) return campo;
+            var campo = grupos[i].querySelector('input, textarea, select');
+            if (campoNavegavel(campo)) return campo;
         }
         return null;
     }
 
     function primeiroEditavel(form) {
-        var campos = camposDoFormulario(form);
+        var campos = camposNavegaveis(form);
         var i;
         for (i = 0; i < campos.length; i += 1) {
-            if (editavel(campos[i])) return campos[i];
+            if (campoNavegavel(campos[i])) return campos[i];
         }
         return null;
     }
 
     function focarSeguinte(form, atual) {
-        var campos = camposDoFormulario(form).filter(editavel);
+        var campos = camposNavegaveis(form);
         var indice = campos.indexOf(atual);
         var proximo = indice >= 0 ? campos[indice + 1] : null;
         if (proximo) {
@@ -151,7 +167,7 @@
             if (!alvo || alvo.tagName === 'TEXTAREA' || alvo.tagName === 'BUTTON' || alvo.tagName === 'A') {
                 return;
             }
-            if (!campoDeTexto(alvo)) return;
+            if (!campoDeTexto(alvo) && !campoSelecao(alvo)) return;
             evento.preventDefault();
             if (alvo.getAttribute('data-cadastro-enter') === 'validar-codigo') return;
             focarSeguinte(form, alvo);
@@ -200,7 +216,7 @@
         if (global.visualViewport) {
             global.visualViewport.addEventListener('resize', function () {
                 var ativo = global.document.activeElement;
-                if (ativo && campoDeTexto(ativo)) manterVisivel(ativo);
+                if (ativo && campoNavegavel(ativo)) manterVisivel(ativo);
             });
         }
     }

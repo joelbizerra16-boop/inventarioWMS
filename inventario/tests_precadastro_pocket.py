@@ -5,8 +5,12 @@ O cliente de teste do Django grava só no banco de testes, separado do desenvolv
 
 import json
 import re
+from pathlib import Path
 
+from django.conf import settings
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from accounts.models import Usuario
@@ -14,6 +18,7 @@ from accounts.test_utils import ClienteAutenticadoMixin, criar_usuario_teste
 from core.choices import StatusHomologacao
 from inventario.models import Inventario
 from posicoes.models import Posicao
+from produtos.forms import listar_embalagens_distintas
 from produtos.models import Produto
 
 
@@ -22,6 +27,12 @@ class OperadorPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
         self.user = self.autenticar_cliente(perfil=Usuario.Perfil.OPERADOR)
 
     def test_cria_produto_com_zero_a_esquerda_e_volta_ao_pocket(self):
+        Produto.objects.create(
+            codigo_produto='CAT-CX',
+            descricao='Catálogo',
+            setor='A',
+            embalagem='CX',
+        )
         resposta = self.client.post(reverse('pocket:operador_precadastro_produto'), {
             'codigo_produto': '00123',
             'descricao': 'Item com zero',
@@ -40,6 +51,12 @@ class OperadorPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertEqual(mestres.json()['mapa_produtos']['00123'], 'Item com zero')
 
     def test_campos_obrigatorios_mantem_valor_informado(self):
+        Produto.objects.create(
+            codigo_produto='CAT-CX',
+            descricao='Catálogo',
+            setor='A',
+            embalagem='CX',
+        )
         resposta = self.client.post(reverse('pocket:operador_precadastro_produto'), {
             'codigo_produto': '00123',
             'descricao': '',
@@ -63,7 +80,7 @@ class OperadorPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
         resposta = self.client.post(reverse('pocket:operador_precadastro_produto'), {
             'codigo_produto': '00100',
             'descricao': 'Outra descrição',
-            'embalagem': 'UN',
+            'embalagem': 'CX',
         })
         self.assertEqual(resposta.status_code, 302)
         produto = Produto.objects.get(codigo_produto='00100')
@@ -78,6 +95,7 @@ class OperadorPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
             setor='A',
             status_homologacao=StatusHomologacao.REJEITADO,
             ativo=False,
+            embalagem='CX',
         )
         resposta = self.client.post(reverse('pocket:operador_precadastro_produto'), {
             'codigo_produto': '00999',
@@ -160,6 +178,12 @@ class InventarioPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
         )
 
     def test_produto_salvo_volta_para_o_inventario_e_entra_na_contagem(self):
+        Produto.objects.create(
+            codigo_produto='CAT-CX',
+            descricao='Catálogo',
+            setor='A',
+            embalagem='CX',
+        )
         url = reverse('pocket:precadastro_produto', args=[self.inventario.pk])
         resposta = self.client.post(url, {
             'codigo_produto': '00123',
@@ -253,3 +277,226 @@ class PrecadastroNaoUsaFluxoDeContagemTestCase(TestCase):
             self.assertIn('type="text"', html)
             self.assertNotIn('type="number"', html)
             self.assertIn('inputmode="none"', html)
+
+
+def _criar_catalogo(codigo, embalagem, descricao='Catálogo'):
+    return Produto.objects.create(
+        codigo_produto=codigo,
+        descricao=descricao,
+        setor='A',
+        embalagem=embalagem,
+    )
+
+
+def _select_embalagem(html):
+    select = re.search(
+        r'<select\b[^>]*\bname="embalagem"[^>]*>(.*?)</select>',
+        html,
+        re.DOTALL,
+    )
+    return select.group(1) if select else ''
+
+
+def _opcoes_embalagem(html):
+    miolo = _select_embalagem(html)
+    return re.findall(r'<option\b([^>]*)>(.*?)</option>', miolo, re.DOTALL)
+
+
+def _valor_option(attrs):
+    achado = re.search(r'\bvalue="([^"]*)"', attrs)
+    return achado.group(1) if achado else ''
+
+
+class EmbalagemComboboxPrecadastroTestCase(TestCase):
+    def setUp(self):
+        self.operador, _perfil = criar_usuario_teste(
+            username='op.emb.combo',
+            perfil=Usuario.Perfil.OPERADOR,
+        )
+        self.usuario_inventario, perfil = criar_usuario_teste(
+            username='inv.emb.combo',
+            perfil=Usuario.Perfil.INVENTARIO,
+        )
+        self.inventario = Inventario.objects.create(
+            usuario=perfil,
+            status=Inventario.Status.EM_ANDAMENTO,
+        )
+        _criar_catalogo('CAT-1', 'BOMBONA')
+        _criar_catalogo('CAT-2', 'BOMBONA')
+        _criar_catalogo('CAT-3', 'bombona')
+        _criar_catalogo('CAT-4', 'Tambor')
+        _criar_catalogo('CAT-5', '  CX ')
+        _criar_catalogo('CAT-6', '')
+        _criar_catalogo('CAT-7', '   ')
+        _criar_catalogo('CAT-8', '\t')
+        _criar_catalogo('CAT-9', '\n')
+        _criar_catalogo('CAT-10', ' \r\n ')
+
+    def test_consulta_distinta_exclui_vazio_e_nao_regrava(self):
+        with CaptureQueriesContext(connection) as consultas:
+            opcoes = listar_embalagens_distintas()
+        self.assertEqual(len(consultas), 1)
+        sql = consultas[0]['sql'].upper()
+        self.assertIn('DISTINCT', sql)
+        self.assertEqual(opcoes.count('BOMBONA'), 1)
+        self.assertEqual(opcoes.count('bombona'), 1)
+        self.assertNotIn('', opcoes)
+        self.assertNotIn('   ', opcoes)
+        self.assertNotIn('\t', opcoes)
+        self.assertNotIn('\n', opcoes)
+        self.assertNotIn(' \r\n ', opcoes)
+        self.assertEqual(
+            opcoes,
+            sorted(opcoes, key=lambda valor: (valor.casefold(), valor)),
+        )
+        self.assertEqual(Produto.objects.get(codigo_produto='CAT-5').embalagem, '  CX ')
+
+    def test_selecao_valida_grava_o_valor_exato_nos_dois_fluxos(self):
+        self.client.force_login(self.operador)
+        operador = self.client.post(reverse('pocket:operador_precadastro_produto'), {
+            'codigo_produto': '001',
+            'descricao': 'Item operador',
+            'embalagem': '  CX ',
+        })
+        self.assertEqual(operador.status_code, 302)
+        self.assertEqual(Produto.objects.get(codigo_produto='001').embalagem, '  CX ')
+
+        self.client.force_login(self.usuario_inventario)
+        url = reverse('pocket:precadastro_produto', args=[self.inventario.pk])
+        inventario = self.client.post(url, {
+            'codigo_produto': '002',
+            'descricao': 'Item inventário',
+            'codigo_ean': '',
+            'embalagem': 'Tambor',
+            'observacao': '',
+        })
+        self.assertEqual(inventario.status_code, 302)
+        self.assertEqual(
+            inventario['Location'],
+            reverse('pocket:contagem', args=[self.inventario.pk]),
+        )
+        self.assertEqual(Produto.objects.get(codigo_produto='002').embalagem, 'Tambor')
+        self.assertEqual(Produto.objects.get(codigo_produto='CAT-5').embalagem, '  CX ')
+
+    def test_valor_fora_do_conjunto_e_rejeitado(self):
+        self.client.force_login(self.operador)
+        resposta = self.client.post(reverse('pocket:operador_precadastro_produto'), {
+            'codigo_produto': '003',
+            'descricao': 'Item',
+            'embalagem': 'GRANEL_NOVO',
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'Selecione uma embalagem já cadastrada.')
+        self.assertFalse(Produto.objects.filter(codigo_produto='003').exists())
+
+        self.client.force_login(self.usuario_inventario)
+        url = reverse('pocket:precadastro_produto', args=[self.inventario.pk])
+        inventario = self.client.post(url, {
+            'codigo_produto': '004',
+            'descricao': 'Item',
+            'embalagem': '   ',
+        })
+        self.assertEqual(inventario.status_code, 200)
+        self.assertContains(inventario, 'Selecione uma embalagem já cadastrada.')
+        self.assertFalse(Produto.objects.filter(codigo_produto='004').exists())
+
+    def test_selecao_permanece_quando_outro_campo_falha(self):
+        self.client.force_login(self.operador)
+        resposta = self.client.post(reverse('pocket:operador_precadastro_produto'), {
+            'codigo_produto': '005',
+            'descricao': '',
+            'embalagem': 'Tambor',
+        })
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'Este campo é obrigatório.')
+        html = resposta.content.decode()
+        selecionada = [
+            _valor_option(attrs)
+            for attrs, _rotulo in _opcoes_embalagem(html)
+            if re.search(r'\bselected\b', attrs)
+        ]
+        self.assertEqual(selecionada, ['Tambor'])
+        self.assertEqual(html.count('value="BOMBONA"'), 1)
+        self.assertFalse(Produto.objects.filter(codigo_produto='005').exists())
+
+    def test_embalagem_continua_opcional_e_a_lista_e_um_select(self):
+        from produtos.forms import PrecadastroProdutoForm, PrecadastroProdutoOperadorForm
+
+        self.assertFalse(PrecadastroProdutoOperadorForm.base_fields['embalagem'].required)
+        self.assertFalse(PrecadastroProdutoForm.base_fields['embalagem'].required)
+
+        self.client.force_login(self.operador)
+        tela = self.client.get(reverse('pocket:operador_precadastro_produto'))
+        html = tela.content.decode()
+        self.assertIsNotNone(re.search(r'<select\b[^>]*name="embalagem"', html))
+        self.assertIsNone(re.search(r'<input\b[^>]*name="embalagem"', html))
+        self.assertIn('Não informado', _select_embalagem(html))
+        self.assertNotIn('Embalagem *', html)
+        self.assertIn('id="pocket-cadastro-teclado"', html)
+        self.assertIn('Salvar pré-cadastro', html)
+        self.assertIn(reverse('pocket:selecionar'), html)
+        self.assertNotIn('Nenhuma embalagem cadastrada', html)
+
+        salvo = self.client.post(reverse('pocket:operador_precadastro_produto'), {
+            'codigo_produto': '006',
+            'descricao': 'Sem embalagem',
+            'embalagem': '',
+        })
+        self.assertEqual(salvo.status_code, 302)
+        self.assertEqual(Produto.objects.get(codigo_produto='006').embalagem, '')
+
+        self.client.force_login(self.usuario_inventario)
+        url = reverse('pocket:precadastro_produto', args=[self.inventario.pk])
+        inventario = self.client.get(url)
+        self.assertContains(inventario, 'name="embalagem"')
+        self.assertContains(inventario, 'Não informado')
+        self.assertContains(inventario, reverse('pocket:contagem', args=[self.inventario.pk]))
+        self.assertContains(inventario, 'Voltar à contagem')
+        self.assertNotContains(inventario, 'pocket-bipagem.js')
+
+    def test_sem_opcoes_mostra_aviso_e_nao_inventa_embalagem(self):
+        Produto.objects.all().delete()
+        _criar_catalogo('SO-1', '')
+        _criar_catalogo('SO-2', '   ')
+        self.client.force_login(self.operador)
+        tela = self.client.get(reverse('pocket:operador_precadastro_produto'))
+        html = tela.content.decode()
+        self.assertIn('Nenhuma embalagem cadastrada nos produtos.', html)
+        self.assertIn('Não informado', _select_embalagem(html))
+        self.assertEqual(
+            [_valor_option(attrs) for attrs, _rotulo in _opcoes_embalagem(html)],
+            [''],
+        )
+        self.assertIsNone(re.search(r'<input\b[^>]*name="embalagem"', html))
+        salvo = self.client.post(reverse('pocket:operador_precadastro_produto'), {
+            'codigo_produto': '007',
+            'descricao': 'Sem lista',
+            'embalagem': '',
+        })
+        self.assertEqual(salvo.status_code, 302)
+        self.assertEqual(Produto.objects.get(codigo_produto='007').embalagem, '')
+
+    def test_contagem_e_cadastro_completo_nao_mudam_e_atraso_permanece(self):
+        cadastro = Path(
+            settings.BASE_DIR, 'produtos', 'templates', 'produtos', 'formulario.html',
+        ).read_text(encoding='utf-8')
+        self.assertIn('id="embalagem-opcoes"', cadastro)
+        self.assertNotIn('Não informado', cadastro)
+
+        contagem = Path(
+            settings.BASE_DIR, 'inventario', 'templates', 'inventario', 'pocket', 'contagem.html',
+        ).read_text(encoding='utf-8')
+        self.assertNotIn('pocket-cadastro.js', contagem)
+        self.assertNotIn('Não informado', contagem)
+
+        js = Path(settings.BASE_DIR, 'static', 'js', 'pocket-cadastro.js').read_text(encoding='utf-8')
+        self.assertIn("=== 'SELECT'", js)
+        self.assertIn("querySelectorAll('input, textarea')", js)
+        self.assertNotIn('setInterval', js)
+        self.assertNotIn('POCKET_VALIDACAO_ATRASO', js)
+
+        bipagem = Path(settings.BASE_DIR, 'static', 'js', 'pocket-bipagem.js').read_text(encoding='utf-8')
+        self.assertEqual(bipagem.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
+
+        settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002a')", settings_src)

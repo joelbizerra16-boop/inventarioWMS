@@ -874,7 +874,8 @@
 
     .pocket-cadastro .form-control,
     .pocket-cadastro .pocket-input,
-    .pocket-cadastro textarea {
+    .pocket-cadastro textarea,
+    .pocket-cadastro select {
         min-height: 2.85rem;
         font-size: 1.0625rem !important;
         padding: 0.5rem 0.75rem !important;
@@ -891,6 +892,7 @@
 
     .pocket-cadastro input,
     .pocket-cadastro textarea,
+    .pocket-cadastro select,
     .pocket-cadastro button,
     .pocket-cadastro a.pocket-btn {
         scroll-margin: 4.5rem;

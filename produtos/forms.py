@@ -1,7 +1,45 @@
 from django import forms
 from django.core.validators import FileExtensionValidator
+from django.db.models import Value
+from django.db.models.functions import Lower, Replace, Trim
 
 from produtos.models import Produto
+
+
+def _embalagem_sem_branco(expressao='embalagem'):
+    expr = expressao
+    for caractere in ('\t', '\n', '\r', '\v', '\f', '\xa0'):
+        expr = Replace(expr, Value(caractere), Value(''))
+    return Trim(expr)
+
+
+def listar_embalagens_distintas():
+    """Valores distintos já gravados em Produto.embalagem, sem vazio nem só espaços."""
+    return list(
+        Produto.objects.exclude(embalagem__isnull=True)
+        .annotate(_embalagem_util=_embalagem_sem_branco())
+        .exclude(_embalagem_util='')
+        .values_list('embalagem', flat=True)
+        .distinct()
+        .order_by(Lower('embalagem'), 'embalagem')
+    )
+
+
+class EmbalagemCatalogoFormMixin:
+    """Select nativo com as embalagens que já existem. Não cria valor novo."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        opcoes = listar_embalagens_distintas()
+        self.sem_embalagens = not opcoes
+        escolhas = [('', 'Não informado')]
+        escolhas.extend((valor, valor) for valor in opcoes)
+        self.fields['embalagem'].choices = escolhas
+        if self.sem_embalagens:
+            self.fields['embalagem'].help_text = (
+                'Nenhuma embalagem cadastrada nos produtos. '
+                'Esta tela não cria uma embalagem nova.'
+            )
 
 
 class ProdutoForm(forms.ModelForm):
@@ -52,7 +90,7 @@ class ProdutoForm(forms.ModelForm):
         )
 
 
-class PrecadastroProdutoOperadorForm(forms.Form):
+class PrecadastroProdutoOperadorForm(EmbalagemCatalogoFormMixin, forms.Form):
     codigo_produto = forms.CharField(
         label='SKU',
         max_length=50,
@@ -71,19 +109,18 @@ class PrecadastroProdutoOperadorForm(forms.Form):
             'inputmode': 'none',
         }),
     )
-    embalagem = forms.CharField(
+    embalagem = forms.ChoiceField(
         label='Embalagem',
-        max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control pocket-input',
-            'autocomplete': 'off',
-            'inputmode': 'none',
-        }),
+        choices=[('', 'Não informado')],
+        widget=forms.Select(attrs={'class': 'form-select pocket-input'}),
+        error_messages={
+            'invalid_choice': 'Selecione uma embalagem já cadastrada.',
+        },
     )
 
 
-class PrecadastroProdutoForm(forms.Form):
+class PrecadastroProdutoForm(EmbalagemCatalogoFormMixin, forms.Form):
     codigo_produto = forms.CharField(
         label='SKU',
         max_length=50,
@@ -112,15 +149,14 @@ class PrecadastroProdutoForm(forms.Form):
             'inputmode': 'none',
         }),
     )
-    embalagem = forms.CharField(
+    embalagem = forms.ChoiceField(
         label='Embalagem',
-        max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control pocket-input',
-            'autocomplete': 'off',
-            'inputmode': 'none',
-        }),
+        choices=[('', 'Não informado')],
+        widget=forms.Select(attrs={'class': 'form-select pocket-input'}),
+        error_messages={
+            'invalid_choice': 'Selecione uma embalagem já cadastrada.',
+        },
     )
     observacao = forms.CharField(
         label='Observação',
