@@ -214,7 +214,7 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         from pathlib import Path
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002e')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002f')", settings_src)
 
         js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
         self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
@@ -403,5 +403,5 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
             'function initAudioTouch', 1
         )[0]
         self.assertIn('confirmaPendente', leitura)
-        self.assertIn('controle.cancelar()', leitura)
+        self.assertNotIn('controle.cancelar()', leitura)
         self.assertNotIn('setInterval', leitura)

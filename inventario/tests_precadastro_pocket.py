@@ -563,4 +563,4 @@ class EmbalagemComboboxPrecadastroTestCase(TestCase):
         self.assertEqual(bipagem.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002e')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002f')", settings_src)

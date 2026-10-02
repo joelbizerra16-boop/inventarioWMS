@@ -402,16 +402,41 @@
         if (!campo) return;
         instalarRecepcaoDeLeitura(campo);
         var pendente = false;
+        var confirmaTimer = null;
+
+        function cancelarConfirmacao() {
+            if (confirmaTimer !== null) {
+                global.clearTimeout(confirmaTimer);
+                confirmaTimer = null;
+            }
+        }
+
+        function confirmar() {
+            if (!pendente) return;
+            pendente = false;
+            cancelarConfirmacao();
+            callback();
+        }
+
         campo.addEventListener('keydown', function (evento) {
             if (!teclaConfirma(evento)) return;
             evento.preventDefault();
             evento.stopPropagation();
             pendente = true;
+            // Não confirma dentro do keydown: o foco aí cortava o wedge.
+            // O keyup confirma na hora. Se o preventDefault engolir o keyup,
+            // o turno seguinte confirma — sem isso o Enter não salvava a quantidade.
+            if (evento.isComposing || evento.key === 'Process') return;
+            cancelarConfirmacao();
+            confirmaTimer = global.setTimeout(function () {
+                confirmaTimer = null;
+                confirmar();
+            }, 0);
         });
         campo.addEventListener('keyup', function (evento) {
             if (!pendente || !teclaConfirma(evento)) return;
-            pendente = false;
-            callback();
+            if (evento.isComposing || evento.key === 'Process') return;
+            confirmar();
         });
     }
 
@@ -512,23 +537,47 @@
         });
         instalarRecepcaoDeLeitura(campo);
         var confirmaPendente = false;
+        var confirmaTimer = null;
+
+        function cancelarConfirmacao() {
+            if (confirmaTimer !== null) {
+                global.clearTimeout(confirmaTimer);
+                confirmaTimer = null;
+            }
+        }
+
+        function confirmarAgora() {
+            if (!confirmaPendente || controle.emComposicao()) return;
+            confirmaPendente = false;
+            cancelarConfirmacao();
+            controle.aoEnter();
+        }
+
+        campo.addEventListener('compositionend', function () {
+            if (confirmaPendente) confirmarAgora();
+        });
         campo.addEventListener('keydown', function (evento) {
             var tab = !!(opcoes.tabConfirma && evento.key === 'Tab');
             var confirma = teclaConfirma(evento) || tab;
             if (!confirma) return;
             evento.preventDefault();
             evento.stopPropagation();
-            if (controle.emComposicao()) return;
-            controle.cancelar();
+            // 20261002b passou o aoEnter para o keyup e cancelava o timer
+            // neste keydown. No coletor o keyup não fechava o ciclo: o Enter
+            // era engolido e a pausa de 2000 ms já tinha sido desarmada.
             confirmaPendente = true;
+            if (controle.emComposicao()) return;
+            cancelarConfirmacao();
+            confirmaTimer = global.setTimeout(function () {
+                confirmaTimer = null;
+                confirmarAgora();
+            }, 0);
         });
         campo.addEventListener('keyup', function (evento) {
             if (!confirmaPendente) return;
             var tab = !!(opcoes.tabConfirma && evento.key === 'Tab');
             if (!teclaConfirma(evento) && !tab) return;
-            confirmaPendente = false;
-            if (controle.emComposicao()) return;
-            controle.aoEnter();
+            confirmarAgora();
         });
         return { cancelar: controle.cancelar };
     }

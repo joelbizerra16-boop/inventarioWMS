@@ -1,6 +1,6 @@
 /**
- * Simulação de wedge (teclas rápidas) contra o JS real do Pocket.
- * Não é leitura física de coletor. Não grava código nenhum.
+ * Executa o JS real do Pocket contra um DOM no formato dos templates de contagem.
+ * Não é leitura física de coletor e não prova o aparelho. Não grava código nenhum.
  */
 'use strict';
 
@@ -150,6 +150,21 @@ function criarDocumento() {
             filho.parentNode = el;
             el.children.push(filho);
             return filho;
+        };
+        el.insertAdjacentElement = function (onde, novo) {
+            if (onde === 'beforeend') return el.appendChild(novo);
+            if (onde === 'afterbegin') {
+                novo.parentNode = el;
+                el.children.unshift(novo);
+                return novo;
+            }
+            const pai = el.parentNode;
+            if (!pai) return null;
+            const idx = pai.children.indexOf(el);
+            novo.parentNode = pai;
+            if (onde === 'afterend') pai.children.splice(Math.max(idx, 0) + 1, 0, novo);
+            else pai.children.splice(Math.max(idx, 0), 0, novo);
+            return novo;
         };
         if (attrs) {
             Object.keys(attrs).forEach(function (chave) {
@@ -496,34 +511,65 @@ function simularProduto() {
     assert(form.getAttribute('data-cadastro-enviando') !== '1', 'formulário não foi marcado como enviado');
 }
 
-function simularContagem() {
-    const doc = criarDocumento();
-    const toast = doc.criar('div', { id: 'pocket-toast' });
-    const form = doc.criar('form', { id: 'pocket-contagem-form' });
-    form.dataset.postUrl = '/pocket/contagem/';
-    const posicao = doc.criar('input', { id: 'id_codigo_posicao', name: 'codigo_posicao', maxlength: '50' });
-    const produto = doc.criar('input', { id: 'id_codigo_produto', name: 'codigo_produto', maxlength: '50' });
-    const quantidade = doc.criar('input', { id: 'id_quantidade_fisica', name: 'quantidade_fisica' });
-    const salvar = doc.criar('button', { id: 'pocket-btn-salvar', type: 'submit' });
-    const posicaoConfirm = doc.criar('p', { id: 'pocket-posicao-confirm' });
-    const posicaoLabel = doc.criar('strong', { id: 'posicao-alocacao' });
-    const descricaoConfirm = doc.criar('p', { id: 'pocket-descricao-confirm' });
-    const produtoDescricao = doc.criar('strong', { id: 'produto-descricao' });
-    form.appendChild(posicao);
-    form.appendChild(produto);
-    form.appendChild(quantidade);
-    form.appendChild(salvar);
-    doc.body.appendChild(toast);
-    doc.body.appendChild(form);
-    doc.body.appendChild(posicaoConfirm);
-    doc.body.appendChild(posicaoLabel);
-    doc.body.appendChild(descricaoConfirm);
-    doc.body.appendChild(produtoDescricao);
+function ativos(lista, ms) {
+    return lista.filter(function (t) {
+        return !t.limpo && t.ms === ms;
+    });
+}
 
+function dispararMs(lista, ms) {
+    ativos(lista, ms).forEach(function (t) {
+        if (t.limpo) return;
+        t.limpo = true;
+        t.fn();
+    });
+}
+
+function ler(relativo) {
+    return fs.readFileSync(path.join(raiz, relativo), 'utf8');
+}
+
+function assertTemplatesDaContagem() {
+    const geral = ler('inventario/templates/inventario/pocket/contagem.html');
+    const ciclico = ler('inventario/templates/inventario/pocket/contagem_ciclico.html');
+    const forms = ler('inventario/forms.py');
+    assert(geral.includes('pocket-bipagem.js'), 'contagem carrega pocket-bipagem.js');
+    assert(geral.includes('PocketBipagem.initGeral'), 'contagem chama initGeral');
+    assert(geral.includes('id="pocket-contagem-form"'), 'contagem tem o form real');
+    assert(geral.includes('form.codigo_posicao.id_for_label'), 'posição usa o id do form');
+    assert(!geral.includes('pocket-cadastro.js'), 'contagem não carrega o script de cadastro');
+    assert(ciclico.includes('pocket-bipagem.js'), 'cíclico carrega pocket-bipagem.js');
+    assert(ciclico.includes('PocketBipagem.initCiclico'), 'cíclico chama initCiclico');
+    assert(ciclico.includes('pocket-produto-ciclico'), 'cíclico usa o id real do produto');
+    assert(!ciclico.includes('pocket-cadastro.js'), 'cíclico não carrega o script de cadastro');
+    assert(forms.includes("'id': 'pocket-produto-ciclico'"), 'form cíclico fixa o id do produto');
+    assert(!forms.includes("inputmode': 'none'"), 'forms não usam inputmode none');
+    assert(!geral.includes('virtualkeyboardpolicy'), 'template geral sem virtualkeyboardpolicy');
+    assert(!ciclico.includes('virtualkeyboardpolicy'), 'template cíclico sem virtualkeyboardpolicy');
+}
+
+function campoDaContagem(doc, id, name, extras) {
+    const secao = doc.criar('section', { class: 'pocket-scan-sec' });
+    const wrap = doc.criar('div', { class: 'pocket-scan-input-wrap' });
+    const input = doc.criar('input', {
+        id: id,
+        name: name,
+        type: 'text',
+        maxlength: '50',
+    });
+    Object.keys(extras || {}).forEach(function (chave) {
+        input.setAttribute(chave, extras[chave]);
+    });
+    wrap.appendChild(input);
+    secao.appendChild(wrap);
+    return { secao: secao, input: input };
+}
+
+function sandboxContagem(doc) {
     const temporizadores = [];
-    let fetches = 0;
-    let seqFetch = 0;
     const fila = [];
+    let fetches = 0;
+    let alertas = 0;
     const sandbox = sandboxDe(doc, {
         setTimeout: function (fn, ms) {
             const id = temporizadores.length + 1;
@@ -536,7 +582,6 @@ function simularContagem() {
         },
         fetch: function () {
             fetches += 1;
-            const id = ++seqFetch;
             return new Promise(function (resolve) {
                 fila.push(function (corpo) {
                     resolve({
@@ -550,9 +595,9 @@ function simularContagem() {
                         text: function () { return Promise.resolve(''); },
                     });
                 });
-                fila[fila.length - 1]._id = id;
             });
         },
+        alert: function () { alertas += 1; },
         location: { href: 'http://local/pocket/contagem/' },
         FormData: function FormData() {
             this._dados = [];
@@ -564,97 +609,365 @@ function simularContagem() {
         },
     });
     carregar(sandbox, ['static/js/pocket-bipagem.js']);
-    sandbox.PocketBipagem.initGeral({
-        ajax: true,
+    return {
+        sandbox: sandbox,
+        temporizadores: temporizadores,
+        fila: fila,
+        alertas: function () { return alertas; },
+        fetches: function () { return fetches; },
+    };
+}
+
+function montarContagemGeral(doc) {
+    const toast = doc.criar('div', { id: 'pocket-toast' });
+    const form = doc.criar('form', { id: 'pocket-contagem-form', class: 'pocket-scan-form' });
+    form.className = 'pocket-scan-form';
+    form.setAttribute('data-post-url', '/pocket/contagem/1/');
+    form.setAttribute('data-inventario-id', '1');
+    form.dataset.postUrl = '/pocket/contagem/1/';
+    form.dataset.inventarioId = '1';
+    const posicao = campoDaContagem(doc, 'id_codigo_posicao', 'codigo_posicao', { autofocus: 'true' });
+    const produto = campoDaContagem(doc, 'id_codigo_produto', 'codigo_produto');
+    const quantidade = campoDaContagem(doc, 'id_quantidade_fisica', 'quantidade_fisica', { inputmode: 'numeric' });
+    const salvar = doc.criar('button', { id: 'pocket-btn-salvar', type: 'submit' });
+    salvar.setAttribute('type', 'submit');
+    const posicaoConfirm = doc.criar('p', { id: 'pocket-posicao-confirm' });
+    const posicaoLabel = doc.criar('strong', { id: 'posicao-alocacao' });
+    const descricaoConfirm = doc.criar('p', { id: 'pocket-descricao-confirm' });
+    const produtoDescricao = doc.criar('strong', { id: 'produto-descricao' });
+    form.appendChild(posicao.secao);
+    form.appendChild(produto.secao);
+    form.appendChild(quantidade.secao);
+    form.appendChild(salvar);
+    doc.body.appendChild(toast);
+    doc.body.appendChild(form);
+    doc.body.appendChild(posicaoConfirm);
+    doc.body.appendChild(posicaoLabel);
+    doc.body.appendChild(descricaoConfirm);
+    doc.body.appendChild(produtoDescricao);
+    return {
         form: form,
-        csrfToken: 'csrf',
-        postUrl: '/pocket/contagem/',
-        inventarioId: '1',
-        posicaoInput: posicao,
-        produtoInput: produto,
-        quantidadeInput: quantidade,
+        posicao: posicao.input,
+        produto: produto.input,
+        quantidade: quantidade.input,
+        salvar: salvar,
         posicaoConfirm: posicaoConfirm,
         posicaoLabel: posicaoLabel,
         descricaoConfirm: descricaoConfirm,
         produtoDescricao: produtoDescricao,
-        btnSalvar: salvar,
+    };
+}
+
+function opcoesGerais(ui) {
+    return {
+        ajax: true,
+        form: ui.form,
+        csrfToken: 'csrf',
+        postUrl: '/pocket/contagem/1/',
+        inventarioId: '1',
+        posicaoInput: ui.posicao,
+        produtoInput: ui.produto,
+        quantidadeInput: ui.quantidade,
+        posicaoConfirm: ui.posicaoConfirm,
+        posicaoLabel: ui.posicaoLabel,
+        descricaoConfirm: ui.descricaoConfirm,
+        produtoDescricao: ui.produtoDescricao,
+        btnSalvar: ui.salvar,
         mapaPosicoes: { '00123': 'Rua 1' },
         mapaProdutos: { '00123': 'Produto zero' },
         mapaEan: { '07890': { codigo_produto: '00123', descricao: 'Pelo EAN' } },
+    };
+}
+
+function simularCadastroSemAtraso() {
+    const doc = criarDocumento();
+    const teclado = doc.criar('button', { id: 'pocket-cadastro-teclado', type: 'button' });
+    const form = doc.criar('form', { id: 'pocket-precadastro-posicao-form', class: 'pocket-cadastro-form' });
+    form.className = 'pocket-cadastro-form';
+    form.dataset.validarCodigoUrl = '/validar';
+    form.dataset.sucesso = '0';
+    const codigo = doc.criar('input', { id: 'id_codigo', name: 'codigo', maxlength: '50' });
+    codigo.setAttribute('data-cadastro-enter', 'validar-codigo');
+    const posicao = doc.criar('input', { id: 'id_posicao', name: 'posicao' });
+    form.appendChild(codigo);
+    form.appendChild(posicao);
+    doc.body.appendChild(teclado);
+    doc.body.appendChild(form);
+    const temporizadores = [];
+    const sandbox = sandboxDe(doc, {
+        setTimeout: function (fn, ms) {
+            const id = temporizadores.length + 1;
+            temporizadores.push({ id: id, fn: fn, ms: ms, limpo: false });
+            return id;
+        },
+        clearTimeout: function (id) {
+            const item = temporizadores.find(function (t) { return t.id === id; });
+            if (item) item.limpo = true;
+        },
+        fetch: function () {
+            return Promise.resolve({
+                ok: true,
+                json: function () { return Promise.resolve({ existe: false }); },
+            });
+        },
     });
+    carregar(sandbox, [
+        'static/js/pocket-precadastro-posicao.js',
+        'static/js/pocket-cadastro.js',
+    ]);
+    assert(!sandbox.PocketBipagem, 'cadastro não recebe PocketBipagem');
+    assert(!ler('static/js/pocket-cadastro.js').includes('POCKET_VALIDACAO_ATRASO_MS'), 'cadastro.js sem timer da contagem');
+    assert(!ler('static/js/pocket-precadastro-posicao.js').includes('POCKET_VALIDACAO_ATRASO_MS'), 'precadastro sem timer da contagem');
+    pronto(doc, sandbox);
+    codigo.value = '00123';
+    codigo.dispatchEvent(evento('input', {}));
+    codigo.dispatchEvent(evento('keydown', { key: 'Enter' }));
+    codigo.dispatchEvent(evento('keyup', { key: 'Enter' }));
+    assert(ativos(temporizadores, 2000).length === 0, 'cadastro não arma pausa de 2000 ms');
+}
 
-    posicao.value = 'VELHA';
-    bip(posicao, '00123', { selecionar: true, selecaoEstagnada: true });
-    assert(posicao.value === '00123', 'contagem: seleção estagnada preserva 00123, veio ' + posicao.value);
-    assert(fetches === 0, 'contagem: bip sem Enter não consulta, fetches=' + fetches);
-    const pendentes = temporizadores.filter(function (t) { return !t.limpo && t.ms === 2000; });
-    assert(pendentes.length === 1, 'contagem: um timer de 2000 ms fica armado, n=' + pendentes.length);
+function simularContagem() {
+    assertTemplatesDaContagem();
+    const doc = criarDocumento();
+    const ui = montarContagemGeral(doc);
+    const ambiente = sandboxContagem(doc);
+    const sandbox = ambiente.sandbox;
+    let erroInit = null;
+    try {
+        sandbox.PocketBipagem.initGeral(opcoesGerais(ui));
+    } catch (erro) {
+        erroInit = erro;
+    }
+    assert(!erroInit, 'initGeral lançou ' + (erroInit && erroInit.message));
+    assert(sandbox.PocketBipagem.POCKET_VALIDACAO_ATRASO_MS === 2000, 'atraso real é 2000');
+    assert(ui.posicao.getAttribute('inputmode') === null, 'posição segue sem inputmode');
+    assert(ui.produto.getAttribute('inputmode') === null, 'produto segue sem inputmode');
+    assert(ui.quantidade.getAttribute('inputmode') === 'numeric', 'quantidade permanece numeric');
+    assert(ui.posicao.getAttribute('virtualkeyboardpolicy') === null, 'init não aplica virtualkeyboardpolicy');
 
-    posicao.dispatchEvent(evento('keydown', { key: 'Enter' }));
-    assert(temporizadores.filter(function (t) { return !t.limpo && t.ms === 2000; }).length === 0,
-        'contagem: Enter cancela o timer');
-    assert(fetches === 0, 'contagem: keydown Enter ainda não valida');
-    posicao.dispatchEvent(evento('keyup', { key: 'Enter' }));
-    assert(fetches === 1, 'contagem: keyup Enter valida uma vez, fetches=' + fetches);
-    pendentes.forEach(function (t) { if (!t.limpo) t.fn(); });
-    assert(fetches === 1, 'contagem: timer cancelado não valida de novo, fetches=' + fetches);
+    ui.posicao.dispatchEvent(evento('keydown', { key: 'Enter' }));
+    dispararMs(ambiente.temporizadores, 0);
+    assert(ambiente.fetches() === 0, 'campo vazio não valida');
 
-    const trava = fila.shift();
+    ui.posicao.value = 'XXXX';
+    ui.posicao.dispatchEvent(evento('input', {}));
+    ui.posicao.dispatchEvent(evento('keydown', { key: 'Enter' }));
+    dispararMs(ambiente.temporizadores, 0);
+    return drenar().then(function () {
+        assert(doc.activeElement === ui.posicao, 'código inválido permanece na posição');
+        assert(doc.querySelectorAll('.pocket-campo-erro').length === 1, 'erro inline, sem alerta bloqueante');
+        assert(ambiente.alertas() === 0, 'não usa alert');
+        assert(ambiente.fetches() === 0, 'inválido local não consulta');
+        ui.posicao.dispatchEvent(evento('keydown', { key: 'Enter' }));
+        ui.posicao.dispatchEvent(evento('keyup', { key: 'Enter' }));
+        dispararMs(ambiente.temporizadores, 0);
+        return drenar();
+    }).then(function () {
+        assert(doc.querySelectorAll('.pocket-campo-erro').length === 1, 'não repete o erro do mesmo valor');
+        assert(doc.activeElement === ui.posicao, 'inválido repetido não avança');
+
+        ui.posicao.value = 'VELHA';
+        ui.posicao.focus();
+        ui.posicao.select();
+        const antesTimers = ambiente.temporizadores.filter(function (t) { return t.ms === 2000; }).length;
+        bip(ui.posicao, '00123', { selecionar: true, selecaoEstagnada: true });
+        assert(ui.posicao.value === '00123', 'seleção estagnada preserva 00123, veio ' + ui.posicao.value);
+        const novos = ambiente.temporizadores.filter(function (t) { return t.ms === 2000; }).slice(antesTimers);
+        assert(novos.length > 1, 'cada caractere rearma a pausa');
+        assert(ativos(ambiente.temporizadores, 2000).length === 1, 'só o último timer de 2000 ms fica armado');
+        assert(ambiente.fetches() === 0, 'bip sem Enter não consulta');
+
+        dispararMs(ambiente.temporizadores, 2000);
+        assert(ambiente.fetches() === 1, 'pausa de 2000 ms valida a posição');
+        dispararMs(ambiente.temporizadores, 2000);
+        assert(ambiente.fetches() === 1, 'pausa não valida de novo');
+        const trava = ambiente.fila.shift();
+        trava({ ok: true, posicao_codigo: '00123', posicao_alocacao: 'Rua 1' });
+        return drenar();
+    }).then(function () {
+        assert(doc.activeElement === ui.produto, 'posição válida avança para o produto');
+        bip(ui.produto, '07890');
+        assert(ui.produto.value === '07890', 'EAN com zero permanece, veio ' + ui.produto.value);
+        const pausaProduto = ativos(ambiente.temporizadores, 2000);
+        assert(pausaProduto.length === 1, 'produto arma uma pausa');
+        ui.produto.dispatchEvent(evento('keydown', { key: 'Enter' }));
+        assert(pausaProduto[0].limpo === false, 'keydown do Enter ainda não cancela a pausa');
+        assert(ambiente.fetches() === 1, 'keydown do Enter ainda não precisa de outra consulta');
+        ui.produto.dispatchEvent(evento('keyup', { key: 'Enter' }));
+        assert(doc.activeElement === ui.quantidade, 'keyup do Enter avança para a quantidade');
+        assert(pausaProduto[0].limpo === true, 'validar no keyup cancela a pausa');
+        assert(ambiente.fetches() === 1, 'produto do mapa não consulta de novo');
+        dispararMs(ambiente.temporizadores, 0);
+        assert(doc.activeElement === ui.quantidade, 'fallback do Enter não avança de novo');
+        assert(ambiente.fetches() === 1, 'fallback não valida em duplicata');
+
+        ui.quantidade.value = '2';
+        ui.quantidade.dispatchEvent(evento('input', {}));
+        dispararMs(ambiente.temporizadores, 2000);
+        assert(ambiente.fetches() === 1, 'pausa na quantidade não salva');
+        ui.quantidade.dispatchEvent(evento('keydown', { key: 'Enter' }));
+        assert(ambiente.fetches() === 1, 'keydown da quantidade ainda não salva');
+        ui.quantidade.dispatchEvent(evento('keyup', { key: 'Enter' }));
+        assert(ambiente.fetches() === 2, 'keyup da quantidade salva uma vez');
+        dispararMs(ambiente.temporizadores, 0);
+        ui.quantidade.dispatchEvent(evento('keyup', { key: 'Enter' }));
+        assert(ambiente.fetches() === 2, 'Enter repetido não grava de novo');
+    });
+}
+
+function simularEnterSemKeyup() {
+    const doc = criarDocumento();
+    const ui = montarContagemGeral(doc);
+    const ambiente = sandboxContagem(doc);
+    ambiente.sandbox.PocketBipagem.initGeral(opcoesGerais(ui));
+    bip(ui.posicao, '00123');
+    const pausa = ativos(ambiente.temporizadores, 2000);
+    assert(pausa.length === 1, 'sem keyup: a pausa fica armada depois do bip');
+    ui.posicao.dispatchEvent(evento('keydown', { key: 'Enter' }));
+    assert(pausa[0].limpo === false, 'sem keyup: o keydown não desarma a pausa');
+    assert(ambiente.fetches() === 0, 'sem keyup: o keydown ainda não valida');
+    dispararMs(ambiente.temporizadores, 0);
+    assert(ambiente.fetches() === 1, 'sem keyup: o turno seguinte valida');
+    assert(pausa[0].limpo === true, 'sem keyup: validar cancela a pausa');
+    dispararMs(ambiente.temporizadores, 2000);
+    assert(ambiente.fetches() === 1, 'sem keyup: a pausa cancelada não valida outra vez');
+    const trava = ambiente.fila.shift();
     trava({ ok: true, posicao_codigo: '00123', posicao_alocacao: 'Rua 1' });
     return drenar().then(function () {
-        assert(doc.activeElement === produto, 'contagem: posição válida avança para o produto');
-        produto.value = '';
-        bip(produto, '07890');
-        assert(produto.value === '07890', 'contagem: EAN com zero permanece, veio ' + produto.value);
-        produto.dispatchEvent(evento('keydown', { key: 'Enter' }));
-        produto.dispatchEvent(evento('keyup', { key: 'Enter' }));
-        assert(doc.activeElement === quantidade, 'contagem: produto válido avança para quantidade');
-        quantidade.value = '2';
-        quantidade.dispatchEvent(evento('keydown', { key: 'Enter' }));
-        assert(fetches === 1, 'quantidade: keydown Enter não salva');
-        quantidade.dispatchEvent(evento('keyup', { key: 'Enter' }));
-        assert(fetches === 2, 'quantidade: keyup Enter salva uma vez, fetches=' + fetches);
-        quantidade.dispatchEvent(evento('keyup', { key: 'Enter' }));
-        assert(fetches === 2, 'quantidade: keyup solto não salva de novo, fetches=' + fetches);
+        assert(doc.activeElement === ui.produto, 'sem keyup: posição válida avança');
+    });
+}
 
-        const vazio = doc.criar('input', { id: 'id_vazio', maxlength: '50' });
-        doc.body.appendChild(vazio);
-        sandbox.PocketBipagem.initGeral({
-            ajax: true,
+function simularRespostaTardia() {
+    const doc = criarDocumento();
+    const ui = montarContagemGeral(doc);
+    const ambiente = sandboxContagem(doc);
+    ambiente.sandbox.PocketBipagem.initGeral(opcoesGerais(ui));
+    bip(ui.posicao, '00123');
+    dispararMs(ambiente.temporizadores, 2000);
+    ui.posicao.value = '00LATE';
+    const trava = ambiente.fila.shift();
+    trava({ ok: true, posicao_codigo: '00123', posicao_alocacao: 'Rua 1' });
+    return drenar().then(function () {
+        assert(doc.activeElement !== ui.produto, 'resposta tardia não foca o produto');
+        assert(ui.posicao.value === '00LATE', 'resposta tardia não apaga a correção');
+        const liberar = ambiente.fila.shift();
+        if (liberar) liberar({ ok: true });
+        return drenar();
+    }).then(function () {
+        ui.posicao.value = '00123';
+        ui.posicao.dispatchEvent(evento('input', {}));
+        dispararMs(ambiente.temporizadores, 2000);
+        ui.quantidade.focus();
+        const travaFoco = ambiente.fila.shift();
+        travaFoco({ ok: true, posicao_codigo: '00123', posicao_alocacao: 'Rua 1' });
+        return drenar();
+    }).then(function () {
+        assert(doc.activeElement === ui.quantidade, 'não puxa o foco de quem está noutro campo');
+    });
+}
+
+function simularCiclico() {
+    const doc = criarDocumento();
+    const toast = doc.criar('div', { id: 'pocket-toast' });
+    const form = doc.criar('form', { id: 'pocket-contagem-form', class: 'pocket-scan-form' });
+    form.className = 'pocket-scan-form';
+    const posicao = campoDaContagem(doc, 'id_codigo_posicao', 'codigo_posicao', { autofocus: 'true' });
+    const produto = campoDaContagem(doc, 'pocket-produto-ciclico', 'codigo_produto_lido');
+    const quantidade = campoDaContagem(doc, 'id_quantidade_fisica', 'quantidade_fisica', { inputmode: 'numeric' });
+    const sku = doc.criar('select', { id: 'pocket-sku-lote', name: 'sku_id' });
+    sku.tagName = 'SELECT';
+    const salvar = doc.criar('button', { id: 'pocket-btn-salvar', type: 'submit' });
+    salvar.setAttribute('type', 'submit');
+    form.appendChild(sku);
+    form.appendChild(posicao.secao);
+    form.appendChild(produto.secao);
+    form.appendChild(quantidade.secao);
+    form.appendChild(salvar);
+    doc.body.appendChild(toast);
+    doc.body.appendChild(form);
+    const ambiente = sandboxContagem(doc);
+    let erroInit = null;
+    try {
+        ambiente.sandbox.PocketBipagem.initCiclico({
             form: form,
             csrfToken: 'csrf',
-            postUrl: '/pocket/contagem/',
-            inventarioId: '1',
-            posicaoInput: vazio,
-            produtoInput: produto,
-            quantidadeInput: quantidade,
-            posicaoConfirm: posicaoConfirm,
-            posicaoLabel: posicaoLabel,
-            descricaoConfirm: descricaoConfirm,
-            produtoDescricao: produtoDescricao,
+            posicaoInput: posicao.input,
+            produtoInput: produto.input,
+            quantidadeInput: quantidade.input,
+            skuSelect: sku,
             btnSalvar: salvar,
-            mapaPosicoes: {},
-            mapaProdutos: {},
-            mapaEan: {},
+            mapaPosicoes: { '00123': 'Rua 1' },
+            mapaProdutos: { '00123': 'Produto zero' },
+            mapaEan: { '07890': { codigo_produto: '00123', descricao: 'Pelo EAN' } },
+            mapaSkus: {
+                '9': { codigo_produto: '00123', codigo_ean: '07890' },
+            },
         });
-        const antes = fetches;
-        vazio.value = '';
-        vazio.dispatchEvent(evento('keydown', { key: 'Enter' }));
-        vazio.dispatchEvent(evento('keyup', { key: 'Enter' }));
-        assert(fetches === antes, 'contagem: campo vazio não valida');
+        sku.value = '9';
+    } catch (erro) {
+        erroInit = erro;
+    }
+    assert(!erroInit, 'initCiclico lançou ' + (erroInit && erroInit.message));
+    bip(posicao.input, '00123');
+    assert(ativos(ambiente.temporizadores, 2000).length === 1, 'cíclico arma a pausa de 2000 ms');
+    dispararMs(ambiente.temporizadores, 2000);
+    assert(ambiente.fetches() === 1, 'cíclico: a pausa valida a posição');
+
+    const docEnter = criarDocumento();
+    const toastEnter = docEnter.criar('div', { id: 'pocket-toast' });
+    const formEnter = docEnter.criar('form', { id: 'pocket-contagem-form' });
+    const posicaoEnter = campoDaContagem(docEnter, 'id_codigo_posicao', 'codigo_posicao');
+    const produtoEnter = campoDaContagem(docEnter, 'pocket-produto-ciclico', 'codigo_produto_lido');
+    const quantidadeEnter = campoDaContagem(docEnter, 'id_quantidade_fisica', 'quantidade_fisica');
+    formEnter.appendChild(posicaoEnter.secao);
+    formEnter.appendChild(produtoEnter.secao);
+    formEnter.appendChild(quantidadeEnter.secao);
+    docEnter.body.appendChild(toastEnter);
+    docEnter.body.appendChild(formEnter);
+    const enter = sandboxContagem(docEnter);
+    enter.sandbox.PocketBipagem.initCiclico({
+        form: formEnter,
+        csrfToken: 'csrf',
+        posicaoInput: posicaoEnter.input,
+        produtoInput: produtoEnter.input,
+        quantidadeInput: quantidadeEnter.input,
+        btnSalvar: docEnter.criar('button', { id: 'pocket-btn-salvar', type: 'submit' }),
+        mapaPosicoes: { '00123': 'Rua 1' },
+        mapaProdutos: {},
+        mapaEan: {},
+        mapaSkus: {},
     });
+    bip(posicaoEnter.input, '00123');
+    const pausa = ativos(enter.temporizadores, 2000);
+    posicaoEnter.input.dispatchEvent(evento('keydown', { key: 'Enter' }));
+    assert(pausa[0].limpo === false, 'cíclico: keydown não cancela a pausa');
+    assert(enter.fetches() === 0, 'cíclico: keydown ainda não valida');
+    dispararMs(enter.temporizadores, 0);
+    assert(enter.fetches() === 1, 'cíclico: Enter sem keyup valida');
+    assert(pausa[0].limpo === true, 'cíclico: validar cancela a pausa');
+    quantidadeEnter.input.value = '4';
+    quantidadeEnter.input.focus();
+    quantidadeEnter.input.dispatchEvent(evento('input', {}));
+    const fetchesQuantidade = enter.fetches();
+    dispararMs(enter.temporizadores, 2000);
+    assert(enter.fetches() === fetchesQuantidade, 'cíclico: pausa na quantidade não salva');
 }
 
 Promise.resolve()
     .then(simularCadastro)
     .then(simularProduto)
+    .then(simularCadastroSemAtraso)
     .then(simularContagem)
+    .then(simularEnterSemKeyup)
+    .then(simularRespostaTardia)
+    .then(simularCiclico)
     .then(function () {
         if (falhas.length) {
             falhas.forEach(function (msg) { console.error('FALHA: ' + msg); });
             process.exit(1);
         }
-        console.log('Simulação de wedge: ok (não é bip físico).');
+        console.log('Simulação do JS real: ok. Node não prova o coletor físico.');
         process.exit(0);
     })
     .catch(function (erro) {
