@@ -56,18 +56,30 @@ class PrecadastroProdutoOperadorForm(forms.Form):
     codigo_produto = forms.CharField(
         label='SKU',
         max_length=50,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'none',
+        }),
     )
     descricao = forms.CharField(
         label='Descrição',
         max_length=255,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'none',
+        }),
     )
     embalagem = forms.CharField(
         label='Embalagem',
         max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'none',
+        }),
     )
 
 
@@ -75,29 +87,50 @@ class PrecadastroProdutoForm(forms.Form):
     codigo_produto = forms.CharField(
         label='SKU',
         max_length=50,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'none',
+        }),
     )
     descricao = forms.CharField(
         label='Descrição',
         max_length=255,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'none',
+        }),
     )
     codigo_ean = forms.CharField(
         label='EAN',
         max_length=50,
         required=False,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'none',
+        }),
     )
     embalagem = forms.CharField(
         label='Embalagem',
         max_length=100,
         required=False,
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
+        widget=forms.TextInput(attrs={
+            'class': 'form-control pocket-input',
+            'autocomplete': 'off',
+            'inputmode': 'none',
+        }),
     )
     observacao = forms.CharField(
         label='Observação',
         required=False,
-        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+        widget=forms.Textarea(attrs={
+            'class': 'form-control pocket-input',
+            'rows': 2,
+            'autocomplete': 'off',
+            'inputmode': 'none',
+        }),
     )
 
 

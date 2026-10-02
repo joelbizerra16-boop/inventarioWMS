@@ -8,20 +8,23 @@
 {% endblock %}
 
 {% block content %}
-<div class="pocket-page">
-    <div class="mb-4">
-        <h1 class="h3 fw-semibold text-dark mb-1">Pré-Cadastro de Produto</h1>
-        <p class="text-muted mb-0">
-            {% if inventario %}
-            Inventário #{{ inventario.pk }} — o produto ficará disponível imediatamente para contagem.
-            {% else %}
-            O produto ficará disponível imediatamente para contagem.
-            {% endif %}
-        </p>
+<div class="pocket-page pocket-cadastro">
+    <div class="pocket-cadastro-topo mb-4">
+        <div class="pocket-cadastro-titulos">
+            <h1 class="h3 fw-semibold text-dark mb-1">Pré-Cadastro de Produto</h1>
+            <p class="text-muted mb-0">
+                {% if inventario %}
+                Inventário #{{ inventario.pk }} — o produto ficará disponível imediatamente para contagem.
+                {% else %}
+                O produto ficará disponível imediatamente para contagem.
+                {% endif %}
+            </p>
+        </div>
+        {% include 'inventario/pocket/_precadastro_teclado.html' %}
     </div>
-    <div class="card border-0 shadow-sm pocket-card">
+    <div class="card border-0 shadow-sm pocket-card pocket-cadastro-card">
         <div class="card-body p-4">
-            <form method="post" novalidate>
+            <form method="post" novalidate id="pocket-precadastro-produto-form" class="pocket-cadastro-form">
                 {% csrf_token %}
                 {% if form.non_field_errors %}
                 <div class="alert alert-danger">{{ form.non_field_errors }}</div>
@@ -39,4 +42,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/pocket-cadastro.js' %}?v={{ POCKET_STATIC_VERSION }}"></script>
 {% endblock %}

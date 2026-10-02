@@ -33,6 +33,7 @@ from inventario.services.contagem import (
     persistir_auditoria_contagem_rejeitada,
     salvar_contagem,
 )
+from inventario.services.locks import LockError
 from inventario.services.tarefas import TarefaError
 from inventario.services.confronto import executar_confronto
 from inventario.services.aprovacao import (
@@ -116,7 +117,7 @@ def _salvar_contagem_pelo_formulario(request, inventario, form, item_existente=N
         persistir_auditoria_contagem_rejeitada(exc)
         form.add_error(None, str(exc))
         return False
-    except (ContagemError, TarefaError) as exc:
+    except (ContagemError, TarefaError, LockError) as exc:
         form.add_error(None, str(exc))
         return False
     return True

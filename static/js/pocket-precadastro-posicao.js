@@ -1,5 +1,6 @@
 /**
  * Pocket — cadastro contínuo de posição (fluxo RF: código → posição → salvar).
+ * Enter no código valida na hora e avança. Enter na posição só foca Salvar.
  */
 (function (global) {
     'use strict';
@@ -10,6 +11,11 @@
     var ultimaValidacaoEhNovo = false;
     var validacaoController = null;
     var validacaoEmAndamento = false;
+
+    function teclaEnter(evento) {
+        return evento.key === 'Enter' || evento.key === 'NumpadEnter' ||
+            evento.keyCode === 13 || evento.which === 13;
+    }
 
     function focarCampo(el) {
         if (!el || el.disabled || el.readOnly) return;
@@ -45,9 +51,9 @@
         });
     }
 
-    function setPosicaoHabilitada(posicao, habilitada) {
+    function setPosicaoHabilitada(posicao, habilitada, limpar) {
         posicao.disabled = !habilitada;
-        if (!habilitada) {
+        if (!habilitada && limpar !== false) {
             posicao.value = '';
         }
     }
@@ -91,11 +97,11 @@
         focarCampo(codigo);
     }
 
-    function liberarFluxoCodigoNovo(codigo, posicao) {
+    function liberarFluxoCodigoNovo(codigo, posicao, avancar) {
         ultimoCodigoValidado = codigoNormalizado(codigo.value);
         ultimaValidacaoEhNovo = true;
-        setPosicaoHabilitada(posicao, true);
-        focarCampo(posicao);
+        setPosicaoHabilitada(posicao, true, false);
+        if (avancar) focarCampo(posicao);
     }
 
     function iniciar() {
@@ -106,22 +112,33 @@
         var posicao = global.document.getElementById('id_posicao');
         if (!codigo || !posicao) return;
         var validarCodigoUrl = form.dataset.validarCodigoUrl || '';
+        var sucesso = form.dataset.sucesso === '1';
 
-        if (form.dataset.sucesso === '1') {
+        if (sucesso) {
             codigo.value = '';
             posicao.value = '';
             limparAlertasPagina();
             mostrarToast(form.dataset.mensagem || 'Posição salva.', 'ok');
         }
 
-        setPosicaoHabilitada(posicao, false);
-
-        if (campoTemErro(codigo)) {
-            focarCampo(codigo);
-        } else if (campoTemErro(posicao)) {
-            setPosicaoHabilitada(posicao, true);
-            focarCampo(posicao);
+        var codigoComErro = campoTemErro(codigo);
+        var posicaoComErro = campoTemErro(posicao);
+        var erroGeral = !!form.querySelector('.alert-danger');
+        if (codigoComErro || posicaoComErro || erroGeral) {
+            if (posicao.value || posicaoComErro) {
+                setPosicaoHabilitada(posicao, true, false);
+            } else {
+                setPosicaoHabilitada(posicao, false, false);
+            }
+            if (codigoNormalizado(codigo.value)) {
+                ultimoCodigoValidado = codigoNormalizado(codigo.value);
+                ultimaValidacaoEhNovo = true;
+            }
+            if (codigoComErro) focarCampo(codigo);
+            else if (posicaoComErro) focarCampo(posicao);
+            else focarCampo(codigo);
         } else {
+            setPosicaoHabilitada(posicao, false, false);
             focarCampo(codigo);
         }
 
@@ -133,7 +150,7 @@
             }
         }
 
-        function validarCodigoImediatamente() {
+        function validarCodigoImediatamente(avancar) {
             if (validacaoEmAndamento) {
                 return;
             }
@@ -142,12 +159,12 @@
             if (!valorCodigo) {
                 ultimaValidacaoEhNovo = false;
                 setPosicaoHabilitada(posicao, false);
-                focarCampo(codigo);
+                if (avancar) focarCampo(codigo);
                 return;
             }
 
             if (ultimaValidacaoEhNovo && valorCodigo === ultimoCodigoValidado) {
-                liberarFluxoCodigoNovo(codigo, posicao);
+                liberarFluxoCodigoNovo(codigo, posicao, avancar);
                 return;
             }
 
@@ -161,7 +178,7 @@
                         bloquearFluxoCodigoExistente(codigo, posicao);
                         return;
                     }
-                    liberarFluxoCodigoNovo(codigo, posicao);
+                    liberarFluxoCodigoNovo(codigo, posicao, avancar);
                 })
                 .catch(function (error) {
                     if (error && error.name === 'AbortError') {
@@ -182,32 +199,36 @@
         });
 
         codigo.addEventListener('keydown', function (evento) {
-            var tecla = evento.key || '';
-            if (tecla !== 'Enter' && tecla !== 'Tab') return;
+            var enter = teclaEnter(evento);
+            if (!enter && evento.key !== 'Tab') return;
             evento.preventDefault();
-            validarCodigoImediatamente();
+            if (enter) evento.stopPropagation();
+            validarCodigoImediatamente(true);
         });
 
-        codigo.addEventListener('blur', function () {
+        codigo.addEventListener('blur', function (evento) {
             if (!codigoNormalizado(codigo.value)) {
                 return;
             }
             if (ultimaValidacaoEhNovo && codigoNormalizado(codigo.value) === ultimoCodigoValidado) {
                 return;
             }
-            validarCodigoImediatamente();
+            var destino = evento.relatedTarget;
+            var tag = destino && destino.tagName ? destino.tagName.toUpperCase() : '';
+            var avancar = tag !== 'BUTTON' && tag !== 'A';
+            validarCodigoImediatamente(avancar);
         });
 
         posicao.addEventListener('keydown', function (evento) {
-            if (evento.key !== 'Enter') return;
+            if (!teclaEnter(evento)) return;
             evento.preventDefault();
+            evento.stopPropagation();
             if (!ultimaValidacaoEhNovo) {
                 focarCampo(codigo);
                 return;
             }
-            if (posicao.value.trim()) {
-                form.requestSubmit();
-            }
+            var salvar = form.querySelector('button[type="submit"]');
+            if (salvar) salvar.focus();
         });
 
         form.addEventListener('submit', function (evento) {

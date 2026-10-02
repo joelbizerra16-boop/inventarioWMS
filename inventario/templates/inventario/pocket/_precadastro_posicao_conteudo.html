@@ -1,15 +1,19 @@
-<div class="pocket-page">
-    <div class="mb-4">
-        <h1 class="h3 fw-semibold text-dark mb-1">Pré-Cadastro de Posição</h1>
-        <p class="text-muted mb-0">A posição ficará disponível imediatamente para contagem.</p>
+<div class="pocket-page pocket-cadastro">
+    <div class="pocket-cadastro-topo mb-4">
+        <div class="pocket-cadastro-titulos">
+            <h1 class="h3 fw-semibold text-dark mb-1">Pré-Cadastro de Posição</h1>
+            <p class="text-muted mb-0">A posição ficará disponível imediatamente para contagem.</p>
+        </div>
+        {% include 'inventario/pocket/_precadastro_teclado.html' %}
     </div>
     <div id="pocket-toast" class="pocket-toast pocket-toast--ok" hidden aria-live="polite"></div>
-    <div class="card border-0 shadow-sm pocket-card">
+    <div class="card border-0 shadow-sm pocket-card pocket-cadastro-card">
         <div class="card-body p-4">
             <form
                 method="post"
                 novalidate
                 id="pocket-precadastro-posicao-form"
+                class="pocket-cadastro-form"
                 data-sucesso="{% if fluxo_continuo_sucesso %}1{% else %}0{% endif %}"
                 data-mensagem="{{ mensagem_fluxo|default:'Posição salva.' }}"
                 data-validar-codigo-url="{{ validar_codigo_url }}"

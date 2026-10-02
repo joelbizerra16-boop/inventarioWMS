@@ -60,7 +60,7 @@ INSTALLED_APPS = [
     'dashboard',
 ]
 
-POCKET_STATIC_VERSION = os.environ.get('POCKET_STATIC_VERSION', '20261001e')
+POCKET_STATIC_VERSION = os.environ.get('POCKET_STATIC_VERSION', '20261001f')
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

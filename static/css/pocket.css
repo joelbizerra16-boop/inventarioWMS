@@ -776,3 +776,123 @@
     padding-top: 0.3rem !important;
     padding-bottom: 0.3rem !important;
 }
+
+/* Pré-cadastro — coluna única; compacto só no coletor estreito */
+.pocket-cadastro {
+    width: 100%;
+    min-width: 0;
+    max-width: 520px;
+}
+
+.pocket-cadastro-topo {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.pocket-cadastro-titulos {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.pocket-cadastro-titulos h1,
+.pocket-cadastro-titulos p,
+.pocket-cadastro .text-danger,
+.pocket-cadastro .alert {
+    overflow-wrap: anywhere;
+}
+
+.pocket-cadastro-teclado {
+    flex: 0 0 auto;
+    min-height: 2.5rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--pocket-border);
+    background: var(--pocket-surface);
+    color: var(--pocket-navy);
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.pocket-cadastro-teclado.is-virtual {
+    background: var(--pocket-navy);
+    color: #fff;
+    border-color: var(--pocket-navy);
+}
+
+.pocket-cadastro .form-control,
+.pocket-cadastro .pocket-input,
+.pocket-cadastro textarea,
+.pocket-cadastro .pocket-btn,
+.pocket-cadastro .card {
+    max-width: 100%;
+}
+
+@media (max-width: 480px) {
+    .pocket-cadastro {
+        max-width: 100%;
+    }
+
+    .pocket-cadastro-topo {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.45rem;
+        margin-bottom: 0.55rem !important;
+    }
+
+    .pocket-cadastro-titulos h1 {
+        font-size: 1.05rem;
+        line-height: 1.2;
+        margin-bottom: 0.15rem !important;
+    }
+
+    .pocket-cadastro-titulos p {
+        font-size: 0.8125rem;
+        line-height: 1.35;
+    }
+
+    .pocket-cadastro-teclado {
+        width: 100%;
+        white-space: normal;
+    }
+
+    .pocket-cadastro .pocket-cadastro-card .card-body {
+        padding: 0.75rem !important;
+    }
+
+    .pocket-cadastro .form-label {
+        margin-bottom: 0.25rem;
+        font-size: 0.875rem;
+    }
+
+    .pocket-cadastro .mb-3 {
+        margin-bottom: 0.65rem !important;
+    }
+
+    .pocket-cadastro .form-control,
+    .pocket-cadastro .pocket-input,
+    .pocket-cadastro textarea {
+        min-height: 2.85rem;
+        font-size: 1.0625rem !important;
+        padding: 0.5rem 0.75rem !important;
+    }
+
+    .pocket-cadastro textarea {
+        min-height: 4.5rem;
+    }
+
+    .pocket-cadastro .pocket-btn {
+        min-height: 2.9rem;
+        font-size: 1rem;
+    }
+
+    .pocket-cadastro input,
+    .pocket-cadastro textarea,
+    .pocket-cadastro button,
+    .pocket-cadastro a.pocket-btn {
+        scroll-margin: 4.5rem;
+    }
+}

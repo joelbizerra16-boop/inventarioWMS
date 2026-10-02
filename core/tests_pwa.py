@@ -186,7 +186,7 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         from pathlib import Path
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261001e')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261001f')", settings_src)
 
         js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
         self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
@@ -223,3 +223,83 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
             "js/pocket-bipagem.js' %}?v={{ POCKET_STATIC_VERSION }}",
             ciclico,
         )
+        self.assertNotIn('pocket-cadastro-teclado', ciclico)
+        self.assertNotIn('pocket-cadastro.js', ciclico)
+
+    def test_precadastro_tem_teclado_e_contagem_nao(self):
+        from pathlib import Path
+
+        versao = settings.POCKET_STATIC_VERSION
+        paginas = [
+            reverse('pocket:precadastro_produto', args=[self.inventario.pk]),
+            reverse('pocket:precadastro_posicao', args=[self.inventario.pk]),
+            reverse('pocket:precadastro_posicao_ciclico'),
+        ]
+        for url in paginas:
+            resposta = self.client.get(url)
+            self.assertEqual(resposta.status_code, 200, url)
+            html = resposta.content.decode()
+            self.assertIn('id="pocket-cadastro-teclado"', html)
+            self.assertIn('Teclado: físico', html)
+            self.assertIn(f'pocket-cadastro.js?v={versao}', html)
+            self.assertIn(f'pocket.css?v={versao}', html)
+            self.assertIn('inputmode="none"', html)
+            self.assertIn('rel="manifest"', html)
+            self.assertNotIn('pocket-bipagem.js', html)
+            self.assertNotIn('POCKET_VALIDACAO_ATRASO_MS', html)
+            self.assertNotIn('maximum-scale', html)
+            self.assertNotIn('user-scalable', html)
+            self.assertNotIn('sessionStorage', html)
+            self.assertNotIn('localStorage', html)
+
+        contagem = self.client.get(
+            reverse('pocket:contagem', args=[self.inventario.pk])
+        ).content.decode()
+        self.assertNotIn('pocket-cadastro-teclado', contagem)
+        self.assertNotIn('pocket-cadastro.js', contagem)
+        self.assertNotIn('Teclado:', contagem)
+
+        contagem_tpl = Path(
+            settings.BASE_DIR,
+            'inventario',
+            'templates',
+            'inventario',
+            'pocket',
+            'contagem.html',
+        ).read_text(encoding='utf-8')
+        self.assertNotIn('pocket-cadastro-teclado', contagem_tpl)
+        self.assertNotIn('pocket-cadastro.js', contagem_tpl)
+
+        cadastro_js = Path(finders.find('js/pocket-cadastro.js')).read_text(encoding='utf-8')
+        self.assertNotIn('sessionStorage', cadastro_js)
+        self.assertNotIn('localStorage', cadastro_js)
+        self.assertNotIn('setInterval', cadastro_js)
+        self.assertNotIn('POCKET_VALIDACAO_ATRASO', cadastro_js)
+        self.assertNotIn('pocket-bipagem', cadastro_js)
+        self.assertNotIn("setAttribute('readonly'", cadastro_js)
+        self.assertNotIn("setAttribute('disabled'", cadastro_js)
+        self.assertNotIn('campo.disabled =', cadastro_js)
+        self.assertIn("data-cadastro-enviando", cadastro_js)
+        self.assertIn("virtual ? 'text' : 'none'", cadastro_js)
+
+        posicao_js = Path(finders.find('js/pocket-precadastro-posicao.js')).read_text(encoding='utf-8')
+        self.assertNotIn('requestSubmit', posicao_js)
+        self.assertNotIn('POCKET_VALIDACAO_ATRASO', posicao_js)
+        self.assertNotIn('setInterval', posicao_js)
+        self.assertIn('POSIÇÃO JÁ CADASTRADA', posicao_js)
+
+        operador, _ = criar_usuario_teste(
+            username='op.cadastro.pwa',
+            perfil=Usuario.Perfil.OPERADOR,
+        )
+        self.client.force_login(operador)
+        produto_op = self.client.get(reverse('pocket:operador_precadastro_produto'))
+        posicao_op = self.client.get(reverse('pocket:operador_precadastro_posicao'))
+        self.assertContains(produto_op, 'id="pocket-cadastro-teclado"')
+        self.assertContains(produto_op, 'Salvar pré-cadastro')
+        self.assertContains(produto_op, 'Voltar ao Pocket')
+        self.assertNotContains(produto_op, 'pocket-bipagem.js')
+        self.assertContains(posicao_op, 'id="pocket-cadastro-teclado"')
+        self.assertContains(posicao_op, 'Salvar posição')
+        self.assertContains(posicao_op, 'Voltar ao Pocket')
+        self.assertNotContains(posicao_op, 'pocket-bipagem.js')

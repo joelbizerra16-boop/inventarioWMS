@@ -12,5 +12,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/pocket-precadastro-posicao.js' %}"></script>
+<script src="{% static 'js/pocket-precadastro-posicao.js' %}?v={{ POCKET_STATIC_VERSION }}"></script>
+<script src="{% static 'js/pocket-cadastro.js' %}?v={{ POCKET_STATIC_VERSION }}"></script>
 {% endblock %}

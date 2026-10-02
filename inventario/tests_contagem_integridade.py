@@ -6,12 +6,13 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import Usuario
 from accounts.test_utils import ClienteAutenticadoMixin
 from estoque_fisico.models import EstoqueFisico
 from inventario.models import Inventario, InventarioItem
-from inventario.models_operacional import InventarioTarefa
+from inventario.models_operacional import InventarioLock, InventarioTarefa
 from inventario.services.contagem import salvar_contagem
 from posicoes.models import Posicao
 from produtos.models import Produto
@@ -39,6 +40,87 @@ class ContagemWebIntegridadeTestCase(ClienteAutenticadoMixin, TestCase):
             usuario=self.operacional,
             status=Inventario.Status.ABERTO,
         )
+
+    def test_edicao_mesma_combinacao_altera_quantidade(self):
+        item = InventarioItem.objects.create(
+            inventario=self.inventario,
+            posicao=self.posicao,
+            produto=self.produto,
+            quantidade_fisica=Decimal('1.000'),
+            usuario_contagem=self.user,
+            origem_contagem=InventarioItem.OrigemContagem.WEB,
+        )
+        url = reverse('inventario:contagem_editar', args=[self.inventario.pk, item.pk])
+        response = self.client.post(url, {
+            'posicao': self.posicao.pk,
+            'produto': self.produto.pk,
+            'quantidade_fisica': '8.250',
+        })
+        self.assertRedirects(
+            response,
+            reverse('inventario:contagem_lista', args=[self.inventario.pk]),
+        )
+        item.refresh_from_db()
+        self.assertEqual(item.quantidade_fisica, Decimal('8.250'))
+        self.assertEqual(item.posicao_id, self.posicao.pk)
+        self.assertEqual(item.produto_id, self.produto.pk)
+
+    def test_edicao_roundtrip_do_formulario_renderizado(self):
+        item = InventarioItem.objects.create(
+            inventario=self.inventario,
+            posicao=self.posicao,
+            produto=self.produto,
+            quantidade_fisica=Decimal('2.500'),
+        )
+        url = reverse('inventario:contagem_editar', args=[self.inventario.pk, item.pk])
+        pagina = self.client.get(url)
+        self.assertEqual(pagina.status_code, 200)
+        self.assertContains(pagina, 'Editar Contagem')
+        self.assertContains(pagina, 'Atualizar')
+        response = self.client.post(url, {
+            'posicao': self.posicao.pk,
+            'produto': self.produto.pk,
+            'quantidade_fisica': '3',
+        })
+        self.assertRedirects(
+            response,
+            reverse('inventario:contagem_lista', args=[self.inventario.pk]),
+        )
+
+    def test_edicao_com_lock_de_outro_operador_nao_redireciona_dashboard(self):
+        outro = User.objects.create_user(username='lock.outro', password='senha12345')
+        agora = timezone.now()
+        InventarioLock.objects.create(
+            tipo_inventario=InventarioLock.TipoInventario.GERAL,
+            inventario=self.inventario,
+            posicao=self.posicao,
+            usuario=outro,
+            adquirido_em=agora,
+            renovado_em=agora,
+            expira_em=agora + timezone.timedelta(minutes=15),
+            ativo=True,
+            session_key='',
+        )
+        item = InventarioItem.objects.create(
+            inventario=self.inventario,
+            posicao=self.posicao,
+            produto=self.produto,
+            quantidade_fisica=Decimal('1'),
+        )
+        url = reverse('inventario:contagem_editar', args=[self.inventario.pk, item.pk])
+        response = self.client.post(url, {
+            'posicao': self.posicao.pk,
+            'produto': self.produto.pk,
+            'quantidade_fisica': '6',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Editar Contagem')
+        self.assertContains(response, 'Posição em contagem por outro operador.')
+        self.assertNotContains(response, 'Ocorreu um erro inesperado')
+        item.refresh_from_db()
+        self.assertEqual(item.quantidade_fisica, Decimal('1'))
+        self.assertEqual(item.posicao_id, self.posicao.pk)
+        self.assertEqual(item.produto_id, self.produto.pk)
 
     def test_edicao_grava_nova_posicao_e_produto(self):
         item = InventarioItem.objects.create(
