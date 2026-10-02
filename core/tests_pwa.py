@@ -186,7 +186,7 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         from pathlib import Path
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002a')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002b')", settings_src)
 
         js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
         self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
@@ -303,3 +303,26 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertContains(posicao_op, 'Salvar posição')
         self.assertContains(posicao_op, 'Voltar ao Pocket')
         self.assertNotContains(posicao_op, 'pocket-bipagem.js')
+
+    def test_bip_preserva_codigo_selecionado_e_confirma_no_keyup(self):
+        import re
+        from pathlib import Path
+
+        js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
+        self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
+        self.assertIn('function instalarRecepcaoDeLeitura', js)
+        self.assertIn("addEventListener('keyup'", js)
+        self.assertNotIn("addEventListener('blur'", js)
+        self.assertNotIn('localStorage', js)
+        self.assertNotIn('sessionStorage', js)
+        foco = js.split('function focarCampo', 1)[1].split('function focoNoCampo', 1)[0]
+        self.assertNotIn('requestAnimationFrame', foco)
+        self.assertNotIn('setTimeout', foco)
+        self.assertIn('!el.value', foco)
+
+        leitura = js.split('function registrarLeituraCampo', 1)[1].split(
+            'function initAudioTouch', 1
+        )[0]
+        self.assertIn('confirmaPendente', leitura)
+        self.assertIn('controle.cancelar()', leitura)
+        self.assertNotIn('setInterval', leitura)

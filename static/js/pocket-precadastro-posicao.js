@@ -19,10 +19,16 @@
 
     function focarCampo(el) {
         if (!el || el.disabled || el.readOnly) return;
-        global.requestAnimationFrame(function () {
+        // Síncrono: adiar o foco para o frame seguinte sai do gesto e o Android descarta.
+        try {
+            el.focus({ preventScroll: true });
+        } catch (_e) {
             el.focus();
-            if (el.select) el.select();
-        });
+        }
+        if (!el.value || typeof el.setSelectionRange !== 'function') return;
+        try {
+            el.setSelectionRange(0, el.value.length);
+        } catch (_e2) { /* campo sem seleção */ }
     }
 
     function campoTemErro(field) {
@@ -200,9 +206,20 @@
 
         codigo.addEventListener('keydown', function (evento) {
             var enter = teclaEnter(evento);
-            if (!enter && evento.key !== 'Tab') return;
+            var tab = evento.key === 'Tab';
+            if (!enter && !tab) return;
             evento.preventDefault();
-            if (enter) evento.stopPropagation();
+            evento.stopPropagation();
+            codigo.setAttribute('data-codigo-confirma-pendente', '1');
+        });
+
+        codigo.addEventListener('keyup', function (evento) {
+            var enter = teclaEnter(evento);
+            var tab = evento.key === 'Tab';
+            if (!enter && !tab) return;
+            if (codigo.getAttribute('data-codigo-confirma-pendente') !== '1') return;
+            codigo.removeAttribute('data-codigo-confirma-pendente');
+            evento.stopPropagation();
             validarCodigoImediatamente(true);
         });
 
@@ -222,6 +239,14 @@
         posicao.addEventListener('keydown', function (evento) {
             if (!teclaEnter(evento)) return;
             evento.preventDefault();
+            evento.stopPropagation();
+            posicao.setAttribute('data-posicao-enter-pendente', '1');
+        });
+
+        posicao.addEventListener('keyup', function (evento) {
+            if (!teclaEnter(evento)) return;
+            if (posicao.getAttribute('data-posicao-enter-pendente') !== '1') return;
+            posicao.removeAttribute('data-posicao-enter-pendente');
             evento.stopPropagation();
             if (!ultimaValidacaoEhNovo) {
                 focarCampo(codigo);

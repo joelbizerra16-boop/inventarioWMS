@@ -278,6 +278,57 @@ class PrecadastroNaoUsaFluxoDeContagemTestCase(TestCase):
             self.assertNotIn('type="number"', html)
             self.assertIn('inputmode="none"', html)
 
+    def test_codigo_recebe_bip_sem_virar_campo_de_descricao(self):
+        from pathlib import Path
+
+        usuario, _perfil = criar_usuario_teste(
+            username='op.bip.codigo',
+            perfil=Usuario.Perfil.OPERADOR,
+        )
+        self.client.force_login(usuario)
+        produto = self.client.get(reverse('pocket:operador_precadastro_produto')).content.decode()
+        posicao = self.client.get(reverse('pocket:operador_precadastro_posicao')).content.decode()
+
+        sku = re.search(r'<input\b[^>]*\bname="codigo_produto"[^>]*>', produto)
+        descricao = re.search(r'<input\b[^>]*\bname="descricao"[^>]*>', produto)
+        codigo = re.search(r'<input\b[^>]*\bname="codigo"[^>]*>', posicao)
+        nome = re.search(r'<input\b[^>]*\bname="posicao"[^>]*>', posicao)
+        self.assertIsNotNone(sku)
+        self.assertIsNotNone(descricao)
+        self.assertIsNotNone(codigo)
+        self.assertIsNotNone(nome)
+        for tag in (sku.group(0), codigo.group(0)):
+            self.assertIn('type="text"', tag)
+            self.assertIn('inputmode="none"', tag)
+            self.assertIn('autofocus', tag)
+            self.assertIn('maxlength="50"', tag)
+            self.assertNotIn('readonly', tag)
+            self.assertNotIn('disabled', tag)
+            self.assertNotIn('type="number"', tag)
+        self.assertNotIn('autofocus', descricao.group(0))
+        self.assertNotIn('autofocus', nome.group(0))
+        self.assertNotIn('data-cadastro-enter', descricao.group(0))
+        self.assertIn('data-cadastro-enter="validar-codigo"', codigo.group(0))
+        self.assertIsNotNone(re.search(r'<select\b[^>]*\bname="embalagem"', produto))
+        self.assertIn('Não informado', produto)
+
+        cadastro = Path(settings.BASE_DIR, 'static', 'js', 'pocket-cadastro.js').read_text(encoding='utf-8')
+        fluxo = Path(settings.BASE_DIR, 'static', 'js', 'pocket-precadastro-posicao.js').read_text(encoding='utf-8')
+        self.assertIn('function instalarRecepcaoDeLeitura', cadastro)
+        self.assertNotIn('requestAnimationFrame', cadastro)
+        self.assertNotIn('POCKET_VALIDACAO_ATRASO', cadastro)
+        self.assertNotIn('localStorage', cadastro)
+        self.assertNotIn('sessionStorage', cadastro)
+        self.assertIn("addEventListener('keyup'", cadastro)
+        self.assertIn('data-cadastro-enter-pendente', cadastro)
+        foco = fluxo.split('function focarCampo', 1)[1].split('function campoTemErro', 1)[0]
+        self.assertNotIn('requestAnimationFrame', foco)
+        self.assertNotIn('setTimeout', foco)
+        self.assertIn('.focus(', foco)
+        self.assertIn('data-codigo-confirma-pendente', fluxo)
+        self.assertIn("addEventListener('keyup'", fluxo)
+        self.assertNotIn('POCKET_VALIDACAO_ATRASO', fluxo)
+
 
 def _criar_catalogo(codigo, embalagem, descricao='Catálogo'):
     return Produto.objects.create(
@@ -499,4 +550,4 @@ class EmbalagemComboboxPrecadastroTestCase(TestCase):
         self.assertEqual(bipagem.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002a')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002b')", settings_src)

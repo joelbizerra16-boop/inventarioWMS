@@ -140,7 +140,10 @@
         } catch (_e) {
             el.focus();
         }
-        if (selecionar !== false && typeof el.select === 'function') {
+        // Campo vazio não fica selecionado: no Android o select() faz o wedge
+        // seguinte substituir cada tecla pela anterior e sobra só o último caractere.
+        if (selecionar === false || !el.value) return;
+        if (typeof el.select === 'function') {
             try {
                 el.select();
             } catch (_e2) { /* campo sem seleção */ }
@@ -298,14 +301,117 @@
             evento.keyCode === 13 || evento.which === 13;
     }
 
+    function instalarRecepcaoDeLeitura(campo) {
+        if (!campo || campo.getAttribute('data-pocket-recepcao') === '1') return;
+        campo.setAttribute('data-pocket-recepcao', '1');
+        var substituindo = false;
+        var viaTecla = false;
+
+        function limite() {
+            var bruto = campo.getAttribute('maxlength');
+            if (!bruto) return 0;
+            var n = parseInt(bruto, 10);
+            return n > 0 ? n : 0;
+        }
+
+        function aplicar(novo, cursor) {
+            var max = limite();
+            if (max && novo.length > max) {
+                novo = novo.slice(0, max);
+                if (cursor > novo.length) cursor = novo.length;
+            }
+            campo.value = novo;
+            try {
+                campo.setSelectionRange(cursor, cursor);
+            } catch (_e) { /* campo sem seleção */ }
+            campo.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        function selecionouTudo() {
+            var valor = campo.value || '';
+            if (!valor.length) return false;
+            var inicio = campo.selectionStart;
+            var fim = campo.selectionEnd;
+            return inicio === 0 && fim === valor.length;
+        }
+
+        function inserir(texto) {
+            var valor = campo.value || '';
+            if (substituindo) {
+                var acrescentado = valor + texto;
+                aplicar(acrescentado, acrescentado.length);
+                return;
+            }
+            substituindo = true;
+            aplicar(texto, texto.length);
+        }
+
+        function soltarSubstituicao(evento) {
+            if (evento.ctrlKey || evento.altKey || evento.metaKey) {
+                substituindo = false;
+                return true;
+            }
+            var key = evento.key;
+            if (!key || key === 'Enter' || key === 'NumpadEnter' || key === 'Tab' ||
+                key === 'Backspace' || key === 'Delete' ||
+                key === 'ArrowLeft' || key === 'ArrowRight' ||
+                key === 'ArrowUp' || key === 'ArrowDown' ||
+                key === 'Home' || key === 'End' || key === 'Escape') {
+                substituindo = false;
+                return true;
+            }
+            return false;
+        }
+
+        campo.addEventListener('focus', function () {
+            substituindo = false;
+        });
+        campo.addEventListener('pointerdown', function () {
+            substituindo = false;
+        });
+        campo.addEventListener('compositionstart', function () {
+            substituindo = false;
+        });
+        campo.addEventListener('keydown', function (evento) {
+            viaTecla = false;
+            if (evento.isComposing || evento.key === 'Process' || evento.key === 'Unidentified') {
+                return;
+            }
+            if (soltarSubstituicao(evento)) return;
+            if (!evento.key || evento.key.length !== 1) return;
+            if (!substituindo && !selecionouTudo()) return;
+            evento.preventDefault();
+            viaTecla = true;
+            inserir(evento.key);
+        }, true);
+        campo.addEventListener('beforeinput', function (evento) {
+            if (viaTecla) {
+                viaTecla = false;
+                return;
+            }
+            if (evento.isComposing || evento.defaultPrevented) return;
+            if (!evento.data || evento.data.length !== 1) return;
+            if (evento.inputType && evento.inputType !== 'insertText') return;
+            if (!substituindo && !selecionouTudo()) return;
+            evento.preventDefault();
+            inserir(evento.data);
+        });
+    }
+
     function registrarEnter(campo, callback) {
         if (!campo) return;
+        instalarRecepcaoDeLeitura(campo);
+        var pendente = false;
         campo.addEventListener('keydown', function (evento) {
-            if (teclaConfirma(evento)) {
-                evento.preventDefault();
-                evento.stopPropagation();
-                callback();
-            }
+            if (!teclaConfirma(evento)) return;
+            evento.preventDefault();
+            evento.stopPropagation();
+            pendente = true;
+        });
+        campo.addEventListener('keyup', function (evento) {
+            if (!pendente || !teclaConfirma(evento)) return;
+            pendente = false;
+            callback();
         });
     }
 
@@ -404,11 +510,23 @@
         campo.addEventListener('compositionend', function () {
             controle.aoCompositionEnd();
         });
+        instalarRecepcaoDeLeitura(campo);
+        var confirmaPendente = false;
         campo.addEventListener('keydown', function (evento) {
-            var confirma = teclaConfirma(evento) || (opcoes.tabConfirma && evento.key === 'Tab');
+            var tab = !!(opcoes.tabConfirma && evento.key === 'Tab');
+            var confirma = teclaConfirma(evento) || tab;
             if (!confirma) return;
             evento.preventDefault();
             evento.stopPropagation();
+            if (controle.emComposicao()) return;
+            controle.cancelar();
+            confirmaPendente = true;
+        });
+        campo.addEventListener('keyup', function (evento) {
+            if (!confirmaPendente) return;
+            var tab = !!(opcoes.tabConfirma && evento.key === 'Tab');
+            if (!teclaConfirma(evento) && !tab) return;
+            confirmaPendente = false;
             if (controle.emComposicao()) return;
             controle.aoEnter();
         });
