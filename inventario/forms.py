@@ -73,7 +73,6 @@ class PocketContagemForm(forms.Form):
             'spellcheck': 'false',
             'autofocus': True,
             'placeholder': 'Bipar posição',
-            'virtualkeyboardpolicy': 'manual',
         }),
     )
     codigo_produto = forms.CharField(
@@ -87,7 +86,6 @@ class PocketContagemForm(forms.Form):
             'autocapitalize': 'off',
             'spellcheck': 'false',
             'placeholder': 'Bipar produto ou EAN',
-            'virtualkeyboardpolicy': 'manual',
         }),
     )
     quantidade_fisica = forms.IntegerField(
@@ -104,7 +102,6 @@ class PocketContagemForm(forms.Form):
             'autocorrect': 'off',
             'spellcheck': 'false',
             'inputmode': 'numeric',
-            'virtualkeyboardpolicy': 'manual',
         }),
     )
     dispositivo = forms.CharField(
@@ -153,7 +150,6 @@ class PocketContagemCiclicoForm(forms.Form):
             'spellcheck': 'false',
             'autofocus': True,
             'placeholder': 'Bipar posição',
-            'virtualkeyboardpolicy': 'manual',
         }),
     )
     quantidade_fisica = forms.IntegerField(
@@ -170,7 +166,6 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocorrect': 'off',
             'spellcheck': 'false',
             'inputmode': 'numeric',
-            'virtualkeyboardpolicy': 'manual',
         }),
     )
     codigo_produto_lido = forms.CharField(
@@ -185,7 +180,6 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocapitalize': 'off',
             'spellcheck': 'false',
             'placeholder': 'Bipar produto ou EAN',
-            'virtualkeyboardpolicy': 'manual',
         }),
     )
 

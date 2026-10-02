@@ -7,49 +7,6 @@
 
     var TOAST_MS = 2200;
     var toastTimer = null;
-    var botaoTecladoPosicao = null;
-
-    // Só age se navigator.virtualKeyboard existir. Sem a API o botão some
-    // e o teclado do sistema continua abrindo no foco.
-    function tecladoVirtual() {
-        var nav = global.navigator;
-        if (!nav || !('virtualKeyboard' in nav) || !nav.virtualKeyboard) return null;
-        var vk = nav.virtualKeyboard;
-        if (typeof vk.hide !== 'function' || typeof vk.show !== 'function') return null;
-        return vk;
-    }
-
-    function esconderTecladoVirtual() {
-        var vk = tecladoVirtual();
-        if (!vk) return;
-        try {
-            vk.hide();
-        } catch (_e) { /* sem gesto recente ou API indisponível */ }
-    }
-
-    function configurarTecladoDaPosicao(posicao, botao) {
-        if (!botao) return;
-        if (!tecladoVirtual()) {
-            botao.hidden = true;
-            return;
-        }
-        botao.addEventListener('mousedown', function (evento) {
-            evento.preventDefault();
-        });
-        botao.addEventListener('click', function () {
-            if (!posicao || posicao.disabled) return;
-            try {
-                posicao.focus({ preventScroll: true });
-            } catch (_e) {
-                posicao.focus();
-            }
-            var vk = tecladoVirtual();
-            if (!vk) return;
-            try {
-                vk.show();
-            } catch (_e2) { /* sem gesto recente */ }
-        });
-    }
     var ultimoCodigoValidado = '';
     var ultimaValidacaoEhNovo = false;
     var validacaoController = null;
@@ -102,7 +59,6 @@
 
     function setPosicaoHabilitada(posicao, habilitada, limpar) {
         posicao.disabled = !habilitada;
-        if (botaoTecladoPosicao) botaoTecladoPosicao.disabled = !habilitada;
         if (!habilitada && limpar !== false) {
             posicao.value = '';
         }
@@ -161,9 +117,6 @@
         var codigo = global.document.getElementById('id_codigo');
         var posicao = global.document.getElementById('id_posicao');
         if (!codigo || !posicao) return;
-        botaoTecladoPosicao = global.document.getElementById('pocket-posicao-teclado');
-        configurarTecladoDaPosicao(posicao, botaoTecladoPosicao);
-        codigo.addEventListener('focus', esconderTecladoVirtual);
         var validarCodigoUrl = form.dataset.validarCodigoUrl || '';
         var sucesso = form.dataset.sucesso === '1';
 
@@ -285,7 +238,6 @@
 
         posicao.addEventListener('keydown', function (evento) {
             if (!teclaEnter(evento)) return;
-            esconderTecladoVirtual();
             evento.preventDefault();
             evento.stopPropagation();
             posicao.setAttribute('data-posicao-enter-pendente', '1');
@@ -303,13 +255,6 @@
             var salvar = form.querySelector('button[type="submit"]');
             if (salvar) salvar.focus();
         });
-
-        var salvar = form.querySelector('button[type="submit"]');
-        if (salvar) {
-            salvar.addEventListener('pointerdown', function () {
-                if (global.document.activeElement === posicao) esconderTecladoVirtual();
-            });
-        }
 
         form.addEventListener('submit', function (evento) {
             if (!ultimaValidacaoEhNovo) {

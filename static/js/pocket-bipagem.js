@@ -10,30 +10,6 @@
     // Único atraso da validação de Posição e Produto/EAN. Não vale para Quantidade.
     var POCKET_VALIDACAO_ATRASO_MS = 2000;
 
-    // Chrome 94+: virtualkeyboardpolicy=manual impede o teclado de abrir no foco.
-    // Sem a API o atributo é ignorado e a leitura segue como está. Não usa inputmode=none.
-    function tecladoVirtual() {
-        var nav = global.navigator;
-        if (!nav || !('virtualKeyboard' in nav) || !nav.virtualKeyboard) return null;
-        var vk = nav.virtualKeyboard;
-        if (typeof vk.hide !== 'function') return null;
-        return vk;
-    }
-
-    function ocultarTecladoSeManual(campo) {
-        if (!campo || campo.getAttribute('data-pocket-vk-manual') === '1') return;
-        if (campo.getAttribute('virtualkeyboardpolicy') !== 'manual') return;
-        if (!tecladoVirtual()) return;
-        campo.setAttribute('data-pocket-vk-manual', '1');
-        campo.addEventListener('focus', function () {
-            var vk = tecladoVirtual();
-            if (!vk) return;
-            try {
-                vk.hide();
-            } catch (_e) { /* sem gesto recente ou API indisponível */ }
-        });
-    }
-
     function opcoesFetchPocket(csrfToken) {
         return {
             credentials: 'same-origin',
@@ -810,9 +786,6 @@
         var posicaoInput = config.posicaoInput;
         var produtoInput = config.produtoInput;
         var quantidadeInput = config.quantidadeInput;
-        ocultarTecladoSeManual(posicaoInput);
-        ocultarTecladoSeManual(produtoInput);
-        ocultarTecladoSeManual(quantidadeInput);
         var posicaoConfirm = config.posicaoConfirm;
         var posicaoLabel = config.posicaoLabel;
         var descricaoConfirm = config.descricaoConfirm;
@@ -1240,9 +1213,6 @@
         var posicaoInput = config.posicaoInput;
         var produtoInput = config.produtoInput;
         var quantidadeInput = config.quantidadeInput;
-        ocultarTecladoSeManual(posicaoInput);
-        ocultarTecladoSeManual(produtoInput);
-        ocultarTecladoSeManual(quantidadeInput);
         var skuSelect = config.skuSelect;
         var form = config.form;
         config.mapaPosicoes = config.mapaPosicoes || {};
