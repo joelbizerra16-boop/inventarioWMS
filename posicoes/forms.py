@@ -25,7 +25,6 @@ class PrecadastroPosicaoOperadorForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
             'autofocus': True,
             'data-cadastro-enter': 'validar-codigo',
         }),
@@ -36,7 +35,6 @@ class PrecadastroPosicaoOperadorForm(forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input',
             'autocomplete': 'off',
-            'inputmode': 'none',
         }),
     )
 
@@ -51,7 +49,6 @@ class PrecadastroPosicaoForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
             'autofocus': True,
             'data-cadastro-enter': 'validar-codigo',
         }),
@@ -62,7 +59,6 @@ class PrecadastroPosicaoForm(forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input',
             'autocomplete': 'off',
-            'inputmode': 'none',
         }),
     )
 

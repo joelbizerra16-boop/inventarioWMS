@@ -157,9 +157,14 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
             self.assertIsNotNone(tag, nome)
             attrs = tag.group(0)
             self.assertIn('type="text"', attrs, nome)
-            self.assertIn('inputmode="none"', attrs, nome)
+            self.assertNotIn('inputmode="none"', attrs, nome)
             self.assertNotIn('readonly', attrs, nome)
             self.assertNotIn('disabled', attrs, nome)
+        for nome in ('codigo_posicao', 'codigo_produto'):
+            tag = re.search(rf'<input\b[^>]*\bname="{nome}"[^>]*>', html)
+            self.assertNotIn('inputmode=', tag.group(0), nome)
+        quantidade = re.search(r'<input\b[^>]*\bname="quantidade_fisica"[^>]*>', html)
+        self.assertIn('inputmode="numeric"', quantidade.group(0))
         posicao = re.search(r'<input\b[^>]*\bname="codigo_posicao"[^>]*>', html)
         self.assertIn('autofocus', posicao.group(0))
         self.assertIn(f'pocket-bipagem.js?v={settings.POCKET_STATIC_VERSION}', html)
@@ -186,7 +191,7 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         from pathlib import Path
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002b')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002c')", settings_src)
 
         js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
         self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
@@ -243,7 +248,7 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
             self.assertIn('Teclado: físico', html)
             self.assertIn(f'pocket-cadastro.js?v={versao}', html)
             self.assertIn(f'pocket.css?v={versao}', html)
-            self.assertIn('inputmode="none"', html)
+            self.assertNotIn('inputmode="none"', html)
             self.assertIn('rel="manifest"', html)
             self.assertNotIn('pocket-bipagem.js', html)
             self.assertNotIn('POCKET_VALIDACAO_ATRASO_MS', html)
@@ -280,7 +285,8 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertNotIn("setAttribute('disabled'", cadastro_js)
         self.assertNotIn('campo.disabled =', cadastro_js)
         self.assertIn("data-cadastro-enviando", cadastro_js)
-        self.assertIn("virtual ? 'text' : 'none'", cadastro_js)
+        self.assertIn("removeAttribute('inputmode')", cadastro_js)
+        self.assertNotIn("virtual ? 'text' : 'none'", cadastro_js)
 
         posicao_js = Path(finders.find('js/pocket-precadastro-posicao.js')).read_text(encoding='utf-8')
         self.assertNotIn('requestSubmit', posicao_js)

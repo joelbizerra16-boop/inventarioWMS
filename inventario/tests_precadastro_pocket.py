@@ -276,7 +276,7 @@ class PrecadastroNaoUsaFluxoDeContagemTestCase(TestCase):
             self.assertNotIn('POCKET_VALIDACAO_ATRASO_MS', html)
             self.assertIn('type="text"', html)
             self.assertNotIn('type="number"', html)
-            self.assertIn('inputmode="none"', html)
+            self.assertNotIn('inputmode="none"', html)
 
     def test_codigo_recebe_bip_sem_virar_campo_de_descricao(self):
         from pathlib import Path
@@ -299,7 +299,7 @@ class PrecadastroNaoUsaFluxoDeContagemTestCase(TestCase):
         self.assertIsNotNone(nome)
         for tag in (sku.group(0), codigo.group(0)):
             self.assertIn('type="text"', tag)
-            self.assertIn('inputmode="none"', tag)
+            self.assertNotIn('inputmode=', tag)
             self.assertIn('autofocus', tag)
             self.assertIn('maxlength="50"', tag)
             self.assertNotIn('readonly', tag)
@@ -550,4 +550,4 @@ class EmbalagemComboboxPrecadastroTestCase(TestCase):
         self.assertEqual(bipagem.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002b')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002c')", settings_src)

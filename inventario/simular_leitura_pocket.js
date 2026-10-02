@@ -451,7 +451,7 @@ function simularCadastro() {
         assert(codigo.value === '07890', 'teclado não apaga o código, veio ' + codigo.value);
         assert(codigo.getAttribute('inputmode') === 'text', 'teclado virtual liga inputmode text');
         teclado.dispatchEvent(evento('click', {}));
-        assert(codigo.getAttribute('inputmode') === 'none', 'teclado físico volta para inputmode none');
+        assert(codigo.getAttribute('inputmode') === null, 'teclado físico tira inputmode para o wedge gravar');
         assert(codigo.value === '07890', 'voltar o teclado não apaga o código');
     });
 }

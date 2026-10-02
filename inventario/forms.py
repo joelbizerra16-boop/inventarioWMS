@@ -71,7 +71,6 @@ class PocketContagemForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
             'autofocus': True,
             'placeholder': 'Bipar posição',
         }),
@@ -86,7 +85,6 @@ class PocketContagemForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
             'placeholder': 'Bipar produto ou EAN',
         }),
     )
@@ -103,7 +101,7 @@ class PocketContagemForm(forms.Form):
             'autocomplete': 'off',
             'autocorrect': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
+            'inputmode': 'numeric',
         }),
     )
     dispositivo = forms.CharField(
@@ -150,7 +148,6 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
             'autofocus': True,
             'placeholder': 'Bipar posição',
         }),
@@ -168,7 +165,7 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocomplete': 'off',
             'autocorrect': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
+            'inputmode': 'numeric',
         }),
     )
     codigo_produto_lido = forms.CharField(
@@ -182,7 +179,6 @@ class PocketContagemCiclicoForm(forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
             'placeholder': 'Bipar produto ou EAN',
         }),
     )

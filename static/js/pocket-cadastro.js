@@ -195,9 +195,14 @@
     }
 
     function aplicarModo(campos, virtual) {
-        var modo = virtual ? 'text' : 'none';
+        // inputmode=none esconde o teclado, mas no Android o wedge deixa de gravar.
+        // Físico: sem o atributo, para o leitor entregar o código. Virtual: texto.
         campos.forEach(function (campo) {
-            campo.setAttribute('inputmode', modo);
+            if (virtual) {
+                campo.setAttribute('inputmode', 'text');
+            } else {
+                campo.removeAttribute('inputmode');
+            }
         });
     }
 

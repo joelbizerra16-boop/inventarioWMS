@@ -100,7 +100,6 @@ class PrecadastroProdutoOperadorForm(EmbalagemCatalogoFormMixin, forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
             'autofocus': True,
         }),
     )
@@ -110,7 +109,6 @@ class PrecadastroProdutoOperadorForm(EmbalagemCatalogoFormMixin, forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input',
             'autocomplete': 'off',
-            'inputmode': 'none',
         }),
     )
     embalagem = forms.ChoiceField(
@@ -134,7 +132,6 @@ class PrecadastroProdutoForm(EmbalagemCatalogoFormMixin, forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
             'autofocus': True,
         }),
     )
@@ -144,7 +141,6 @@ class PrecadastroProdutoForm(EmbalagemCatalogoFormMixin, forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input',
             'autocomplete': 'off',
-            'inputmode': 'none',
         }),
     )
     codigo_ean = forms.CharField(
@@ -157,7 +153,6 @@ class PrecadastroProdutoForm(EmbalagemCatalogoFormMixin, forms.Form):
             'autocorrect': 'off',
             'autocapitalize': 'off',
             'spellcheck': 'false',
-            'inputmode': 'none',
         }),
     )
     embalagem = forms.ChoiceField(
@@ -176,7 +171,6 @@ class PrecadastroProdutoForm(EmbalagemCatalogoFormMixin, forms.Form):
             'class': 'form-control pocket-input',
             'rows': 2,
             'autocomplete': 'off',
-            'inputmode': 'none',
         }),
     )
 
