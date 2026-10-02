@@ -823,6 +823,35 @@
     border-color: var(--pocket-navy);
 }
 
+.pocket-posicao-teclado-linha {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.pocket-posicao-teclado-linha .form-label {
+    margin-bottom: 0;
+}
+
+.pocket-posicao-teclado {
+    flex: 0 0 auto;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid var(--pocket-border);
+    background: var(--pocket-surface);
+    color: var(--pocket-navy);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.pocket-posicao-teclado:disabled {
+    opacity: 0.45;
+}
+
 .pocket-cadastro .form-control,
 .pocket-cadastro .pocket-input,
 .pocket-cadastro textarea,

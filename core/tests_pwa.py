@@ -157,6 +157,7 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
             self.assertIsNotNone(tag, nome)
             attrs = tag.group(0)
             self.assertIn('type="text"', attrs, nome)
+            self.assertIn('virtualkeyboardpolicy="manual"', attrs, nome)
             self.assertNotIn('inputmode="none"', attrs, nome)
             self.assertNotIn('readonly', attrs, nome)
             self.assertNotIn('disabled', attrs, nome)
@@ -167,6 +168,8 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertIn('inputmode="numeric"', quantidade.group(0))
         posicao = re.search(r'<input\b[^>]*\bname="codigo_posicao"[^>]*>', html)
         self.assertIn('autofocus', posicao.group(0))
+        self.assertNotIn('id="pocket-posicao-teclado"', html)
+        self.assertNotIn('Abrir teclado', html)
         self.assertIn(f'pocket-bipagem.js?v={settings.POCKET_STATIC_VERSION}', html)
         self.assertIn(f'pocket.css?v={settings.POCKET_STATIC_VERSION}', html)
         self.assertIn('rel="manifest"', html)
@@ -176,6 +179,12 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertNotIn('localStorage', js)
         self.assertNotIn('pocket-teclado-virtual', js)
         self.assertNotIn('initTecladoColetor', js)
+        self.assertIn('function tecladoVirtual', js)
+        self.assertIn('vk.hide()', js)
+        self.assertNotIn('vk.show()', js)
+        self.assertNotIn('overlaysContent', js)
+        self.assertNotIn('pocket-posicao-teclado', js)
+        self.assertNotIn("setAttribute('inputmode', 'none')", js)
         foco = js.split('function focarCampo', 1)[1].split('function marcarErro', 1)[0]
         self.assertIn('.focus(', foco)
         self.assertNotIn('setInterval', foco)
@@ -187,11 +196,23 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertNotIn('.focus(', sync)
         self.assertIn('focarCampo(opcoes.posicaoInput)', js)
 
+        from inventario.forms import PocketContagemCiclicoForm
+
+        ciclico_form = PocketContagemCiclicoForm(fila=[])
+        for nome in ('codigo_posicao', 'codigo_produto_lido', 'quantidade_fisica'):
+            campo = str(ciclico_form[nome])
+            self.assertIn('type="text"', campo, nome)
+            self.assertIn('virtualkeyboardpolicy="manual"', campo, nome)
+            self.assertNotIn('inputmode="none"', campo, nome)
+        self.assertNotIn('inputmode=', str(ciclico_form['codigo_posicao']))
+        self.assertNotIn('inputmode=', str(ciclico_form['codigo_produto_lido']))
+        self.assertIn('inputmode="numeric"', str(ciclico_form['quantidade_fisica']))
+
     def test_leitura_de_posicao_e_produto_espera_sem_salvar_quantidade(self):
         from pathlib import Path
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002c')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002d')", settings_src)
 
         js = Path(finders.find('js/pocket-bipagem.js')).read_text(encoding='utf-8')
         self.assertEqual(js.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
@@ -232,21 +253,44 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertNotIn('pocket-cadastro.js', ciclico)
 
     def test_precadastro_tem_teclado_e_contagem_nao(self):
+        import re
         from pathlib import Path
 
         versao = settings.POCKET_STATIC_VERSION
-        paginas = [
-            reverse('pocket:precadastro_produto', args=[self.inventario.pk]),
+        produto = self.client.get(
+            reverse('pocket:precadastro_produto', args=[self.inventario.pk])
+        )
+        self.assertEqual(produto.status_code, 200)
+        html_produto = produto.content.decode()
+        self.assertIn('id="pocket-cadastro-teclado"', html_produto)
+        self.assertIn('Teclado: físico', html_produto)
+        self.assertNotIn('virtualkeyboardpolicy', html_produto)
+        self.assertNotIn('id="pocket-posicao-teclado"', html_produto)
+        self.assertIn(f'pocket-cadastro.js?v={versao}', html_produto)
+        self.assertIn(f'pocket.css?v={versao}', html_produto)
+        self.assertNotIn('inputmode="none"', html_produto)
+        self.assertIn('rel="manifest"', html_produto)
+        self.assertNotIn('pocket-bipagem.js', html_produto)
+        self.assertNotIn('POCKET_VALIDACAO_ATRASO_MS', html_produto)
+        self.assertNotIn('maximum-scale', html_produto)
+        self.assertNotIn('user-scalable', html_produto)
+        self.assertNotIn('sessionStorage', html_produto)
+        self.assertNotIn('localStorage', html_produto)
+
+        paginas_posicao = [
             reverse('pocket:precadastro_posicao', args=[self.inventario.pk]),
             reverse('pocket:precadastro_posicao_ciclico'),
         ]
-        for url in paginas:
+        for url in paginas_posicao:
             resposta = self.client.get(url)
             self.assertEqual(resposta.status_code, 200, url)
             html = resposta.content.decode()
-            self.assertIn('id="pocket-cadastro-teclado"', html)
-            self.assertIn('Teclado: físico', html)
+            self.assertIn('id="pocket-posicao-teclado"', html)
+            self.assertIn('Abrir teclado', html)
+            self.assertNotIn('id="pocket-cadastro-teclado"', html)
+            self.assertNotIn('Teclado: físico', html)
             self.assertIn(f'pocket-cadastro.js?v={versao}', html)
+            self.assertIn(f'pocket-precadastro-posicao.js?v={versao}', html)
             self.assertIn(f'pocket.css?v={versao}', html)
             self.assertNotIn('inputmode="none"', html)
             self.assertIn('rel="manifest"', html)
@@ -256,11 +300,21 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
             self.assertNotIn('user-scalable', html)
             self.assertNotIn('sessionStorage', html)
             self.assertNotIn('localStorage', html)
+            codigo = re.search(r'<input\b[^>]*\bname="codigo"[^>]*>', html)
+            nome = re.search(r'<input\b[^>]*\bname="posicao"[^>]*>', html)
+            self.assertIsNotNone(codigo, url)
+            self.assertIsNotNone(nome, url)
+            self.assertIn('type="text"', codigo.group(0))
+            self.assertIn('virtualkeyboardpolicy="manual"', codigo.group(0))
+            self.assertNotIn('inputmode=', codigo.group(0))
+            self.assertIn('virtualkeyboardpolicy="manual"', nome.group(0))
+            self.assertNotIn('inputmode="none"', nome.group(0))
 
         contagem = self.client.get(
             reverse('pocket:contagem', args=[self.inventario.pk])
         ).content.decode()
         self.assertNotIn('pocket-cadastro-teclado', contagem)
+        self.assertNotIn('pocket-posicao-teclado', contagem)
         self.assertNotIn('pocket-cadastro.js', contagem)
         self.assertNotIn('Teclado:', contagem)
 
@@ -287,12 +341,20 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertIn("data-cadastro-enviando", cadastro_js)
         self.assertIn("removeAttribute('inputmode')", cadastro_js)
         self.assertNotIn("virtual ? 'text' : 'none'", cadastro_js)
+        self.assertNotIn('virtualKeyboard', cadastro_js)
 
         posicao_js = Path(finders.find('js/pocket-precadastro-posicao.js')).read_text(encoding='utf-8')
         self.assertNotIn('requestSubmit', posicao_js)
         self.assertNotIn('POCKET_VALIDACAO_ATRASO', posicao_js)
         self.assertNotIn('setInterval', posicao_js)
         self.assertIn('POSIÇÃO JÁ CADASTRADA', posicao_js)
+        self.assertIn('pocket-posicao-teclado', posicao_js)
+        self.assertIn('vk.show()', posicao_js)
+        self.assertIn('vk.hide()', posicao_js)
+        self.assertNotIn('overlaysContent', posicao_js)
+        self.assertNotIn('inputmode', posicao_js)
+        self.assertNotIn('sessionStorage', posicao_js)
+        self.assertNotIn('localStorage', posicao_js)
 
         operador, _ = criar_usuario_teste(
             username='op.cadastro.pwa',
@@ -305,7 +367,12 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertContains(produto_op, 'Salvar pré-cadastro')
         self.assertContains(produto_op, 'Voltar ao Pocket')
         self.assertNotContains(produto_op, 'pocket-bipagem.js')
-        self.assertContains(posicao_op, 'id="pocket-cadastro-teclado"')
+        self.assertNotContains(produto_op, 'virtualkeyboardpolicy')
+        self.assertContains(posicao_op, 'id="pocket-posicao-teclado"')
+        self.assertContains(posicao_op, 'Abrir teclado')
+        self.assertContains(posicao_op, 'virtualkeyboardpolicy="manual"')
+        self.assertNotContains(posicao_op, 'id="pocket-cadastro-teclado"')
+        self.assertNotContains(posicao_op, 'inputmode="none"')
         self.assertContains(posicao_op, 'Salvar posição')
         self.assertContains(posicao_op, 'Voltar ao Pocket')
         self.assertNotContains(posicao_op, 'pocket-bipagem.js')

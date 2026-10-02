@@ -255,7 +255,11 @@ class InventarioPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, reverse('pocket:contagem_ciclico'))
         self.assertContains(resposta, 'Voltar à contagem')
-        self.assertContains(resposta, 'id="pocket-cadastro-teclado"')
+        self.assertContains(resposta, 'id="pocket-posicao-teclado"')
+        self.assertContains(resposta, 'Abrir teclado')
+        self.assertContains(resposta, 'virtualkeyboardpolicy="manual"')
+        self.assertNotContains(resposta, 'id="pocket-cadastro-teclado"')
+        self.assertNotContains(resposta, 'inputmode="none"')
         self.assertNotContains(resposta, 'pocket-bipagem.js')
 
 
@@ -305,6 +309,11 @@ class PrecadastroNaoUsaFluxoDeContagemTestCase(TestCase):
             self.assertNotIn('readonly', tag)
             self.assertNotIn('disabled', tag)
             self.assertNotIn('type="number"', tag)
+        self.assertIn('virtualkeyboardpolicy="manual"', codigo.group(0))
+        self.assertIn('virtualkeyboardpolicy="manual"', nome.group(0))
+        self.assertNotIn('virtualkeyboardpolicy', sku.group(0))
+        self.assertNotIn('virtualkeyboardpolicy', descricao.group(0))
+        self.assertNotIn('virtualkeyboardpolicy', produto)
         self.assertNotIn('autofocus', descricao.group(0))
         self.assertNotIn('autofocus', nome.group(0))
         self.assertNotIn('data-cadastro-enter', descricao.group(0))
@@ -550,4 +559,4 @@ class EmbalagemComboboxPrecadastroTestCase(TestCase):
         self.assertEqual(bipagem.count('POCKET_VALIDACAO_ATRASO_MS = 2000'), 1)
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
-        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002c')", settings_src)
+        self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002d')", settings_src)

@@ -4,7 +4,6 @@
             <h1 class="h3 fw-semibold text-dark mb-1">Pré-Cadastro de Posição</h1>
             <p class="text-muted mb-0">A posição ficará disponível imediatamente para contagem.</p>
         </div>
-        {% include 'inventario/pocket/_precadastro_teclado.html' %}
     </div>
     <div id="pocket-toast" class="pocket-toast pocket-toast--ok" hidden aria-live="polite"></div>
     <div class="card border-0 shadow-sm pocket-card pocket-cadastro-card">
@@ -28,7 +27,15 @@
                     {% if form.codigo.errors %}<div class="text-danger small">{{ form.codigo.errors }}</div>{% endif %}
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-semibold" for="{{ form.posicao.id_for_label }}">{{ form.posicao.label }}</label>
+                    <div class="pocket-posicao-teclado-linha">
+                        <label class="form-label fw-semibold" for="{{ form.posicao.id_for_label }}">{{ form.posicao.label }}</label>
+                        <button
+                            type="button"
+                            id="pocket-posicao-teclado"
+                            class="pocket-posicao-teclado"
+                            aria-controls="{{ form.posicao.id_for_label }}"
+                        >Abrir teclado</button>
+                    </div>
                     {{ form.posicao }}
                     {% if form.posicao.errors %}<div class="text-danger small">{{ form.posicao.errors }}</div>{% endif %}
                 </div>

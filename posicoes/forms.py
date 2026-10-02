@@ -27,6 +27,7 @@ class PrecadastroPosicaoOperadorForm(forms.Form):
             'spellcheck': 'false',
             'autofocus': True,
             'data-cadastro-enter': 'validar-codigo',
+            'virtualkeyboardpolicy': 'manual',
         }),
     )
     posicao = forms.CharField(
@@ -35,6 +36,7 @@ class PrecadastroPosicaoOperadorForm(forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input',
             'autocomplete': 'off',
+            'virtualkeyboardpolicy': 'manual',
         }),
     )
 
@@ -51,6 +53,7 @@ class PrecadastroPosicaoForm(forms.Form):
             'spellcheck': 'false',
             'autofocus': True,
             'data-cadastro-enter': 'validar-codigo',
+            'virtualkeyboardpolicy': 'manual',
         }),
     )
     posicao = forms.CharField(
@@ -59,6 +62,7 @@ class PrecadastroPosicaoForm(forms.Form):
         widget=forms.TextInput(attrs={
             'class': 'form-control pocket-input',
             'autocomplete': 'off',
+            'virtualkeyboardpolicy': 'manual',
         }),
     )
 
