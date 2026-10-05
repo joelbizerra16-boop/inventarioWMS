@@ -1,3 +1,4 @@
+import unittest
 from decimal import Decimal
 
 from django.test import TestCase
@@ -27,7 +28,7 @@ from inventario.services.consolidacao import (
     obter_id_inventario_finalizado_mais_recente,
     publicar_estoque_fisico,
 )
-from inventario.services.confronto import executar_confronto
+from inventario.services.confronto import CanalConfronto, executar_confronto
 from posicoes.models import Posicao
 from produtos.models import Produto
 
@@ -252,6 +253,203 @@ class ConfrontoResumoTestCase(TestCase):
         self.assertEqual(linha.embalagem, 'Unidade')
         self.assertEqual(linha.setor, 'A')
         self.assertEqual(linha.total_contabil, Decimal('10'))
+
+
+class ConfrontoCanalTestCase(TestCase):
+    """Seletor 'Comparar com' (COSAN/BRIDA/Ambos) do Confronto Físico x Contábil."""
+
+    def setUp(self):
+        self.usuario = Usuario.objects.create(
+            nome='Operador Canal',
+            login='op_canal',
+            setor='Estoque',
+            perfil=Usuario.Perfil.INVENTARIO,
+        )
+        self.posicao = Posicao.objects.create(codigo='CN01', posicao='C-01')
+        self.inventario = Inventario.objects.create(
+            usuario=self.usuario,
+            status=Inventario.Status.FINALIZADO,
+        )
+
+    def _contar(self, produto, quantidade):
+        InventarioItem.objects.create(
+            inventario=self.inventario,
+            posicao=self.posicao,
+            produto=produto,
+            quantidade_fisica=quantidade,
+        )
+
+    def test_fisico10_cosan10_brida5(self):
+        produto = Produto.objects.create(
+            codigo_produto='CN100', descricao='Canal Teste 1', setor='A', embalagem='Unidade',
+        )
+        self._contar(produto, Decimal('10'))
+        EstoqueSAP.objects.create(
+            produto=produto,
+            canal_110=Decimal('10'),
+            canal_1=Decimal('5'),
+            total=Decimal('15'),
+            arquivo_origem='teste.xlsx',
+        )
+
+        cosan = executar_confronto(self.inventario.pk, canal=CanalConfronto.COSAN)
+        linha = cosan.linhas[0]
+        self.assertEqual(linha.total_contabil, Decimal('10'))
+        self.assertEqual(linha.diferenca, Decimal('0'))
+        self.assertEqual(linha.status_label, 'Correto')
+        self.assertEqual(cosan.resumo.total_produtos, 1)
+        self.assertEqual(cosan.resumo.produtos_corretos, 1)
+        self.assertEqual(cosan.resumo.produtos_divergentes, 0)
+        self.assertEqual(cosan.resumo.acuracidade, Decimal('100.00'))
+
+        brida = executar_confronto(self.inventario.pk, canal=CanalConfronto.BRIDA)
+        linha = brida.linhas[0]
+        self.assertEqual(linha.total_contabil, Decimal('5'))
+        self.assertEqual(linha.diferenca, Decimal('5'))
+        self.assertEqual(linha.status_label, 'Excesso físico')
+        self.assertEqual(brida.resumo.produtos_corretos, 0)
+        self.assertEqual(brida.resumo.produtos_divergentes, 1)
+        self.assertEqual(brida.resumo.acuracidade, Decimal('0.00'))
+
+        ambos = executar_confronto(self.inventario.pk, canal=CanalConfronto.AMBOS)
+        linha = ambos.linhas[0]
+        self.assertEqual(linha.total_contabil, Decimal('15'))
+        self.assertEqual(linha.diferenca, Decimal('-5'))
+        self.assertEqual(linha.status_label, 'Déficit físico')
+        self.assertEqual(ambos.resumo.produtos_corretos, 0)
+        self.assertEqual(ambos.resumo.produtos_divergentes, 1)
+        self.assertEqual(ambos.resumo.acuracidade, Decimal('0.00'))
+
+    def test_fisico0_cosan53_brida0(self):
+        produto = Produto.objects.create(
+            codigo_produto='CN101', descricao='Canal Teste 2', setor='A', embalagem='Unidade',
+        )
+        self._contar(produto, Decimal('0'))
+        EstoqueSAP.objects.create(
+            produto=produto,
+            canal_110=Decimal('53'),
+            canal_1=Decimal('0'),
+            total=Decimal('53'),
+            arquivo_origem='teste.xlsx',
+        )
+
+        cosan = executar_confronto(self.inventario.pk, canal=CanalConfronto.COSAN)
+        self.assertEqual(cosan.linhas[0].total_contabil, Decimal('53'))
+        self.assertEqual(cosan.linhas[0].diferenca, Decimal('-53'))
+
+        brida = executar_confronto(self.inventario.pk, canal=CanalConfronto.BRIDA)
+        self.assertEqual(brida.linhas[0].total_contabil, Decimal('0'))
+        self.assertEqual(brida.linhas[0].diferenca, Decimal('0'))
+        self.assertEqual(brida.linhas[0].status_label, 'Correto')
+
+        ambos = executar_confronto(self.inventario.pk, canal=CanalConfronto.AMBOS)
+        self.assertEqual(ambos.linhas[0].total_contabil, Decimal('53'))
+        self.assertEqual(ambos.linhas[0].diferenca, Decimal('-53'))
+
+    def test_canal_none_preserva_comportamento_legado_do_sap_total(self):
+        produto = Produto.objects.create(
+            codigo_produto='CN102', descricao='Legado', setor='A', embalagem='Unidade',
+        )
+        self._contar(produto, Decimal('10'))
+        EstoqueSAP.objects.create(
+            produto=produto,
+            canal_110=Decimal('1'),
+            canal_1=Decimal('1'),
+            total=Decimal('10'),
+            arquivo_origem='teste.xlsx',
+        )
+
+        resultado = executar_confronto(self.inventario.pk)
+        self.assertEqual(resultado.linhas[0].total_contabil, Decimal('10'))
+        self.assertEqual(resultado.linhas[0].status_label, 'Correto')
+
+    def test_produto_inativo_nao_participa_independente_do_canal(self):
+        produto = Produto.objects.create(
+            codigo_produto='CN103', descricao='Inativo', setor='A', embalagem='Unidade',
+            ativo=False,
+        )
+        EstoqueSAP.objects.create(
+            produto=produto,
+            canal_110=Decimal('99'),
+            canal_1=Decimal('99'),
+            total=Decimal('198'),
+            arquivo_origem='teste.xlsx',
+        )
+
+        for canal in (CanalConfronto.COSAN, CanalConfronto.BRIDA, CanalConfronto.AMBOS):
+            resultado = executar_confronto(self.inventario.pk, canal=canal)
+            self.assertEqual(resultado.resumo.total_produtos, 0)
+
+    def test_normalizar_canal(self):
+        self.assertEqual(CanalConfronto.normalizar(''), CanalConfronto.AMBOS)
+        self.assertEqual(CanalConfronto.normalizar('xpto'), CanalConfronto.AMBOS)
+        self.assertEqual(CanalConfronto.normalizar('110'), CanalConfronto.COSAN)
+        self.assertEqual(CanalConfronto.normalizar('1'), CanalConfronto.BRIDA)
+
+
+class ConfrontoCanalViewTestCase(ClienteAutenticadoMixin, TestCase):
+    """Seletor 'Comparar com' refletido na tela de Confronto (view + template)."""
+
+    def setUp(self):
+        self.user = self.autenticar_cliente(perfil=Usuario.Perfil.INVENTARIO)
+        self.posicao = Posicao.objects.create(codigo='CNV01', posicao='CV-01')
+        self.inventario = Inventario.objects.create(
+            usuario=self.user.perfil_operacional,
+            status=Inventario.Status.FINALIZADO,
+        )
+        self.produto = Produto.objects.create(
+            codigo_produto='CNV100', descricao='Canal View', setor='A', embalagem='Unidade',
+        )
+        InventarioItem.objects.create(
+            inventario=self.inventario,
+            posicao=self.posicao,
+            produto=self.produto,
+            quantidade_fisica=Decimal('10'),
+        )
+        EstoqueSAP.objects.create(
+            produto=self.produto,
+            canal_110=Decimal('10'),
+            canal_1=Decimal('5'),
+            total=Decimal('15'),
+            arquivo_origem='teste.xlsx',
+        )
+
+    def test_default_sem_parametro_e_ambos(self):
+        response = self.client.get(reverse('confronto'), {'inventario': self.inventario.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Déficit físico')
+        self.assertContains(response, '<option value="ambos" selected>')
+
+    def test_selecionar_cosan_recalcula_tabela_e_cards(self):
+        response = self.client.get(reverse('confronto'), {
+            'inventario': self.inventario.pk,
+            'canal': '110',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Correto')
+        self.assertNotContains(response, '<th>Canal 1 (BRIDA)</th>')
+        self.assertContains(response, '<th>Canal 110 (COSAN)</th>')
+        self.assertContains(response, '<option value="110" selected>')
+
+    def test_selecionar_brida_recalcula_tabela_e_cards(self):
+        response = self.client.get(reverse('confronto'), {
+            'inventario': self.inventario.pk,
+            'canal': '1',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Excesso físico')
+        self.assertNotContains(response, '<th>Canal 110 (COSAN)</th>')
+        self.assertContains(response, '<th>Canal 1 (BRIDA)</th>')
+        self.assertContains(response, '<option value="1" selected>')
+
+    def test_canal_persiste_ao_trocar_filtro(self):
+        response = self.client.get(reverse('confronto'), {
+            'inventario': self.inventario.pk,
+            'canal': '110',
+            'filtro': 'corretos',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<option value="110" selected>')
 
 
 class AprovacaoViewTestCase(ClienteAutenticadoMixin, TestCase):
@@ -1019,6 +1217,10 @@ class CiclicoServiceTestCase(TestCase):
         self.assertEqual(InventarioItem.objects.count(), itens_antes)
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada "
+    "(rotas ciclico/* removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoViewTestCase(ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         from inventario.services.ciclico import limpar_estado_ciclico

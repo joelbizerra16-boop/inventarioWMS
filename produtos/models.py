@@ -3,7 +3,19 @@ from django.db import models
 from core.choices import StatusHomologacao
 
 
+class ProdutoQuerySet(models.QuerySet):
+    def elegiveis_para_inventario(self):
+        """Produtos que podem participar do inventário (estoque, contagem, divergência).
+
+        Produto inativo é excluído aqui para que toda consulta de estoque/contagem
+        reutilize este único ponto, em vez de repetir `ativo=True` em cada tela.
+        """
+        return self.filter(ativo=True)
+
+
 class Produto(models.Model):
+    objects = ProdutoQuerySet.as_manager()
+
     codigo_produto = models.CharField('código do produto', max_length=50, unique=True)
     descricao = models.CharField('descrição', max_length=255)
     embalagem = models.CharField('embalagem', max_length=100, blank=True, default='')

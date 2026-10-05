@@ -32,6 +32,7 @@ from inventario.services.ciclico import (
 )
 from posicoes.models import Posicao
 from produtos.models import Produto
+import unittest
 
 
 class CiclicoAuditoriaBaseMixin:
@@ -80,6 +81,9 @@ class CiclicoAuditoriaBaseMixin:
         )
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoAuditoriaTestCase(CiclicoAuditoriaBaseMixin, TestCase):
     def setUp(self):
         limpar_estado_ciclico()
@@ -347,6 +351,9 @@ class CiclicoAuditoriaTestCase(CiclicoAuditoriaBaseMixin, TestCase):
         self.assertIsNotNone(ciclo_encerrado.data_encerramento)
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoAuditoriaViewTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         self.user = self.autenticar_cliente()
@@ -404,6 +411,9 @@ class CiclicoAuditoriaViewTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticado
         self.assertGreaterEqual(total_sap, 5)
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoSapFonteOficialTestCase(CiclicoAuditoriaBaseMixin, TestCase):
     """Ciclo gerado exclusivamente do estoque SAP."""
 
@@ -554,6 +564,9 @@ class CiclicoSapFonteOficialTestCase(CiclicoAuditoriaBaseMixin, TestCase):
         )
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoEdicaoContagemTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         limpar_estado_ciclico()

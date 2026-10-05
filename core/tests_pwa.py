@@ -281,7 +281,6 @@ class PocketTelaPwaTestCase(ClienteAutenticadoMixin, TestCase):
 
         paginas_posicao = [
             reverse('pocket:precadastro_posicao', args=[self.inventario.pk]),
-            reverse('pocket:precadastro_posicao_ciclico'),
         ]
         for url in paginas_posicao:
             resposta = self.client.get(url)

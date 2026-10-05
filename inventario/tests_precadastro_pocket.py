@@ -5,6 +5,7 @@ O cliente de teste do Django grava só no banco de testes, separado do desenvolv
 
 import json
 import re
+import unittest
 from pathlib import Path
 
 from django.conf import settings
@@ -250,6 +251,10 @@ class InventarioPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertContains(contagem, '001')
         self.assertContains(contagem, 'Docas 001')
 
+    @unittest.skip(
+        "Rotas pocket:precadastro_posicao_ciclico/pocket:contagem_ciclico removidas: "
+        "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada."
+    )
     def test_ciclico_preserva_retorno_da_contagem(self):
         resposta = self.client.get(reverse('pocket:precadastro_posicao_ciclico'))
         self.assertEqual(resposta.status_code, 200)

@@ -1,3 +1,4 @@
+import unittest
 from decimal import Decimal
 
 from django.db import connection
@@ -60,6 +61,10 @@ class CiclicoListaViewTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixi
     def tearDown(self):
         limpar_estado_ciclico()
 
+    @unittest.skip(
+        "Rota ciclico removida: Inventario Ciclico foi ocultado/bloqueado "
+        "da navegacao nesta rodada."
+    )
     def test_ciclico_responde_200_sem_erro(self):
         criar_ciclo(usuario_criacao=self.user)
         response = self.client.get(reverse('ciclico'))

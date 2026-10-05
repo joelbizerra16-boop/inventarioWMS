@@ -27,8 +27,12 @@ from inventario.services.ciclico_relatorio import (
 )
 from inventario.services.ciclico_relatorio_pdf import gerar_relatorio_executivo_pdf
 from inventario.tests_ciclico_professional import CiclicoProfissionalBaseMixin
+import unittest
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoPremiumTestCase(CiclicoProfissionalBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         self.user = self.autenticar_cliente()

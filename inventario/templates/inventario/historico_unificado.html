@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 
-{% block title %}Histórico de Inventários e Ciclos | Sistema de Inventário{% endblock %}
+{% block title %}Histórico de Inventários | Sistema de Inventário{% endblock %}
 
 {% block content %}
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
     <div>
-        <h1 class="h3 fw-semibold text-dark mb-1">Histórico de Inventários e Ciclos</h1>
-        <p class="text-muted mb-0">Consulta permanente de inventários gerais e cíclicos finalizados.</p>
+        <h1 class="h3 fw-semibold text-dark mb-1">Histórico de Inventários</h1>
+        <p class="text-muted mb-0">Consulta permanente de inventários finalizados.</p>
     </div>
 </div>
 
@@ -16,14 +16,6 @@
             <div class="card-body">
                 <div class="text-muted small">Total Inventários</div>
                 <div class="h4 mb-0">{{ indicadores.total_inventarios }}</div>
-            </div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-muted small">Total Ciclos</div>
-                <div class="h4 mb-0">{{ indicadores.total_ciclos }}</div>
             </div>
         </div>
     </div>

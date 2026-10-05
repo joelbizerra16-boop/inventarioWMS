@@ -26,8 +26,12 @@ from inventario.services.pocket_ciclico_fila import obter_painel_pocket_ciclico
 from inventario.tests_ciclico_auditoria import CiclicoAuditoriaBaseMixin
 from posicoes.models import Posicao
 from produtos.models import Produto
+import unittest
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         self.user = self.autenticar_cliente(perfil=Usuario.Perfil.INVENTARIO)
@@ -724,6 +728,9 @@ class PocketCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, 
         self.assertFalse(response.json()['ok'])
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class PocketCiclicoSupervisorViewTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         limpar_estado_ciclico()
@@ -802,6 +809,9 @@ class PocketCiclicoSupervisorViewTestCase(CiclicoAuditoriaBaseMixin, ClienteAute
         self.assertEqual(ciclo.status_ciclo, CicloInventario.StatusCiclo.ENCERRADO)
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class PocketModoUnificadoTestCase(TestCase):
     def test_urls_pocket(self):
         self.assertEqual(reverse('pocket:selecionar'), '/pocket/')

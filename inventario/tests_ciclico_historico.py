@@ -23,8 +23,12 @@ from inventario.services.ciclico_historico import (
 )
 from inventario.tests_ciclico_auditoria import CiclicoAuditoriaBaseMixin
 from produtos.models import Produto
+import unittest
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoHistoricoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         self.user = self.autenticar_cliente(perfil=Usuario.Perfil.INVENTARIO)

@@ -1,6 +1,5 @@
 from django.contrib import messages
 from django.shortcuts import redirect, render
-from django.urls import reverse
 from django.views import View
 
 from accounts.mixins import AcessoOperacionalMixin
@@ -21,11 +20,15 @@ class HistoricoUnificadoView(AcessoOperacionalMixin, View):
     template_name = 'inventario/historico_unificado.html'
 
     def get(self, request):
+        tipo_filtro = request.GET.get('tipo', '').strip().upper()
+        if tipo_filtro == TipoHistorico.CICLICO:
+            tipo_filtro = ''
+
         filtros = {
             'periodo_inicio': request.GET.get('periodo_inicio', '').strip(),
             'periodo_fim': request.GET.get('periodo_fim', '').strip(),
             'status_filtro': request.GET.get('status', '').strip(),
-            'tipo_filtro': request.GET.get('tipo', '').strip(),
+            'tipo_filtro': tipo_filtro,
             'usuario_filtro': request.GET.get('usuario', '').strip(),
         }
         linhas = listar_historico_unificado(**filtros)
@@ -43,7 +46,10 @@ class HistoricoDetalheView(AcessoOperacionalMixin, View):
 
     def get(self, request, tipo: str, pk: int):
         tipo = tipo.upper()
-        if tipo not in (TipoHistorico.GERAL, TipoHistorico.CICLICO):
+        if tipo == TipoHistorico.CICLICO:
+            messages.error(request, 'Inventário Cíclico não está mais disponível nesta interface.')
+            return redirect('historico_unificado')
+        if tipo != TipoHistorico.GERAL:
             messages.error(request, 'Tipo de histórico inválido.')
             return redirect('historico_unificado')
 
@@ -65,9 +71,9 @@ class HistoricoExportarView(AcessoOperacionalMixin, View):
         tipo = tipo.upper()
         formato = request.GET.get('formato', 'excel').strip().lower()
 
-        if formato == 'pdf' and tipo == TipoHistorico.CICLICO:
-            url = reverse('ciclico_relatorio') + f'?ciclo={pk}'
-            return redirect(url)
+        if tipo == TipoHistorico.CICLICO:
+            messages.error(request, 'Inventário Cíclico não está mais disponível nesta interface.')
+            return redirect('historico_unificado')
 
         if formato == 'csv':
             return exportar_historico_csv(tipo, pk)

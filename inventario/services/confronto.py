@@ -5,6 +5,36 @@ from django.db.models import Sum
 
 from estoque_sap.models import EstoqueSAP
 from inventario.models import InventarioItem
+from produtos.models import Produto
+
+
+class CanalConfronto:
+    """Estoque contábil usado como referência no confronto físico x contábil."""
+
+    COSAN = '110'
+    BRIDA = '1'
+    AMBOS = 'ambos'
+
+    LABELS = {
+        COSAN: 'Canal 110 (COSAN)',
+        BRIDA: 'Canal 1 (BRIDA)',
+        AMBOS: 'Ambos',
+    }
+
+    CHOICES = [
+        (COSAN, LABELS[COSAN]),
+        (BRIDA, LABELS[BRIDA]),
+        (AMBOS, LABELS[AMBOS]),
+    ]
+
+    DEFAULT = AMBOS
+
+    @classmethod
+    def normalizar(cls, valor: str) -> str:
+        valor = (valor or '').strip()
+        if valor in (cls.COSAN, cls.BRIDA, cls.AMBOS):
+            return valor
+        return cls.DEFAULT
 
 
 @dataclass
@@ -55,7 +85,9 @@ def _decimal(valor) -> Decimal:
 
 def _obter_estoque_sap_por_produto() -> dict[int, EstoqueSAP]:
     estoques = {}
-    registros = EstoqueSAP.objects.select_related('produto').order_by(
+    registros = EstoqueSAP.objects.select_related('produto').filter(
+        produto__in=Produto.objects.elegiveis_para_inventario(),
+    ).order_by(
         'produto_id',
         '-data_importacao',
     )
@@ -65,6 +97,24 @@ def _obter_estoque_sap_por_produto() -> dict[int, EstoqueSAP]:
             estoques[registro.produto_id] = registro
 
     return estoques
+
+
+def _total_contabil_por_canal(sap: EstoqueSAP | None, canal: str | None) -> Decimal:
+    """Estoque contábil de referência, de acordo com o canal escolhido no confronto.
+
+    `canal=None` preserva o comportamento histórico (soma total do SAP, campo
+    `EstoqueSAP.total`), usado por Aprovação/Histórico/Dashboard, que não
+    conhecem o seletor "Comparar com" e não devem mudar de resultado.
+    """
+    if sap is None:
+        return Decimal('0')
+    if canal is None:
+        return _decimal(sap.total)
+    if canal == CanalConfronto.COSAN:
+        return _decimal(sap.canal_110)
+    if canal == CanalConfronto.BRIDA:
+        return _decimal(sap.canal_1)
+    return _decimal(sap.canal_110) + _decimal(sap.canal_1)
 
 
 def _calcular_status(fisico: Decimal, total_contabil: Decimal) -> tuple[str, str, bool]:
@@ -87,9 +137,10 @@ def _montar_linha(
     setor,
     fisico,
     sap,
+    canal: str | None = None,
 ) -> LinhaConfronto:
+    total_contabil = _total_contabil_por_canal(sap, canal)
     if sap:
-        total_contabil = _decimal(sap.total)
         linha = LinhaConfronto(
             produto_id=produto_id,
             codigo_produto=codigo,
@@ -209,6 +260,7 @@ def executar_confronto(
     inventario_id: int,
     filtro_status: str = 'todos',
     termo_busca: str = '',
+    canal: str | None = None,
 ) -> ResultadoConfronto:
     fisico_agregado = InventarioItem.objects.filter(
         inventario_id=inventario_id,
@@ -237,6 +289,7 @@ def executar_confronto(
             setor=item['produto__setor'] or '',
             fisico=_decimal(item['fisico']),
             sap=sap_por_produto.get(produto_id),
+            canal=canal,
         ))
 
     for produto_id, sap in sap_por_produto.items():
@@ -250,6 +303,7 @@ def executar_confronto(
             setor=sap.produto.setor or '',
             fisico=Decimal('0'),
             sap=sap,
+            canal=canal,
         ))
 
     linhas = _ordenar_linhas(linhas)

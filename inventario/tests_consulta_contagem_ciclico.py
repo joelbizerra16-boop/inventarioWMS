@@ -14,8 +14,12 @@ from inventario.services.consulta_contagem_ciclico import obter_consulta_contage
 from inventario.tests_ciclico_auditoria import CiclicoAuditoriaBaseMixin
 from posicoes.models import Posicao
 from produtos.models import Produto
+import unittest
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class ConsultaContagemCiclicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         limpar_estado_ciclico()

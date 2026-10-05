@@ -13,7 +13,7 @@ class DashboardOperacionalApiView(AcessoOperacionalMixin, View):
     """Endpoint JSON para atualização operacional em tempo real (polling)."""
 
     def get(self, request):
-        tipo = request.GET.get('tipo', 'CICLICO').upper()
+        tipo = request.GET.get('tipo', 'GERAL').upper()
         referencia_id = request.GET.get('id')
 
         ref_pk = int(referencia_id) if referencia_id and referencia_id.isdigit() else None

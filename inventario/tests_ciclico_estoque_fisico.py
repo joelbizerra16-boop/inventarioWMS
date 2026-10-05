@@ -13,8 +13,12 @@ from inventario.tests_ciclico_auditoria import CiclicoAuditoriaBaseMixin
 from posicoes.models import Posicao
 from produtos.models import Produto
 from estoque_sap.models import EstoqueSAP
+import unittest
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoEstoqueFisicoTestCase(CiclicoAuditoriaBaseMixin, ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         self.user = self.autenticar_cliente(perfil=Usuario.Perfil.INVENTARIO)

@@ -35,7 +35,7 @@ from inventario.services.contagem import (
 )
 from inventario.services.locks import LockError
 from inventario.services.tarefas import TarefaError
-from inventario.services.confronto import executar_confronto
+from inventario.services.confronto import CanalConfronto, executar_confronto
 from inventario.services.aprovacao import (
     AprovacaoError,
     consultar_aprovacao,
@@ -481,6 +481,7 @@ class ConfrontoListView(AcessoOperacionalMixin, View):
         inventario_id = request.GET.get('inventario', '').strip()
         filtro_status = request.GET.get('filtro', 'todos')
         termo_busca = request.GET.get('q', '')
+        canal = CanalConfronto.normalizar(request.GET.get('canal', ''))
 
         resultado = None
         inventario_selecionado = None
@@ -491,6 +492,7 @@ class ConfrontoListView(AcessoOperacionalMixin, View):
                 inventario_id=inventario_selecionado.pk,
                 filtro_status=filtro_status,
                 termo_busca=termo_busca,
+                canal=canal,
             )
 
         return render(request, self.template_name, {
@@ -499,6 +501,8 @@ class ConfrontoListView(AcessoOperacionalMixin, View):
             'inventario_id': inventario_id,
             'filtro_status': filtro_status,
             'termo_busca': termo_busca,
+            'canal': canal,
+            'canal_opcoes': CanalConfronto.CHOICES,
             'resultado': resultado,
         })
 

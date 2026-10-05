@@ -37,7 +37,6 @@ def main():
         '/confronto/',
         '/aprovacao/',
         '/consolidacao/',
-        '/ciclico/',
     ):
         response = opener.open(f'{BASE}{path}')
         print(f'autenticado {path} -> {response.status}')

@@ -30,7 +30,6 @@ class TipoHistorico:
     FILTROS = [
         ('', 'Todos'),
         (GERAL, 'Inventário'),
-        (CICLICO, 'Inventário Cíclico'),
     ]
 
 
@@ -256,7 +255,7 @@ def listar_historico_unificado(
                 continue
             linhas.append(linha)
 
-    if tipo_filtro in ('', TipoHistorico.CICLICO):
+    if tipo_filtro == TipoHistorico.CICLICO:
         ciclos = CicloInventario.objects.select_related(
             'usuario_criacao',
             'usuario_criacao__perfil_operacional',

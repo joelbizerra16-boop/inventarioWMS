@@ -48,7 +48,7 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label for="inventario" class="form-label">Inventário</label>
                 <select name="inventario" id="inventario" class="form-select" required>
                     <option value="">Selecione um inventário</option>
@@ -60,12 +60,21 @@
                 </select>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="filtro" class="form-label">Filtro</label>
                 <select name="filtro" id="filtro" class="form-select">
                     <option value="todos" {% if filtro_status == 'todos' %}selected{% endif %}>Todos</option>
                     <option value="divergencias" {% if filtro_status == 'divergencias' %}selected{% endif %}>Somente Divergências</option>
                     <option value="corretos" {% if filtro_status == 'corretos' %}selected{% endif %}>Somente Corretos</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label for="canal" class="form-label">Comparar com</label>
+                <select name="canal" id="canal" class="form-select">
+                    {% for valor, rotulo in canal_opcoes %}
+                    <option value="{{ valor }}" {% if canal == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
                 </select>
             </div>
 
@@ -108,8 +117,8 @@
                         <th>Embalagem</th>
                         <th>Setor</th>
                         <th>Físico</th>
-                        <th>Canal 110 (COSAN)</th>
-                        <th>Canal 1 (BRIDA)</th>
+                        {% if canal != '1' %}<th>Canal 110 (COSAN)</th>{% endif %}
+                        {% if canal != '110' %}<th>Canal 1 (BRIDA)</th>{% endif %}
                         <th>Total Contábil</th>
                         <th>Diferença</th>
                         <th class="pe-4">Status</th>
@@ -123,8 +132,8 @@
                         <td>{{ linha.embalagem|default:"—" }}</td>
                         <td>{{ linha.setor|default:"—" }}</td>
                         <td>{{ linha.fisico }}</td>
-                        <td>{{ linha.canal_110 }}</td>
-                        <td>{{ linha.canal_1 }}</td>
+                        {% if canal != '1' %}<td>{{ linha.canal_110 }}</td>{% endif %}
+                        {% if canal != '110' %}<td>{{ linha.canal_1 }}</td>{% endif %}
                         <td>{{ linha.total_contabil }}</td>
                         <td class="fw-semibold">{{ linha.diferenca }}</td>
                         <td class="pe-4">
@@ -133,7 +142,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="10" class="text-center text-muted py-5">
+                        <td colspan="{% if canal == 'ambos' %}10{% else %}9{% endif %}" class="text-center text-muted py-5">
                             Nenhum produto encontrado para os filtros selecionados.
                         </td>
                     </tr>

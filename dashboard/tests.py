@@ -163,13 +163,10 @@ class DashboardViewTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertContains(response, 'Dashboard Operacional')
         self.assertContains(response, 'Acuracidade Geral')
         self.assertContains(response, 'chart-status_inventarios')
-        self.assertContains(response, 'visaoGraficos')
-        self.assertContains(response, 'Inventário Cíclico')
-        self.assertContains(response, 'Itens Planejados')
+        self.assertNotContains(response, 'Inventário Cíclico')
         self.assertContains(response, 'dashboard.css')
         self.assertContains(response, 'id="dashboard-graficos-data"')
         self.assertContains(response, '"status_inventarios"')
-        self.assertContains(response, 'data-chart-wrapper="status_ciclos"')
 
 
 class DashboardCiclicoTestCase(TestCase):

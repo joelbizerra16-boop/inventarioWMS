@@ -50,9 +50,9 @@ class ContagemForm(forms.ModelForm):
             }
             for posicao in queryset
         }
-        self.fields['produto'].queryset = Produto.objects.filter(
-            ativo=True,
-        ).order_by('codigo_produto')
+        self.fields['produto'].queryset = Produto.objects.elegiveis_para_inventario().order_by(
+            'codigo_produto',
+        )
 
     def clean_quantidade_fisica(self):
         quantidade = self.cleaned_data.get('quantidade_fisica')

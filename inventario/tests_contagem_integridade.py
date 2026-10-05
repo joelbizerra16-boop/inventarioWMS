@@ -1,5 +1,6 @@
 """Correções de contagem web, finalização atômica e recontagem de SKU ausente."""
 
+import unittest
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -266,6 +267,10 @@ class FinalizacaoAtomicaTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertEqual(EstoqueFisico.objects.count(), 0)
 
 
+@unittest.skip(
+    "Rota ciclico_executar removida: Inventario Ciclico foi ocultado/bloqueado "
+    "da navegacao nesta rodada."
+)
 class RecontagemSkuAusenteTestCase(ClienteAutenticadoMixin, TestCase):
     def test_sku_inexistente_redireciona_com_mensagem(self):
         self.autenticar_cliente()

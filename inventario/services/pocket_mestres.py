@@ -10,7 +10,7 @@ def obter_mapas_mestres_pocket() -> dict:
     mapa_produtos: dict[str, str] = {}
     mapa_ean: dict[str, dict] = {}
     mapa_embalagens: dict[str, str] = {}
-    for produto in Produto.objects.filter(ativo=True).values(
+    for produto in Produto.objects.elegiveis_para_inventario().values(
         'codigo_produto',
         'descricao',
         'codigo_ean',

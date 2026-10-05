@@ -1,6 +1,7 @@
 """Testes do guard de redirect do Pocket."""
 
 import json
+import unittest
 from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser
@@ -69,6 +70,10 @@ class Handler500PocketContagemTestCase(TestCase):
         self.assertNotIn('Location', response)
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada "
+    "(rota pocket:contagem_ciclico removida); suite mantida para eventual reativacao futura."
+)
 class PocketContagemExcecaoNaoRedirecionaTestCase(PocketCiclicoTestCase):
     def test_contagem_excecao_inesperada_retorna_json_sem_redirect(self):
         with patch(

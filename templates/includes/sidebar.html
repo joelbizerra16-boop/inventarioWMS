@@ -81,42 +81,6 @@
         </ul>
 
         <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
-            Inventário Cíclico
-        </p>
-        <ul class="nav nav-pills flex-column gap-1 mb-4 sidebar-submenu">
-            <li class="nav-item">
-                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico' %} active{% endif %}" href="{% url 'ciclico' %}" title="Dashboard Cíclico">
-                    <i class="bi bi-speedometer2 sidebar-icon" aria-hidden="true"></i>
-                    <span class="sidebar-label">Dashboard Cíclico</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico_executar' %} active{% endif %}" href="{% url 'ciclico_executar' %}" title="Executar">
-                    <i class="bi bi-play-circle sidebar-icon" aria-hidden="true"></i>
-                    <span class="sidebar-label">Executar</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico_consulta_contagem' %} active{% endif %}" href="{% url 'ciclico_consulta_contagem' %}" title="Consulta de Contagem">
-                    <i class="bi bi-upc-scan sidebar-icon" aria-hidden="true"></i>
-                    <span class="sidebar-label">Contagem</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico_consulta' %} active{% endif %}" href="{% url 'ciclico_consulta' %}" title="Consulta">
-                    <i class="bi bi-search sidebar-icon" aria-hidden="true"></i>
-                    <span class="sidebar-label">Consulta</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link text-white-50 py-2{% if request.resolver_match.url_name == 'ciclico_historico' or request.resolver_match.url_name == 'ciclico_historico_detalhe' or request.resolver_match.url_name == 'ciclico_historico_auditoria' or request.resolver_match.url_name == 'historico_unificado' or request.resolver_match.url_name == 'historico_detalhe' %} active{% endif %}" href="{% url 'historico_unificado' %}?tipo=CICLICO" title="Histórico">
-                    <i class="bi bi-clock-history sidebar-icon" aria-hidden="true"></i>
-                    <span class="sidebar-label">Histórico</span>
-                </a>
-            </li>
-        </ul>
-
-        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
             Análise
         </p>
         <ul class="nav nav-pills flex-column gap-1 mb-4">
@@ -213,16 +177,6 @@
             <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'inventario:lista' %}">Inventários</a></li>
             <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'pocket:selecionar' %}">Pocket</a></li>
             <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'historico_unificado' %}?tipo=GERAL">Histórico</a></li>
-        </ul>
-
-        <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">
-            Inventário Cíclico
-        </p>
-        <ul class="nav nav-pills flex-column gap-1 mb-4">
-            <li class="nav-item"><a class="nav-link text-white-50{% if request.resolver_match.url_name == 'ciclico' %} active{% endif %}" href="{% url 'ciclico' %}">Dashboard Cíclico</a></li>
-            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'ciclico_executar' %}">Executar</a></li>
-            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'ciclico_consulta' %}">Consulta</a></li>
-            <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'historico_unificado' %}?tipo=CICLICO">Histórico</a></li>
         </ul>
 
         <p class="sidebar-section text-uppercase small text-secondary fw-semibold px-2 mb-2">

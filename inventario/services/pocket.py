@@ -94,17 +94,27 @@ def buscar_produto_por_codigo(codigo: str) -> Produto | None:
     if not codigo:
         return None
 
-    produto = Produto.objects.filter(
-        codigo_produto=codigo,
-        ativo=True,
-    ).first()
+    elegiveis = Produto.objects.elegiveis_para_inventario()
+
+    produto = elegiveis.filter(codigo_produto=codigo).first()
     if produto:
         return produto
 
-    return Produto.objects.filter(
-        codigo_ean=codigo,
-        ativo=True,
-    ).first()
+    return elegiveis.filter(codigo_ean=codigo).first()
+
+
+def produto_inativo_por_codigo(codigo: str) -> Produto | None:
+    """Localiza um produto INATIVO pelo código/EAN, para mensagem amigável no Pocket."""
+    codigo = codigo.strip()
+    if not codigo:
+        return None
+
+    inativo = Produto.objects.filter(ativo=False)
+    produto = inativo.filter(codigo_produto=codigo).first()
+    if produto:
+        return produto
+
+    return inativo.filter(codigo_ean=codigo).first()
 
 
 def obter_item_existente(

@@ -127,7 +127,7 @@ def _montar_graficos_geral(
     planejados = itens_ativos.count()
     contados = itens_ativos.filter(quantidade_fisica__gt=0).count()
     if planejados == 0:
-        planejados = Produto.objects.filter(ativo=True).count()
+        planejados = Produto.objects.elegiveis_para_inventario().count()
         contados = (
             EstoqueFisico.objects.values('produto_id').distinct().count()
         )
@@ -337,7 +337,9 @@ def obter_indicadores_dashboard() -> IndicadoresDashboard:
         total_produtos = Produto.objects.count()
         total_posicoes = Posicao.objects.count()
         produtos_estoque_sap = (
-            EstoqueSAP.objects.values('produto_id').distinct().count()
+            EstoqueSAP.objects.filter(
+                produto__in=Produto.objects.elegiveis_para_inventario(),
+            ).values('produto_id').distinct().count()
         )
         produtos_estoque_fisico = (
             EstoqueFisico.objects.values('produto_id').distinct().count()

@@ -1,3 +1,5 @@
+import unittest
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -24,6 +26,10 @@ class OperadorPocketAcessoTestCase(ClienteAutenticadoMixin, TestCase):
         response = self.client.get(reverse('home'))
         self.assertRedirects(response, reverse('pocket:selecionar'))
 
+    @unittest.skip(
+        "Rota ciclico_executar removida: Inventario Ciclico foi ocultado/bloqueado "
+        "da navegacao nesta rodada."
+    )
     def test_operador_bloqueado_em_ciclico_executar(self):
         response = self.client.get(reverse('ciclico_executar'))
         self.assertRedirects(response, reverse('pocket:selecionar'))

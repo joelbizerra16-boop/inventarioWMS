@@ -28,6 +28,7 @@ from inventario.services.ciclico import (
 from inventario.tests_ciclico_auditoria import CiclicoAuditoriaBaseMixin
 from posicoes.models import Posicao
 from produtos.models import Produto
+import unittest
 
 
 class CiclicoProfissionalBaseMixin:
@@ -57,6 +58,9 @@ class CiclicoProfissionalBaseMixin:
         return produto
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoProfissionalTestCase(
     CiclicoProfissionalBaseMixin,
     CiclicoAuditoriaBaseMixin,
@@ -171,6 +175,9 @@ class CiclicoProfissionalTestCase(
         self.assertEqual(obter_lote_execucao_ativo().pk, lote.pk)
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoExclusaoTestCase(CiclicoProfissionalBaseMixin, TestCase):
     def setUp(self):
         limpar_estado_ciclico()
@@ -211,6 +218,9 @@ class CiclicoExclusaoTestCase(CiclicoProfissionalBaseMixin, TestCase):
         self.assertEqual(resumo.total_skus, 0)
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoCongelamentoCanaisTestCase(CiclicoProfissionalBaseMixin, TestCase):
     def setUp(self):
         limpar_estado_ciclico()
@@ -233,6 +243,9 @@ class CiclicoCongelamentoCanaisTestCase(CiclicoProfissionalBaseMixin, TestCase):
         self.assertEqual(sku.quantidade_cosan, Decimal('90'))
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoIndicadorSapTestCase(CiclicoProfissionalBaseMixin, TestCase):
     def setUp(self):
         limpar_estado_ciclico()
@@ -270,6 +283,9 @@ class CiclicoIndicadorSapTestCase(CiclicoProfissionalBaseMixin, TestCase):
         self.assertEqual(dto.indicador_sap, IndicadorConfronto.LARANJA)
 
 
+@unittest.skip(
+    "Inventario Ciclico foi ocultado/bloqueado da navegacao nesta rodada (rotas removidas); suite mantida para eventual reativacao futura."
+)
 class CiclicoPerformanceTestCase(CiclicoProfissionalBaseMixin, TestCase):
     def setUp(self):
         limpar_estado_ciclico()

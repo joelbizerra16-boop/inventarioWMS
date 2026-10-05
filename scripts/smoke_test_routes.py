@@ -23,7 +23,6 @@ ROUTES = [
     ('ESTOQUE FISICO', 'estoque_fisico:lista'),
     ('INVENTARIO', 'inventario:lista'),
     ('POCKET', 'pocket:selecionar'),
-    ('CICLICO', 'ciclico'),
     ('HISTORICO', 'historico_unificado'),
     ('CONFRONTO', 'confronto'),
     ('APROVACAO', 'aprovacao'),

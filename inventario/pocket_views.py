@@ -82,8 +82,6 @@ from core.pocket_http import (
 
 from inventario.services.pocket import (
 
-    MODO_CICLICO,
-
     MODO_INVENTARIO,
 
     PocketContagemError,
@@ -100,13 +98,13 @@ from inventario.services.pocket import (
 
     obter_historico_pocket_ciclico,
 
-    obter_modo_pocket,
-
     registrar_historico_pocket,
 
     registrar_historico_pocket_ciclico,
 
     limpar_posicao_pocket,
+
+    produto_inativo_por_codigo,
 
     SESSION_POCKET_MANTER_CONTAGEM,
 
@@ -145,21 +143,11 @@ class PocketSelecionarView(AcessoOperacionalMixin, View):
 
     def get(self, request):
 
-        modo = obter_modo_pocket(request.session)
-
-        ciclo = obter_ciclo_atual(request.session)
-
-        lote_info = obter_lote_execucao_info(request.session)
-
         return render(request, self.template_name, {
 
-            'modo': modo,
+            'modo': MODO_INVENTARIO,
 
             'inventarios': listar_inventarios_pocket(),
-
-            'ciclo': ciclo,
-
-            'lote_info': lote_info,
 
         })
 
@@ -167,13 +155,7 @@ class PocketSelecionarView(AcessoOperacionalMixin, View):
 
     def post(self, request):
 
-        modo = request.POST.get('modo', MODO_INVENTARIO)
-
-        if modo not in (MODO_INVENTARIO, MODO_CICLICO):
-
-            modo = MODO_INVENTARIO
-
-        definir_modo_pocket(request.session, modo)
+        definir_modo_pocket(request.session, MODO_INVENTARIO)
 
         return redirect('pocket:selecionar')
 
@@ -378,7 +360,13 @@ class PocketContagemView(RequerEscritaPocketMixin, View):
 
         if produto is None:
 
-            form.add_error('codigo_produto', 'Produto não encontrado.')
+            if produto_inativo_por_codigo(form.cleaned_data['codigo_produto']):
+                form.add_error(
+                    'codigo_produto',
+                    'Produto inativo. Este item não participa do inventário.',
+                )
+            else:
+                form.add_error('codigo_produto', 'Produto não encontrado.')
 
             if self._requisicao_ajax(request):
 
