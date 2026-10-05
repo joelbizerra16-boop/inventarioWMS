@@ -9,7 +9,7 @@ from dashboard.services.dashboard import obter_indicadores_dashboard
 
 def _serializar_grafico(grafico) -> dict:
     dados = asdict(grafico)
-    dados['valores'] = [int(valor) for valor in dados.get('valores', [])]
+    dados['valores'] = [float(valor) for valor in dados.get('valores', [])]
     return dados
 
 

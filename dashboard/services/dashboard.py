@@ -1,11 +1,10 @@
 from dataclasses import dataclass, field
-from datetime import timedelta
 from decimal import Decimal
 
 from django.db.models import Count
-from django.db.models.functions import TruncMonth
 from django.utils import timezone
 
+from accounts.models import Usuario
 from core.services.perf_diagnostico import medir_etapa
 from estoque_fisico.models import EstoqueFisico
 from estoque_sap.models import EstoqueSAP
@@ -14,7 +13,7 @@ from inventario.services.ciclico import (
     calcular_resumo_ciclo,
     obter_indicadores_ciclico_dashboard,
 )
-from inventario.services.confronto import executar_confronto
+from inventario.services.confronto import ResultadoConfronto, executar_confronto
 from posicoes.models import Posicao
 from produtos.models import Produto
 
@@ -25,8 +24,26 @@ class GraficoDashboard:
     titulo: str
     tipo: str
     labels: list[str]
-    valores: list[int]
+    valores: list[float]
     cores: list[str] = field(default_factory=list)
+    mensagem_vazia: str = ''
+    subtitulo: str = ''
+    sufixo_valor: str = ''
+    centro_valor: str = ''
+    centro_label: str = ''
+    progresso_texto: str = ''
+    progresso_percentual: float = 0
+
+
+@dataclass
+class LinhaDivergenciaDashboard:
+    codigo_produto: str
+    descricao: str
+    fisico: Decimal
+    total_contabil: Decimal
+    diferenca: Decimal
+    status_classe: str
+    status_label: str
 
 
 @dataclass
@@ -48,6 +65,8 @@ class IndicadoresDashboard:
     ciclico_acuracidade: Decimal | None
     graficos_geral: list[GraficoDashboard]
     graficos_ciclico: list[GraficoDashboard]
+    maiores_divergencias: list[LinhaDivergenciaDashboard]
+    maiores_divergencias_inventario: Inventario | None
 
     @property
     def grafico_inventarios_labels(self) -> list[str]:
@@ -81,21 +100,130 @@ COR_CINZA_CLARO = '#E2E8F0'
 PALETA_EMBALAGENS = [COR_AZUL_ESCURO, COR_AZUL, COR_AZUL_CLARO, COR_CINZA, COR_AZUL]
 
 
-def _obter_confronto_ultimo_inventario_finalizado() -> tuple[int, int, Decimal]:
-    inventario = (
+def _obter_inventario_finalizado_mais_recente() -> Inventario | None:
+    return (
         Inventario.objects.filter(status=Inventario.Status.FINALIZADO)
         .order_by('-data_criacao')
         .first()
     )
 
+
+def _obter_confronto_ultimo_inventario_finalizado() -> tuple[Inventario | None, ResultadoConfronto | None]:
+    """Confronto do último inventário geral finalizado.
+
+    Reaproveitado pelos cards de Acuracidade Geral/Corretos/Divergentes e
+    pela análise "Maiores Divergências", para não duplicar a regra de
+    cálculo nem repetir a consulta. Usa `canal=None` (comportamento legado,
+    soma total do SAP) — o mesmo conceito que este Dashboard já usa hoje.
+    """
+    inventario = _obter_inventario_finalizado_mais_recente()
     if inventario is None:
-        return 0, 0, Decimal('0')
+        return None, None
+    return inventario, executar_confronto(inventario.pk)
+
+
+def _montar_evolucao_acuracidade(limite: int = 10) -> GraficoDashboard:
+    inventarios = list(
+        Inventario.objects.filter(
+            status=Inventario.Status.FINALIZADO,
+            taxa_acuracidade__isnull=False,
+            quantidade_produtos__gt=0,
+        )
+        .order_by('-data_finalizacao')[:limite]
+    )
+    inventarios.reverse()
+
+    labels = [
+        f'#{inv.pk} · {timezone.localtime(inv.data_finalizacao):%d/%m}'
+        for inv in inventarios
+    ]
+    valores = [float(inv.taxa_acuracidade) for inv in inventarios]
+
+    return GraficoDashboard(
+        id='evolucao_acuracidade',
+        titulo='Evolução da Acuracidade',
+        tipo='line',
+        labels=labels,
+        valores=valores,
+        cores=[COR_AZUL],
+        mensagem_vazia='' if valores else 'Nenhum inventário finalizado para exibir evolução.',
+        sufixo_valor='%',
+        subtitulo='Acuracidade dos últimos inventários finalizados (Geral)',
+    )
+
+
+def _montar_planejado_contado() -> GraficoDashboard:
+    inventario = (
+        Inventario.objects.filter(status=Inventario.Status.EM_ANDAMENTO)
+        .order_by('-data_criacao')
+        .first()
+    )
+    if inventario is None:
+        return GraficoDashboard(
+            id='planejado_contado',
+            titulo='Planejado x Contado',
+            tipo='doughnut',
+            labels=[],
+            valores=[],
+            cores=[COR_AZUL, COR_CINZA],
+            mensagem_vazia='Nenhum inventário em andamento no momento.',
+            subtitulo='Progresso do inventário em andamento (Geral)',
+        )
 
     resultado = executar_confronto(inventario.pk)
-    return (
-        resultado.resumo.produtos_corretos,
-        resultado.resumo.produtos_divergentes,
-        resultado.resumo.acuracidade,
+    planejado = resultado.resumo.total_produtos
+    contado = sum(1 for linha in resultado.linhas if linha.fisico > 0)
+    pendente = max(planejado - contado, 0)
+    percentual = round(contado / planejado * 100) if planejado else 0
+
+    mensagem_vazia = ''
+    if planejado == 0:
+        mensagem_vazia = 'Nenhuma contagem registrada neste inventário.'
+
+    return GraficoDashboard(
+        id='planejado_contado',
+        titulo='Planejado x Contado',
+        tipo='doughnut',
+        labels=['Contados', 'Pendentes'],
+        valores=[contado, pendente],
+        cores=[COR_AZUL, COR_CINZA_CLARO],
+        mensagem_vazia=mensagem_vazia,
+        centro_valor=f'{percentual}%',
+        centro_label='Concluído',
+        progresso_texto=f'{contado} de {planejado} itens — Inventário #{inventario.pk}',
+        progresso_percentual=percentual,
+        subtitulo='Progresso do inventário em andamento (Geral)',
+    )
+
+
+def _montar_ranking_contagem(limite: int = 10) -> GraficoDashboard:
+    agregados = list(
+        InventarioItem.objects.exclude(usuario_contagem__isnull=True)
+        .values('usuario_contagem_id')
+        .annotate(total_itens=Count('id'))
+        .order_by('-total_itens')[:limite]
+    )
+
+    nomes = dict(
+        Usuario.objects.filter(
+            user_id__in=[item['usuario_contagem_id'] for item in agregados],
+        ).values_list('user_id', 'nome'),
+    )
+
+    labels = [
+        nomes.get(item['usuario_contagem_id']) or '—' for item in agregados
+    ]
+    valores = [item['total_itens'] for item in agregados]
+
+    return GraficoDashboard(
+        id='ranking_usuarios',
+        titulo='Ranking de Contagem',
+        tipo='bar',
+        labels=labels,
+        valores=valores,
+        cores=[COR_AZUL],
+        mensagem_vazia='' if valores else 'Nenhuma contagem registrada.',
+        subtitulo='Top 10 usuários por itens contados (Geral)',
     )
 
 
@@ -104,75 +232,45 @@ def _montar_graficos_geral(
     andamento: int,
     finalizados: int,
 ) -> list[GraficoDashboard]:
-    evolucao_qs = (
-        Inventario.objects.filter(
-            data_criacao__gte=timezone.now() - timedelta(days=180),
-        )
-        .annotate(mes=TruncMonth('data_criacao'))
-        .values('mes')
-        .annotate(total=Count('id'))
-        .order_by('mes')
-    )
-    evolucao_labels = [
-        timezone.localtime(item['mes']).strftime('%m/%y') for item in evolucao_qs
-    ] or ['—']
-    evolucao_valores = [item['total'] for item in evolucao_qs] or [0]
-
-    itens_ativos = InventarioItem.objects.filter(
-        inventario__status__in=(
-            Inventario.Status.ABERTO,
-            Inventario.Status.EM_ANDAMENTO,
-        ),
-    )
-    planejados = itens_ativos.count()
-    contados = itens_ativos.filter(quantidade_fisica__gt=0).count()
-    if planejados == 0:
-        planejados = Produto.objects.elegiveis_para_inventario().count()
-        contados = (
-            EstoqueFisico.objects.values('produto_id').distinct().count()
-        )
-
-    ranking = list(
-        Inventario.objects.values('usuario__nome')
-        .annotate(total=Count('id'))
-        .order_by('-total')[:5],
-    )
-    ranking_labels = [item['usuario__nome'] or '—' for item in ranking] or ['—']
-    ranking_valores = [item['total'] for item in ranking] or [0]
-
     return [
         GraficoDashboard(
             id='status_inventarios',
-            titulo='Status Inventários',
+            titulo='Status dos Inventários',
             tipo='doughnut',
             labels=['Abertos', 'Em Andamento', 'Finalizados'],
             valores=[abertos, andamento, finalizados],
             cores=[COR_CINZA, COR_AZUL, COR_VERDE],
+            centro_valor=str(abertos + andamento + finalizados),
+            centro_label='Total',
+            subtitulo='Quantidade de inventários por situação (Geral)',
         ),
-        GraficoDashboard(
-            id='evolucao_inventarios',
-            titulo='Evolução Inventários',
-            tipo='line',
-            labels=evolucao_labels,
-            valores=evolucao_valores,
-            cores=[COR_AZUL],
-        ),
-        GraficoDashboard(
-            id='planejado_contado',
-            titulo='Planejado x Contado',
-            tipo='bar',
-            labels=['Planejados', 'Contados'],
-            valores=[planejados, contados],
-            cores=[COR_CINZA, COR_AZUL],
-        ),
-        GraficoDashboard(
-            id='ranking_usuarios',
-            titulo='Ranking Usuários',
-            tipo='bar',
-            labels=ranking_labels,
-            valores=ranking_valores,
-            cores=[COR_AZUL],
-        ),
+        _montar_evolucao_acuracidade(),
+        _montar_planejado_contado(),
+        _montar_ranking_contagem(),
+    ]
+
+
+def _montar_maiores_divergencias(
+    resultado: ResultadoConfronto | None,
+    limite: int = 10,
+) -> list[LinhaDivergenciaDashboard]:
+    if resultado is None:
+        return []
+
+    divergentes = [linha for linha in resultado.linhas if linha.possui_divergencia]
+    divergentes.sort(key=lambda linha: abs(linha.diferenca), reverse=True)
+
+    return [
+        LinhaDivergenciaDashboard(
+            codigo_produto=linha.codigo_produto,
+            descricao=linha.descricao,
+            fisico=linha.fisico,
+            total_contabil=linha.total_contabil,
+            diferenca=linha.diferenca,
+            status_classe=linha.status_classe,
+            status_label=linha.status_label,
+        )
+        for linha in divergentes[:limite]
     ]
 
 
@@ -355,9 +453,16 @@ def obter_indicadores_dashboard() -> IndicadoresDashboard:
         ).count()
 
     with medir_etapa('dashboard.obter_indicadores_dashboard.confronto_ultimo_inventario'):
-        produtos_corretos, produtos_divergentes, acuracidade = (
+        maiores_divergencias_inventario, resultado_ultimo_inventario = (
             _obter_confronto_ultimo_inventario_finalizado()
         )
+        if resultado_ultimo_inventario is None:
+            produtos_corretos, produtos_divergentes, acuracidade = 0, 0, Decimal('0')
+        else:
+            produtos_corretos = resultado_ultimo_inventario.resumo.produtos_corretos
+            produtos_divergentes = resultado_ultimo_inventario.resumo.produtos_divergentes
+            acuracidade = resultado_ultimo_inventario.resumo.acuracidade
+        maiores_divergencias = _montar_maiores_divergencias(resultado_ultimo_inventario)
     with medir_etapa('dashboard.obter_indicadores_dashboard.obter_resumo_ciclico'):
         ciclico = obter_indicadores_ciclico_dashboard()
     with medir_etapa('dashboard.obter_indicadores_dashboard.obter_resumo_ciclico_graficos'):
@@ -388,4 +493,6 @@ def obter_indicadores_dashboard() -> IndicadoresDashboard:
         ciclico_acuracidade=ciclico_acuracidade,
         graficos_geral=graficos_geral,
         graficos_ciclico=graficos_ciclico,
+        maiores_divergencias=maiores_divergencias,
+        maiores_divergencias_inventario=maiores_divergencias_inventario,
     )

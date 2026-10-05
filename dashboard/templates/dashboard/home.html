@@ -4,44 +4,59 @@
 {% block title %}Dashboard | Sistema de Inventário{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v={% now 'U' %}">
 {% endblock %}
 
 {% block content %}
 <div class="dashboard-page">
 <div class="dashboard-header">
-    <h1 class="fw-semibold">Dashboard Operacional</h1>
-    <p class="mb-0">Visão executiva compacta — indicadores, estoque e inventários.</p>
+    <div>
+        <h1 class="fw-semibold">Dashboard Operacional</h1>
+        <p class="mb-0">Visão executiva compacta — indicadores, estoque e inventários.</p>
+    </div>
+    <div class="dashboard-header-actions">
+        <span class="dashboard-header-atualizado">
+            <i class="bi bi-calendar3"></i>Última atualização<br>{% now "d/m/Y H:i" %}
+        </span>
+        <button type="button" class="btn btn-primary btn-sm" onclick="window.location.reload()">
+            <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+        </button>
+    </div>
 </div>
 
 <p class="dashboard-section-title text-uppercase fw-semibold">Cadastros e Estoque</p>
 <div class="row dashboard-kpi-row">
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-azul"><i class="bi bi-box-seam"></i></span>
             <p class="dashboard-kpi-label">Total de Produtos</p>
             <p class="dashboard-kpi-value">{{ indicadores.total_produtos }}</p>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-azul"><i class="bi bi-geo-alt"></i></span>
             <p class="dashboard-kpi-label">Total de Posições</p>
             <p class="dashboard-kpi-value">{{ indicadores.total_posicoes }}</p>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-azul"><i class="bi bi-database"></i></span>
             <p class="dashboard-kpi-label">Estoque SAP</p>
             <p class="dashboard-kpi-value">{{ indicadores.produtos_estoque_sap }}</p>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-azul"><i class="bi bi-boxes"></i></span>
             <p class="dashboard-kpi-label">Estoque Físico</p>
             <p class="dashboard-kpi-value">{{ indicadores.produtos_estoque_fisico }}</p>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-laranja"><i class="bi bi-graph-up"></i></span>
             <p class="dashboard-kpi-label">Acuracidade Geral</p>
             <p class="dashboard-kpi-value">{{ indicadores.acuracidade }}%</p>
         </div>
@@ -52,30 +67,35 @@
 <div class="row dashboard-kpi-row">
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-cinza"><i class="bi bi-folder2-open"></i></span>
             <p class="dashboard-kpi-label">Abertos</p>
             <p class="dashboard-kpi-value">{{ indicadores.inventarios_abertos }}</p>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-laranja"><i class="bi bi-arrow-repeat"></i></span>
             <p class="dashboard-kpi-label">Em Andamento</p>
             <p class="dashboard-kpi-value">{{ indicadores.inventarios_em_andamento }}</p>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-verde"><i class="bi bi-check-circle"></i></span>
             <p class="dashboard-kpi-label">Finalizados</p>
             <p class="dashboard-kpi-value text-success">{{ indicadores.inventarios_finalizados }}</p>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-verde"><i class="bi bi-check-circle"></i></span>
             <p class="dashboard-kpi-label">Corretos</p>
             <p class="dashboard-kpi-value text-success">{{ indicadores.produtos_corretos }}</p>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="dashboard-kpi">
+            <span class="dashboard-kpi-icon bg-vermelho"><i class="bi bi-x-circle"></i></span>
             <p class="dashboard-kpi-label">Divergentes</p>
             <p class="dashboard-kpi-value text-danger">{{ indicadores.produtos_divergentes }}</p>
         </div>
@@ -90,10 +110,57 @@
 <div class="dashboard-charts-panel is-active" data-dashboard-panel="geral">
     <div class="row g-2 dashboard-charts-row">
         {% for grafico in indicadores.graficos_geral %}
-        {% include 'dashboard/_chart_card.html' with grafico=grafico cols='md-6' %}
+        {% include 'dashboard/_chart_card.html' with grafico=grafico cols='col-md-6 col-lg-3' %}
         {% endfor %}
     </div>
 </div>
+</div>
+
+<p class="dashboard-section-title text-uppercase fw-semibold mt-2 mb-0">Maiores Divergências do Inventário</p>
+<p class="dashboard-chart-subtitulo mb-2">Top 10 produtos com maior divergência absoluta (Geral)</p>
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body p-0">
+        {% if indicadores.maiores_divergencias %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">#</th>
+                        <th>Código</th>
+                        <th>Produto</th>
+                        <th>Físico</th>
+                        <th>Contábil (SAP)</th>
+                        <th>Diferença</th>
+                        <th class="pe-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in indicadores.maiores_divergencias %}
+                    <tr class="table-{{ linha.status_classe }}">
+                        <td class="ps-4">{{ forloop.counter }}</td>
+                        <td class="fw-semibold">{{ linha.codigo_produto }}</td>
+                        <td>{{ linha.descricao }}</td>
+                        <td>{{ linha.fisico }}</td>
+                        <td>{{ linha.total_contabil }}</td>
+                        <td class="fw-semibold">{{ linha.diferenca }}</td>
+                        <td class="pe-4">
+                            <span class="badge text-bg-{{ linha.status_classe }}">{{ linha.status_label }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-4 mb-0">
+            {% if indicadores.maiores_divergencias_inventario %}
+                Nenhuma divergência no último inventário finalizado.
+            {% else %}
+                Nenhum inventário finalizado para análise de divergências.
+            {% endif %}
+        </p>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}
 
@@ -101,5 +168,5 @@
 {{ graficos_payload|json_script:"dashboard-graficos-data" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-<script src="{% static 'js/dashboard.js' %}"></script>
+<script src="{% static 'js/dashboard.js' %}?v={% now 'U' %}"></script>
 {% endblock %}

@@ -27,6 +27,7 @@
     ];
 
     var MENSAGEM_SEM_DADOS = 'Sem dados para exibição';
+    var MENSAGEM_ERRO = 'Não foi possível carregar esta análise.';
 
     function totalDataset(dataset) {
         if (!dataset || !dataset.data) {
@@ -114,8 +115,8 @@
         return Math.round((Number(valor) / total) * 100);
     }
 
-    function formatLabelBar(value) {
-        return String(Number(value || 0));
+    function formatLabelBar(value, sufixo) {
+        return String(Number(value || 0)) + (sufixo || '');
     }
 
     function obterConfigBarras(graficoId) {
@@ -227,6 +228,34 @@
         });
     }
 
+    function renderCentroDoughnut(graficoId, grafico) {
+        var wrapper = document.querySelector('[data-chart-wrapper="' + graficoId + '"]');
+        if (!wrapper) {
+            return;
+        }
+        var canvasWrap = wrapper.querySelector('.dashboard-doughnut-canvas-wrap');
+        if (!canvasWrap) {
+            return;
+        }
+        var centro = canvasWrap.querySelector('.dashboard-doughnut-center');
+        if (!grafico.centro_valor) {
+            if (centro) {
+                centro.remove();
+            }
+            return;
+        }
+        if (!centro) {
+            centro = document.createElement('div');
+            centro.className = 'dashboard-doughnut-center';
+            canvasWrap.appendChild(centro);
+        }
+        centro.innerHTML =
+            '<span class="dashboard-doughnut-center-valor">' + escapeHtml(grafico.centro_valor) + '</span>' +
+            (grafico.centro_label
+                ? '<span class="dashboard-doughnut-center-label">' + escapeHtml(grafico.centro_label) + '</span>'
+                : '');
+    }
+
     function validarGraficoPayload(grafico) {
         if (!grafico || typeof grafico !== 'object') {
             return { valido: false, motivo: 'empty' };
@@ -245,7 +274,7 @@
         return { valido: true, labels: labels, valores: valores };
     }
 
-    function buildOptions(tipo, valores, graficoId) {
+    function buildOptions(tipo, valores, graficoId, sufixo) {
         var base = {
             responsive: true,
             maintainAspectRatio: false,
@@ -276,10 +305,15 @@
                             return rotuloCompleto(items[0].chart, items[0].dataIndex);
                         },
                         label: function (ctx) {
-                            var val = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed;
+                            var val;
+                            if (ctx.chart.options.indexAxis === 'y') {
+                                val = ctx.parsed.x;
+                            } else {
+                                val = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed;
+                            }
                             var total = totalDataset(ctx.dataset);
                             var pct = percentualValor(val, total);
-                            return val + ' (' + pct + '%)';
+                            return val + (sufixo || '') + ' (' + pct + '%)';
                         },
                     },
                 },
@@ -296,7 +330,9 @@
             return base;
         }
 
-        var escalaX = {
+        var horizontal = graficoId === 'ranking_usuarios';
+
+        var escalaCategoria = {
             grid: { display: false },
             border: { display: false },
             ticks: {
@@ -313,11 +349,12 @@
             },
         };
 
-        var escalaY = {
+        var escalaValor = {
             beginAtZero: true,
             grace: calcularGrace(valores),
             grid: {
                 color: '#E2E8F0',
+                display: !horizontal,
             },
             border: { display: false },
             ticks: {
@@ -327,6 +364,13 @@
                 maxTicksLimit: 5,
             },
         };
+
+        if (horizontal) {
+            base.indexAxis = 'y';
+        }
+
+        var escalaX = horizontal ? escalaValor : escalaCategoria;
+        var escalaY = horizontal ? escalaCategoria : escalaValor;
 
         base.layout.padding.top = calcularPaddingTopBar(valores);
         base.layout.padding.bottom = 6;
@@ -339,7 +383,9 @@
             offset: 4,
             clip: true,
             clamp: true,
-            formatter: formatLabelBar,
+            formatter: function (value) {
+                return formatLabelBar(value, sufixo);
+            },
         };
 
         if (tipo === 'line') {
@@ -470,14 +516,15 @@
 
     function createChart(canvas, grafico) {
         var dados = normalizeGrafico(grafico);
+        var mensagemVazia = grafico.mensagem_vazia || MENSAGEM_SEM_DADOS;
 
         if (dados.invalido) {
-            setChartState(grafico.id, 'empty', MENSAGEM_SEM_DADOS);
+            setChartState(grafico.id, 'empty', mensagemVazia);
             return null;
         }
 
         if (dados.semDados && dados.tipo !== 'doughnut') {
-            setChartState(dados.id, 'empty', MENSAGEM_SEM_DADOS);
+            setChartState(dados.id, 'empty', mensagemVazia);
             return null;
         }
 
@@ -516,13 +563,13 @@
         }
 
         if (!dataset.data || !dataset.data.length) {
-            setChartState(dados.id, 'empty', MENSAGEM_SEM_DADOS);
+            setChartState(dados.id, 'empty', mensagemVazia);
             return null;
         }
 
         if (dataset.data.length !== dados.labels.length) {
             console.error('Gráfico ' + dados.id + ': labels e valores com tamanhos diferentes.');
-            setChartState(dados.id, 'error', 'Erro ao carregar gráfico.');
+            setChartState(dados.id, 'error', MENSAGEM_ERRO);
             return null;
         }
 
@@ -538,11 +585,12 @@
                 chartColors: cores,
                 datasets: [dataset],
             },
-            options: buildOptions(dados.tipo, dados.valores, dados.id),
+            options: buildOptions(dados.tipo, dados.valores, dados.id, grafico.sufixo_valor),
         });
 
         if (dados.tipo === 'doughnut') {
             renderLegendaRosca(dados.id, chart);
+            renderCentroDoughnut(dados.id, grafico);
         }
 
         return chart;
@@ -580,6 +628,7 @@
                 chartRegistry[grafico.id].resize();
                 if (grafico.tipo === 'doughnut') {
                     renderLegendaRosca(grafico.id, chartRegistry[grafico.id]);
+                    renderCentroDoughnut(grafico.id, grafico);
                 }
                 return;
             }
@@ -591,7 +640,7 @@
 
             var validacao = validarGraficoPayload(grafico);
             if (!validacao.valido) {
-                setChartState(grafico.id, 'empty', MENSAGEM_SEM_DADOS);
+                setChartState(grafico.id, 'empty', grafico.mensagem_vazia || MENSAGEM_SEM_DADOS);
                 return;
             }
 
@@ -604,21 +653,16 @@
                 }
             } catch (err) {
                 console.error('Erro ao renderizar gráfico ' + grafico.id + ':', err);
-                setChartState(grafico.id, 'error', 'Erro ao carregar gráfico.');
+                setChartState(grafico.id, 'error', MENSAGEM_ERRO);
             }
         });
     }
 
     function initVisaoGraficos() {
-        var select = document.getElementById('visaoGraficos');
-        if (!select) {
-            return;
-        }
-
         var panels = document.querySelectorAll('[data-dashboard-panel]');
+        var select = document.getElementById('visaoGraficos');
 
-        function aplicar() {
-            var visao = select.value;
+        function aplicar(visao) {
             panels.forEach(function (panel) {
                 var ativo = panel.getAttribute('data-dashboard-panel') === visao;
                 panel.classList.toggle('is-active', ativo);
@@ -629,15 +673,27 @@
             });
         }
 
-        select.addEventListener('change', aplicar);
-        aplicar();
+        if (select) {
+            select.addEventListener('change', function () {
+                aplicar(select.value);
+            });
+            aplicar(select.value);
+            return;
+        }
+
+        // Sem seletor de visão (ex.: Inventário Cíclico oculto): renderiza
+        // diretamente o único painel existente, em vez de nunca iniciar.
+        var painelUnico = panels.length
+            ? panels[0].getAttribute('data-dashboard-panel')
+            : 'geral';
+        aplicar(painelUnico);
     }
 
     function initDashboardCharts() {
         if (typeof Chart === 'undefined') {
             console.error('Chart.js não carregado.');
             document.querySelectorAll('[data-chart-wrapper]').forEach(function (wrapper) {
-                setChartState(wrapper.getAttribute('data-chart-wrapper'), 'error', 'Erro ao carregar gráfico.');
+                setChartState(wrapper.getAttribute('data-chart-wrapper'), 'error', MENSAGEM_ERRO);
             });
             return;
         }
@@ -649,7 +705,7 @@
         } catch (err) {
             console.error(err);
             document.querySelectorAll('[data-chart-wrapper]').forEach(function (wrapper) {
-                setChartState(wrapper.getAttribute('data-chart-wrapper'), 'error', 'Erro ao carregar dados dos gráficos.');
+                setChartState(wrapper.getAttribute('data-chart-wrapper'), 'error', MENSAGEM_ERRO);
             });
             return;
         }

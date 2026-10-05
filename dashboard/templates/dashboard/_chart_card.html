@@ -1,6 +1,7 @@
-<div class="col-{{ cols }}">
+<div class="{{ cols }}">
     <div class="dashboard-chart-card">
-        <p class="dashboard-chart-title">{{ grafico.titulo }}</p>
+        <p class="dashboard-chart-title mb-0">{{ grafico.titulo }}</p>
+        {% if grafico.subtitulo %}<p class="dashboard-chart-subtitulo">{{ grafico.subtitulo }}</p>{% endif %}
         <div class="dashboard-chart-box{% if grafico.tipo == 'doughnut' %} dashboard-chart-box--doughnut{% endif %}" data-chart-wrapper="{{ grafico.id }}">
             <div class="dashboard-chart-loading">
                 <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
@@ -19,5 +20,16 @@
             <div class="dashboard-chart-empty d-none">Sem dados para exibição</div>
             <div class="dashboard-chart-error d-none">Erro ao carregar gráfico.</div>
         </div>
+        {% if grafico.progresso_texto %}
+        <div class="dashboard-progresso">
+            <div class="dashboard-progresso-barra">
+                <div class="dashboard-progresso-barra-fill" style="width: {{ grafico.progresso_percentual }}%"></div>
+            </div>
+            <div class="dashboard-progresso-texto">
+                <span>{{ grafico.progresso_texto }}</span>
+                <span>{{ grafico.progresso_percentual }}%</span>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
