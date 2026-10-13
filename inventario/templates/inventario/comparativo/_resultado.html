@@ -9,6 +9,26 @@
     <span class="cmp-chip cmp-status-ok">SAP OK <strong>{{ resultado.resumo.sap_ok }}</strong></span>
     <span class="cmp-chip cmp-status-parcial">SAP = 1 contagem <strong>{{ resultado.resumo.sap_parcial }}</strong></span>
     <span class="cmp-chip cmp-status-divergente">SAP não coincide <strong>{{ resultado.resumo.sap_divergente }}</strong></span>
+    {% with acc=resultado.acuracidade %}
+    <span class="cmp-chip cmp-chip-acuracidade" title="Base: SKUs com duas contagens iguais. Acerto: consenso igual ao saldo SAP do canal. SKUs sem consenso ficam fora do cálculo.">
+        Acuracidade SAP · {{ rotulos_canal|item:canal }}
+        {% if acc.disponivel %}
+        <strong>{{ acc.percentual|qtd }}%</strong>
+        <span class="cmp-chip-detalhe">{{ acc.acertos }}/{{ acc.avaliados }} SKUs{% if acc.sem_consenso %} · {{ acc.sem_consenso }} sem consenso{% endif %}</span>
+        {% else %}
+        <strong>—</strong> <span class="cmp-chip-detalhe">{{ acc.motivo }}</span>
+        {% endif %}
+    </span>
+    {% if pode_editar and acc.disponivel %}
+    <form method="post" action="{% url 'comparativo:acuracidade_salvar' comparativo.pk %}" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="canal" value="{{ canal }}">
+        <button type="submit" class="btn btn-sm btn-outline-primary cmp-salvar-acuracidade">
+            <i class="bi bi-save me-1"></i>Salvar acuracidade
+        </button>
+    </form>
+    {% endif %}
+    {% endwith %}
     {% endif %}
 </div>
 

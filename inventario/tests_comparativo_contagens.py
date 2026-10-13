@@ -13,6 +13,7 @@ from accounts.test_utils import criar_usuario_teste
 from estoque_sap.models import EstoqueSAP
 from inventario.models import Inventario, InventarioItem
 from inventario.models_comparativo import (
+    ComparativoAcuracidade,
     ComparativoContagem,
     ComparativoContagemEvento,
     ReferenciaSAP,
@@ -32,6 +33,8 @@ from inventario.services.comparativo_contagens import (
     classificar_contagens,
     classificar_sap,
     formatar_quantidade,
+    calcular_acuracidade,
+    salvar_acuracidade,
     salvar_comparativo,
 )
 from inventario.services.contagem import excluir_contagem, salvar_contagem
@@ -530,7 +533,7 @@ class ExcelTestCase(ComparativoBaseTestCase):
 
     def test_abas_colunas_e_valores(self):
         resposta, pasta = self.exportar(canal='cosan')
-        self.assertEqual(pasta.sheetnames, ['Resumo', 'Por SKU', 'Por posição', 'Lançamentos válidos'])
+        self.assertEqual(pasta.sheetnames, ['Resumo', 'Por SKU', 'Por posição', 'Lançamentos válidos', 'Acuracidade salva'])
         self.assertIn('Comparativo_conferencia-outubro_COSAN_', resposta['Content-Disposition'])
         aba = pasta['Por SKU']
         cabecalhos = [c.value for c in aba[1]]
@@ -585,3 +588,100 @@ class ExcelTestCase(ComparativoBaseTestCase):
         self.assertEqual(resumo['Filtros'], 'Pesquisa: 0042')
         self.assertIn('America/Sao_Paulo', resumo['Fuso horário'])
         self.assertIsInstance(resumo['Data/hora da extração'], datetime)
+
+
+class AcuracidadeTestCase(ComparativoBaseTestCase):
+    """Base: SKUs com consenso; acerto: consenso igual ao SAP do canal."""
+
+    def setUp(self):
+        super().setUp()
+        # 00123: SAP COSAN 80 / BRIDA 20 / total 100; consenso 100.
+        self.item(self.inv1, self.pos_a, self.produto, '100', self.ana)
+        self.item(self.inv2, self.pos_a, self.produto, '100', self.bruno)
+        # 0200: SAP total 10 (COSAN 10); consenso 7 -> diferente do SAP.
+        p2 = Produto.objects.create(codigo_produto='0200', descricao='Dois', setor='A')
+        self.sap(p2, cosan='10')
+        self.item(self.inv1, self.pos_b, p2, '7', self.ana)
+        self.item(self.inv2, self.pos_b, p2, '7', self.bruno)
+        # 0300: sem consenso (8 x 9) -> fora do cálculo.
+        p3 = Produto.objects.create(codigo_produto='0300', descricao='Três', setor='A')
+        self.sap(p3, cosan='8')
+        self.item(self.inv1, self.pos_b, p3, '8', self.ana)
+        self.item(self.inv2, self.pos_b, p3, '9', self.bruno)
+        # 0400: só no SAP, sem contagem -> fora do cálculo.
+        p4 = Produto.objects.create(codigo_produto='0400', descricao='Quatro', setor='A')
+        self.sap(p4, cosan='5')
+        # 0500: contado zero e ausente no SAP -> acerto.
+        p5 = Produto.objects.create(codigo_produto='0500', descricao='Cinco', setor='A')
+        self.item(self.inv1, self.pos_a, p5, '0', self.ana)
+        self.item(self.inv2, self.pos_a, p5, '0', self.bruno)
+        self.comparativo = self.criar_comparativo()
+
+    def acuracidade(self, canal):
+        return analisar(self.comparativo, canal=canal, visao='sku', filtros=FiltrosComparativo()).acuracidade
+
+    def test_calculo_por_canal(self):
+        ambas = self.acuracidade('ambas')
+        self.assertEqual((ambas.avaliados, ambas.acertos, ambas.sem_consenso, ambas.total), (3, 2, 2, 5))
+        self.assertEqual(ambas.percentual, D('66.67'))
+        cosan = self.acuracidade('cosan')  # 100 != 80 -> só o 0500 acerta
+        self.assertEqual((cosan.avaliados, cosan.acertos), (3, 1))
+        self.assertEqual(cosan.percentual, D('33.33'))
+
+    def test_filtros_nao_alteram_acuracidade(self):
+        filtrado = analisar(
+            self.comparativo, canal='ambas', visao='sku', filtros=FiltrosComparativo(termo='0200'),
+        )
+        self.assertEqual(len(filtrado.linhas), 1)
+        self.assertEqual(filtrado.acuracidade.percentual, D('66.67'))
+
+    def test_sem_referencia_ou_sem_consenso(self):
+        sem_ref = self.criar_comparativo(referencia='')
+        acc = analisar(sem_ref, canal='ambas', visao='sku', filtros=FiltrosComparativo()).acuracidade
+        self.assertFalse(acc.disponivel)
+        self.assertIsNone(acc.percentual)
+        self.assertEqual(acc.motivo, 'Sem referência SAP')
+        vazio = calcular_acuracidade([], 'ambas', True)
+        self.assertEqual(vazio.motivo, 'Nenhum SKU com duas contagens iguais')
+        with self.assertRaises(ComparativoError):
+            salvar_acuracidade(sem_ref, 'ambas', self.user)
+
+    def test_tela_exibe_e_salva(self):
+        conteudo = self.client.get(self.url(self.comparativo, canal='ambas', visao='sku')).content.decode()
+        self.assertIn('Acuracidade SAP · Ambas', conteudo)
+        self.assertIn('<strong>66,67%</strong>', conteudo)
+        self.assertIn('Salvar acuracidade', conteudo)
+        posicao = self.client.get(self.url(self.comparativo, visao='posicao')).content.decode()
+        self.assertNotIn('Acuracidade SAP', posicao)
+
+        url = reverse('comparativo:acuracidade_salvar', args=[self.comparativo.pk])
+        resposta = self.client.post(url, {'canal': 'cosan'})
+        self.assertRedirects(resposta, self.url(self.comparativo, canal='cosan', visao='sku'))
+        registro = ComparativoAcuracidade.objects.get()
+        self.assertEqual((registro.canal, registro.percentual, registro.skus_acertos, registro.skus_avaliados),
+                         ('cosan', D('33.33'), 1, 3))
+        self.assertEqual(registro.usuario, self.user)
+        self.assertEqual(registro.referencia_sap_id, self.comparativo.referencia_sap_id)
+        self.assertTrue(ComparativoContagemEvento.objects.filter(acao='ACURACIDADE_SALVA').exists())
+        lista = self.client.get(reverse('comparativo:lista')).content.decode()
+        self.assertIn('33,33%', lista)
+
+
+    def test_consulta_nao_salva(self):
+        consulta, _ = criar_usuario_teste('consulta.acc', perfil=Usuario.Perfil.CONSULTA)
+        self.client.force_login(consulta)
+        url = reverse('comparativo:acuracidade_salvar', args=[self.comparativo.pk])
+        self.client.post(url, {'canal': 'ambas'})
+        self.assertFalse(ComparativoAcuracidade.objects.exists())
+
+    def test_excel_resumo_e_historico(self):
+        salvar_acuracidade(self.comparativo, 'ambas', self.user)
+        resposta = self.client.get(reverse('comparativo:exportar', args=[self.comparativo.pk]), {'canal': 'ambas'})
+        pasta = load_workbook(io.BytesIO(resposta.content))
+        resumo = {r[0].value: r[1].value for r in pasta['Resumo'].iter_rows(min_row=2)}
+        self.assertEqual(D(str(resumo['Acuracidade SAP · Ambas (%)'])), D('66.67'))
+        self.assertEqual(resumo['SKUs sem consenso (fora do cálculo)'], 2)
+        historico = list(pasta['Acuracidade salva'].iter_rows(min_row=2, values_only=True))
+        self.assertEqual(len(historico), 1)
+        self.assertEqual(historico[0][1], 'Ambas')
+        self.assertEqual(D(str(historico[0][2])), D('66.67'))

@@ -857,6 +857,7 @@ from inventario.models_operacional import (  # noqa: E402, F401
     InventarioTarefa,
 )
 from inventario.models_comparativo import (  # noqa: E402, F401
+    ComparativoAcuracidade,
     ComparativoContagem,
     ComparativoContagemEvento,
     ComparativoContagemInventario,

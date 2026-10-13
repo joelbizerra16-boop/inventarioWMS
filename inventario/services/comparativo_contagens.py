@@ -26,6 +26,7 @@ from django.utils import timezone
 from estoque_sap.models import EstoqueSAP
 from inventario.models import Inventario, InventarioItem
 from inventario.models_comparativo import (
+    ComparativoAcuracidade,
     ComparativoContagem,
     ComparativoContagemEvento,
     ComparativoContagemInventario,
@@ -1046,6 +1047,95 @@ def resumir(linhas: list[LinhaComparativo]) -> ResumoComparativo:
 
 
 @dataclass
+class Acuracidade:
+    """Acuracidade do estoque contado em relação ao SAP do canal selecionado.
+
+    Base: SKUs com consenso de contagem (duas contagens iguais). Acerto: o
+    valor do consenso é igual ao saldo SAP. SKUs sem consenso ficam fora do
+    cálculo e são informados à parte. SKU com consenso e ausente na base SAP
+    conta como divergente, exceto quando o consenso é zero.
+    """
+
+    canal: str
+    disponivel: bool
+    motivo: str
+    avaliados: int
+    acertos: int
+    divergentes: int
+    sem_consenso: int
+    total: int
+    percentual: Decimal | None
+
+
+def calcular_acuracidade(
+    linhas_sku: list[LinhaComparativo],
+    canal: str,
+    tem_referencia: bool,
+) -> Acuracidade:
+    canal = Canal.normalizar(canal)
+    chave = Canal.chave_saldo(canal)
+    avaliados = acertos = sem_consenso = 0
+    for linha in linhas_sku:
+        consenso = linha.contagens.valor_consenso
+        if linha.contagens.status != StatusContagem.OK or consenso is None:
+            sem_consenso += 1
+            continue
+        avaliados += 1
+        saldo = linha.sap.get(chave)
+        # Ausente na base SAP: só acerta se o estoque contado também for zero.
+        if consenso == (saldo if saldo is not None else Decimal('0')):
+            acertos += 1
+    if not tem_referencia:
+        motivo = 'Sem referência SAP'
+    elif not avaliados:
+        motivo = 'Nenhum SKU com duas contagens iguais'
+    else:
+        motivo = ''
+    percentual = None
+    if not motivo:
+        percentual = (Decimal(acertos) * 100 / Decimal(avaliados)).quantize(Decimal('0.01'))
+    return Acuracidade(
+        canal=canal,
+        disponivel=not motivo,
+        motivo=motivo,
+        avaliados=avaliados,
+        acertos=acertos,
+        divergentes=avaliados - acertos,
+        sem_consenso=sem_consenso,
+        total=len(linhas_sku),
+        percentual=percentual,
+    )
+
+
+def salvar_acuracidade(comparativo: ComparativoContagem, canal: str, usuario) -> ComparativoAcuracidade:
+    """Grava o cálculo atual (somente leitura das contagens) como registro."""
+    canal = Canal.normalizar(canal)
+    dados = carregar_dados(comparativo)
+    acuracidade = calcular_acuracidade(
+        montar_linhas_sku(dados, canal), canal, comparativo.referencia_sap_id is not None,
+    )
+    if not acuracidade.disponivel:
+        raise ComparativoError(f'Acuracidade indisponível: {acuracidade.motivo}.')
+    registro = ComparativoAcuracidade.objects.create(
+        comparativo=comparativo,
+        canal=canal,
+        referencia_sap_id=comparativo.referencia_sap_id,
+        percentual=acuracidade.percentual,
+        skus_avaliados=acuracidade.avaliados,
+        skus_acertos=acuracidade.acertos,
+        skus_divergentes=acuracidade.divergentes,
+        skus_sem_consenso=acuracidade.sem_consenso,
+        skus_total=acuracidade.total,
+        usuario=usuario if getattr(usuario, 'is_authenticated', False) else None,
+    )
+    _registrar_evento(
+        comparativo, usuario, 'ACURACIDADE_SALVA',
+        canal=canal, percentual=str(acuracidade.percentual), registro=registro.pk,
+    )
+    return registro
+
+
+@dataclass
 class ResultadoComparativo:
     dados: DadosComparativo
     canal: str
@@ -1053,6 +1143,7 @@ class ResultadoComparativo:
     filtros: FiltrosComparativo
     linhas: list[LinhaComparativo]
     resumo: ResumoComparativo
+    acuracidade: Acuracidade | None = None
 
     @property
     def colunas_sap(self) -> list[tuple[str, str]]:
@@ -1072,10 +1163,14 @@ def analisar(
     canal = Canal.normalizar(canal)
     visao = Visao.normalizar(visao)
     dados = dados or carregar_dados(comparativo)
+    acuracidade = None
     if visao == Visao.POSICAO:
         todas = montar_linhas_posicao(dados)
     else:
         todas = montar_linhas_sku(dados, canal)
+        acuracidade = calcular_acuracidade(
+            todas, canal, comparativo.referencia_sap_id is not None,
+        )
     return ResultadoComparativo(
         dados=dados,
         canal=canal,
@@ -1083,4 +1178,5 @@ def analisar(
         filtros=filtros,
         linhas=filtrar_linhas(todas, filtros),
         resumo=resumir(todas),
+        acuracidade=acuracidade,
     )

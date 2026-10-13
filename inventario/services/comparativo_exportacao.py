@@ -258,6 +258,17 @@ def gerar_pasta(comparativo, *, canal: str, filtros, usuario) -> tuple[Workbook,
         ('SAP OK (todas as linhas)', resultado.resumo.sap_ok, NUMERO),
         ('SAP coincide com uma contagem (todas as linhas)', resultado.resumo.sap_parcial, NUMERO),
         ('SAP não coincide (todas as linhas)', resultado.resumo.sap_divergente, NUMERO),
+        (
+            f'Acuracidade SAP · {Canal.ROTULOS[canal]} (%)',
+            resultado.acuracidade.percentual if resultado.acuracidade.disponivel else None,
+            NUMERO,
+        ),
+        ('Acuracidade · critério', 'SKUs com duas contagens iguais; acerto = consenso igual ao saldo SAP. '
+         + (resultado.acuracidade.motivo or ''), TEXTO),
+        ('SKUs avaliados (com consenso)', resultado.acuracidade.avaliados, NUMERO),
+        ('SKUs iguais ao SAP', resultado.acuracidade.acertos, NUMERO),
+        ('SKUs diferentes do SAP', resultado.acuracidade.divergentes, NUMERO),
+        ('SKUs sem consenso (fora do cálculo)', resultado.acuracidade.sem_consenso, NUMERO),
         ('Exportado por', nome_usuario, TEXTO),
         ('Data/hora da extração', _data_excel(agora), DATA),
         ('Fuso horário', FUSO_ROTULO, TEXTO),
@@ -325,6 +336,41 @@ def gerar_pasta(comparativo, *, canal: str, filtros, usuario) -> tuple[Workbook,
             ])
     _escrever_aba(aba_lancamentos, colunas_lancamento, linhas_lancamento)
     _corrigir_linhas_sem_lancamento(aba_lancamentos, colunas_lancamento)
+
+    aba_acuracidade = pasta.create_sheet('Acuracidade salva')
+    colunas_acuracidade = [
+        ('Data/hora', DATA),
+        ('Canal', TEXTO),
+        ('Acuracidade (%)', NUMERO),
+        ('SKUs avaliados', NUMERO),
+        ('SKUs iguais ao SAP', NUMERO),
+        ('SKUs diferentes do SAP', NUMERO),
+        ('SKUs sem consenso', NUMERO),
+        ('SKUs no comparativo', NUMERO),
+        ('Fotografia SAP', TEXTO),
+        ('Usuário', TEXTO),
+    ]
+    registros = comparativo.acuracidades.select_related(
+        'usuario', 'usuario__perfil_operacional', 'referencia_sap',
+    )
+    _escrever_aba(aba_acuracidade, colunas_acuracidade, [
+        [
+            _data_excel(registro.data_hora),
+            Canal.ROTULOS.get(registro.canal, registro.canal),
+            registro.percentual,
+            registro.skus_avaliados,
+            registro.skus_acertos,
+            registro.skus_divergentes,
+            registro.skus_sem_consenso,
+            registro.skus_total,
+            f'#{registro.referencia_sap_id}' if registro.referencia_sap_id else '—',
+            (
+                getattr(getattr(registro.usuario, 'perfil_operacional', None), 'nome', '')
+                or (registro.usuario.get_username() if registro.usuario else 'Não registrado')
+            ),
+        ]
+        for registro in registros
+    ])
 
     return pasta, nome_arquivo(comparativo, canal, agora)
 

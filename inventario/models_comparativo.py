@@ -190,3 +190,52 @@ class ComparativoContagemEvento(models.Model):
 
     def __str__(self):
         return f'{self.acao} — {self.comparativo_id}'
+
+
+class ComparativoAcuracidade(models.Model):
+    """Registro salvo da acuracidade do estoque contado em relação ao SAP.
+
+    Fotografia do cálculo no momento do registro: não muda se as contagens
+    ou a referência SAP mudarem depois.
+    """
+
+    comparativo = models.ForeignKey(
+        ComparativoContagem,
+        on_delete=models.CASCADE,
+        related_name='acuracidades',
+        verbose_name='comparativo',
+    )
+    canal = models.CharField('canal SAP', max_length=10)
+    referencia_sap = models.ForeignKey(
+        ReferenciaSAP,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acuracidades',
+        verbose_name='referência SAP',
+    )
+    percentual = models.DecimalField(
+        'acuracidade (%)', max_digits=6, decimal_places=2, null=True, blank=True,
+    )
+    skus_avaliados = models.PositiveIntegerField('SKUs avaliados', default=0)
+    skus_acertos = models.PositiveIntegerField('SKUs iguais ao SAP', default=0)
+    skus_divergentes = models.PositiveIntegerField('SKUs diferentes do SAP', default=0)
+    skus_sem_consenso = models.PositiveIntegerField('SKUs sem consenso', default=0)
+    skus_total = models.PositiveIntegerField('SKUs no comparativo', default=0)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acuracidades_comparativo',
+        verbose_name='usuário',
+    )
+    data_hora = models.DateTimeField('data e hora', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'acuracidade do comparativo'
+        verbose_name_plural = 'acuracidades do comparativo'
+        ordering = ['-data_hora']
+
+    def __str__(self):
+        return f'{self.comparativo_id} · {self.canal} · {self.percentual}%'

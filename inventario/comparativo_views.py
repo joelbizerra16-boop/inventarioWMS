@@ -6,6 +6,7 @@ from django import forms
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
@@ -24,7 +25,9 @@ from inventario.services.comparativo_contagens import (
     StatusSAP,
     Visao,
     analisar,
+    formatar_quantidade,
     obter_ultima_importacao_sap,
+    salvar_acuracidade,
     salvar_comparativo,
 )
 from inventario.services.comparativo_exportacao import resposta_excel_comparativo
@@ -88,7 +91,7 @@ class ComparativoListaView(ComparativoAcessoMixin, View):
         comparativos = (
             ComparativoContagem.objects
             .select_related('referencia_sap', 'usuario_criacao', 'usuario_criacao__perfil_operacional')
-            .prefetch_related('associacoes__inventario')
+            .prefetch_related('associacoes__inventario', 'acuracidades')
             .order_by('-data_criacao')
         )
         pagina = Paginator(comparativos, 20).get_page(request.GET.get('page'))
@@ -96,10 +99,12 @@ class ComparativoListaView(ComparativoAcessoMixin, View):
             comparativo.contagens_ordenadas = sorted(
                 comparativo.associacoes.all(), key=lambda a: a.ordem,
             )
+            comparativo.ultima_acuracidade = next(iter(comparativo.acuracidades.all()), None)
         return render(request, self.template_name, {
             'page_obj': pagina,
             'comparativos': pagina,
             'pode_editar': usuario_pode_escrever_inventario(request.user),
+            'rotulos_canal': Canal.ROTULOS,
         })
 
 
@@ -218,12 +223,42 @@ class ComparativoAcompanhamentoView(ComparativoAcessoMixin, View):
             'fuso_rotulo': FUSO_ROTULO,
             'atualizado_em': timezone.localtime(resultado.dados.gerado_em),
             'pode_editar': usuario_pode_escrever_inventario(request.user),
+            'acuracidades_salvas': list(
+                comparativo.acuracidades.select_related('usuario', 'usuario__perfil_operacional')[:10]
+            ),
+            'rotulos_canal': Canal.ROTULOS,
         }
         if request.GET.get('parcial') == '1':
             resposta = render(request, self.template_parcial, contexto)
             resposta['Cache-Control'] = 'no-store'
             return resposta
         return render(request, self.template_name, contexto)
+
+
+class ComparativoAcuracidadeSalvarView(RequerEscritaInventarioMixin, ComparativoAcessoMixin, View):
+    """Grava o cálculo atual da acuracidade do canal como registro histórico."""
+
+    def post(self, request, pk):
+        comparativo = get_object_or_404(ComparativoContagem, pk=pk)
+        canal = Canal.normalizar(request.POST.get('canal'))
+        destino = (
+            reverse('comparativo:acompanhamento', args=[pk])
+            + '?' + urlencode({'canal': canal, 'visao': Visao.SKU})
+        )
+        if not usuario_pode_escrever_inventario(request.user):
+            messages.error(request, 'Seu perfil não pode salvar a acuracidade.')
+            return redirect(destino)
+        try:
+            registro = salvar_acuracidade(comparativo, canal, request.user)
+        except ComparativoError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(
+                request,
+                f'Acuracidade {Canal.ROTULOS[canal]} salva: {formatar_quantidade(registro.percentual)}% '
+                f'({registro.skus_acertos} de {registro.skus_avaliados} SKUs).',
+            )
+        return redirect(destino)
 
 
 class ComparativoExportarView(ComparativoAcessoMixin, View):

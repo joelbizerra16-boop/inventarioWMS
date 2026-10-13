@@ -152,6 +152,31 @@
 <div id="comparativoResultado" data-url="{% url 'comparativo:acompanhamento' comparativo.pk %}?{{ querystring }}{% if page_obj.number > 1 %}&page={{ page_obj.number }}{% endif %}&parcial=1">
     {% include 'inventario/comparativo/_resultado.html' %}
 </div>
+
+{% if visao == 'sku' and acuracidades_salvas %}
+<div class="card border-0 shadow-sm mt-3">
+    <div class="card-body py-3">
+        <h2 class="h6 fw-semibold mb-2">Acuracidade salva</h2>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 small">
+                <thead><tr><th>Data/hora</th><th>Canal</th><th class="text-end">Acuracidade</th><th class="text-end">Iguais ao SAP</th><th class="text-end">Sem consenso</th><th>Usuário</th></tr></thead>
+                <tbody>
+                    {% for registro in acuracidades_salvas %}
+                    <tr>
+                        <td>{{ registro.data_hora|data_hora }}</td>
+                        <td>{{ rotulos_canal|item:registro.canal }}</td>
+                        <td class="text-end fw-semibold">{{ registro.percentual|qtd }}%</td>
+                        <td class="text-end">{{ registro.skus_acertos }}/{{ registro.skus_avaliados }}</td>
+                        <td class="text-end">{{ registro.skus_sem_consenso }}</td>
+                        <td>{{ registro.usuario.perfil_operacional.nome|default:registro.usuario.username|default:"Não registrado" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
