@@ -141,13 +141,17 @@ def atualizar_usuario_operacional(
             senha=senha,
         )
     else:
-        user = User.objects.create_user(username=login.strip(), password=senha or login.strip())
+        if not senha:
+            raise UsuarioServiceError(
+                'Este cadastro não possui acesso vinculado. '
+                'Informe uma senha para criar o acesso.'
+            )
+        user = User.objects.create_user(username=login.strip(), password=senha)
         _sincronizar_auth_user(
             user,
             login=login.strip(),
             perfil=perfil,
             ativo=ativo,
-            senha=senha,
         )
         usuario.user = user
         usuario.save(update_fields=['user'])

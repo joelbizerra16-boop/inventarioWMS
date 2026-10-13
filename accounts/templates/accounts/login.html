@@ -1,52 +1,181 @@
-{% extends 'base.html' %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1E293B">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="{% url 'pwa_manifest' %}">
+    <link rel="icon" href="{% static 'img/pwa/favicon.ico' %}" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/pwa/favicon-32.png' %}">
+    <title>Login | Sistema de Inventário</title>
+    <style>
+        [hidden] { display: none !important; }
+        .login-body {
+            margin: 0;
+            min-height: 100vh;
+            background: #f1f5f9;
+            color: #0f172a;
+            font-family: "Segoe UI", sans-serif;
+        }
+        .login-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            padding: 12px;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 420px;
+            box-sizing: border-box;
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        }
+        .login-card h1 {
+            margin: 0 0 4px;
+            font-size: 1.25rem;
+            text-align: center;
+        }
+        .login-subtitulo {
+            margin: 0 0 12px;
+            text-align: center;
+            color: #475569;
+            font-size: 0.9rem;
+        }
+        .login-aviso {
+            margin: 0 0 12px;
+            padding: 8px 10px;
+            background: #fef2f2;
+            color: #7f1d1d;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            line-height: 1.35;
+        }
+        .login-campo { margin-bottom: 12px; }
+        .login-campo label {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        .login-campo input {
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 16px;
+            padding: 10px;
+        }
+        .login-erros {
+            margin: 4px 0 0;
+            padding-left: 1.1rem;
+            color: #7f1d1d;
+            font-size: 0.9rem;
+        }
+        .login-enviar {
+            width: 100%;
+            margin-top: 4px;
+            padding: 12px;
+            font-size: 1rem;
+            color: #fff;
+            background: #1e293b;
+            border: 0;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body class="login-body">
+    <main class="login-shell">
+        <section class="login-card">
+            <h1>Sistema de Inventário</h1>
+            <p class="login-subtitulo">Acesso operacional</p>
 
-{% block title %}Login | Sistema de Inventário{% endblock %}
+            <p id="login-rede" class="login-aviso" hidden>
+                Não foi possível conectar. Verifique a conexão e tente novamente.
+            </p>
 
-{% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5 col-lg-4">
-        <div class="card border-0 shadow-sm">
-            <div class="card-body p-4">
-                <h1 class="h4 fw-semibold text-center mb-1">Sistema de Inventário</h1>
-                <p class="text-muted text-center small mb-4">Acesso operacional</p>
+            {% if messages %}
+                {% for message in messages %}
+                <p class="login-aviso" role="alert">{{ message }}</p>
+                {% endfor %}
+            {% endif %}
 
-                <form method="post">
-                    {% csrf_token %}
-                    {% if form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        {{ form.non_field_errors }}
-                    </div>
+            <form
+                id="login-form"
+                method="post"
+                action="{% url 'accounts:login' %}"
+                accept-charset="UTF-8"
+                autocomplete="on"
+            >
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                <div class="login-aviso" role="alert">
+                    {% for erro in form.non_field_errors %}{{ erro }}{% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="login-campo">
+                    <label for="{{ form.username.id_for_label }}">Usuário</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}
+                    <ul class="login-erros">
+                        {% for erro in form.username.errors %}<li>{{ erro }}</li>{% endfor %}
+                    </ul>
                     {% endif %}
+                </div>
 
-                    <div class="mb-3">
-                        <label for="id_username" class="form-label">Usuário</label>
-                        <input
-                            type="text"
-                            name="username"
-                            id="id_username"
-                            class="form-control"
-                            required
-                            autofocus
-                        >
-                    </div>
+                <div class="login-campo">
+                    <label for="{{ form.password.id_for_label }}">Senha</label>
+                    {{ form.password }}
+                    {% if form.password.errors %}
+                    <ul class="login-erros">
+                        {% for erro in form.password.errors %}<li>{{ erro }}</li>{% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
 
-                    <div class="mb-4">
-                        <label for="id_password" class="form-label">Senha</label>
-                        <input
-                            type="password"
-                            name="password"
-                            id="id_password"
-                            class="form-control"
-                            required
-                        >
-                    </div>
-
-                    <button type="submit" class="btn btn-primary w-100">
-                        Entrar
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
+                <button type="submit" class="login-enviar">Entrar</button>
+            </form>
+        </section>
+    </main>
+    <script>
+        (function () {
+            var aviso = document.getElementById('login-rede');
+            if (aviso && window.addEventListener) {
+                var atualizar = function () {
+                    aviso.hidden = navigator.onLine !== false;
+                };
+                window.addEventListener('offline', atualizar);
+                window.addEventListener('online', atualizar);
+                atualizar();
+            }
+            var form = document.getElementById('login-form');
+            if (!form || !form.addEventListener) {
+                return;
+            }
+            form.addEventListener('submit', function (event) {
+                var agora = Date.now ? Date.now() : 0;
+                if (!agora) {
+                    return;
+                }
+                var ultimo = Number(form.getAttribute('data-envio') || '0');
+                if (ultimo && (agora - ultimo) < 1500) {
+                    if (event.preventDefault) {
+                        event.preventDefault();
+                    }
+                    return;
+                }
+                form.setAttribute('data-envio', String(agora));
+            });
+        })();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register("{% url 'pwa_service_worker' %}", { scope: '/' }).catch(function () {});
+        }
+    </script>
+</body>
+</html>

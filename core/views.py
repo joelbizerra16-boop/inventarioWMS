@@ -50,6 +50,10 @@ def handler404(request, exception):
 def handler500(request):
     if deve_responder_json_pocket(request):
         return json_erro_pocket(request, MENSAGEM_ERRO_INESPERADO, status=500)
+    if (request.path or '').startswith('/accounts/login'):
+        from accounts.login_http import resposta_erro_interno_login
+
+        return resposta_erro_interno_login(request)
     messages.error(request, MENSAGEM_ERRO_INESPERADO)
     destino = _destino_pos_erro(request)
     if _paths_equivalent(request.path, destino):

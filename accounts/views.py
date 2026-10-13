@@ -1,17 +1,19 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.views import LoginView, LogoutView
+from django.core.exceptions import PermissionDenied, SuspiciousOperation, ValidationError
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from accounts.forms import UsuarioForm
+from accounts.forms import OperacionalAuthenticationForm, UsuarioForm
+from accounts.login_http import resposta_erro_interno_login
 from accounts.mixins import PaginacaoContextMixin, PaginacaoMixin, RequerAdministradorMixin
 from accounts.models import Usuario
-from core.logging_auditoria import ip_do_request, registrar_evento
-from core.pocket_http import is_pocket_ajax, json_erro_pocket
-from core.mixins import ExclusaoSeguraMixin
 from accounts.services.perfil import usuario_pode_acessar
 from accounts.services.usuarios import (
     UsuarioServiceError,
@@ -22,17 +24,42 @@ from accounts.services.usuarios import (
     filtrar_usuarios,
     obter_resumo_usuarios,
 )
+from core.logging_auditoria import ip_do_request, registrar_evento
+from core.mixins import ExclusaoSeguraMixin
+from core.pocket_http import json_erro_pocket, requisicao_ajax_pocket
+
+logger = logging.getLogger('inventario.auditoria')
 
 
 class OperacionalLoginView(LoginView):
     template_name = 'accounts/login.html'
+    form_class = OperacionalAuthenticationForm
     redirect_authenticated_user = False
 
     def dispatch(self, request, *args, **kwargs):
+        try:
+            return self._dispatch_operacional(request, *args, **kwargs)
+        except (PermissionDenied, Http404, SuspiciousOperation):
+            raise
+        except ValidationError as exc:
+            from accounts.login_http import resposta_login_mensagem
+
+            texto = ' '.join(str(item) for item in exc.messages) or (
+                'Não foi possível validar o acesso.'
+            )
+            return resposta_login_mensagem(request, texto, status=400)
+        except Exception as exc:
+            try:
+                if getattr(request.user, 'is_authenticated', False):
+                    logout(request)
+            except Exception:
+                logger.exception('Falha ao encerrar sessão após erro de login')
+            return resposta_erro_interno_login(request, exc)
+
+    def _dispatch_operacional(self, request, *args, **kwargs):
         if request.user.is_authenticated:
             if usuario_pode_acessar(request.user):
-                referer = request.META.get('HTTP_REFERER', '') or ''
-                if is_pocket_ajax(request) or '/pocket/' in referer:
+                if requisicao_ajax_pocket(request):
                     return json_erro_pocket(
                         request,
                         'Sessão expirada. Faça login novamente.',

@@ -42,6 +42,7 @@ CSRF_TRUSTED_ORIGINS = [
     for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
     if origin.strip()
 ]
+CSRF_FAILURE_VIEW = 'accounts.login_http.csrf_failure'
 
 INSTALLED_APPS = [
     'django.contrib.admin',
