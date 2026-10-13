@@ -39,7 +39,8 @@
                     <tr data-chave="{{ linha.chave }}">
                         <td class="ps-3 cmp-posicao">
                             {% if linha.posicoes %}
-                            {{ linha.posicoes.0.0 }}
+                            <span class="fw-semibold">{{ linha.posicoes.0.1|default:linha.posicoes.0.0 }}</span>
+                            <div class="cmp-sub">Cód. {{ linha.posicoes.0.0 }}</div>
                             {% if linha.posicoes|length > 1 %}<div class="cmp-sub">+{{ linha.posicoes|length|add:"-1" }} posição(ões)</div>{% endif %}
                             {% else %}
                             <span class="text-muted">—</span>
@@ -112,7 +113,7 @@
                                 <tbody>
                                     {% for detalhe in linha.detalhe_posicoes %}
                                     <tr>
-                                        <td>{{ detalhe.codigo }} <span class="text-muted">{{ detalhe.descricao }}</span></td>
+                                        <td>{{ detalhe.descricao|default:detalhe.codigo }} <span class="text-muted">· Cód. {{ detalhe.codigo }}</span></td>
                                         {% for ordem in ordens %}<td class="text-end cmp-num">{{ detalhe.quantidades|item:ordem|qtd }}</td>{% endfor %}
                                     </tr>
                                     {% endfor %}
@@ -136,7 +137,7 @@
                                             <td>{{ lancamento.id }}</td>
                                             <td>{{ lancamento.rotulo_ordem }}</td>
                                             <td>#{{ lancamento.inventario_id }}</td>
-                                            <td>{{ lancamento.codigo_posicao }}</td>
+                                            <td>{{ lancamento.descricao_posicao|default:lancamento.codigo_posicao }} <span class="text-muted">· Cód. {{ lancamento.codigo_posicao }}</span></td>
                                             <td>{{ linha.codigo_produto }}</td>
                                             <td class="text-end cmp-num">{{ lancamento.quantidade|qtd }}</td>
                                             <td>{{ linha.embalagem|default:"—" }}</td>

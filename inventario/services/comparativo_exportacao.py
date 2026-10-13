@@ -120,7 +120,9 @@ def _escrever_aba(planilha, colunas, linhas):
 
 
 def _colunas_contagem(ordens, incluir_sap_status: bool, colunas_sap) -> list[tuple[str, str]]:
-    colunas = [('Posição', TEXTO), ('SKU', TEXTO), ('Descrição', TEXTO)]
+    colunas = [
+        ('Posição', TEXTO), ('Código da posição', TEXTO), ('SKU', TEXTO), ('Descrição', TEXTO),
+    ]
     colunas.extend((rotulo, NUMERO) for _chave, rotulo in colunas_sap)
     colunas.extend((rotulo_ordem(o), NUMERO) for o in ordens)
     for ordem in ordens:
@@ -147,6 +149,7 @@ def _colunas_contagem(ordens, incluir_sap_status: bool, colunas_sap) -> list[tup
 
 def _valores_contagem(linha, ordens, incluir_sap_status: bool, colunas_sap) -> list:
     valores = [
+        ', '.join(linha.nomes_posicao) or '—',
         ', '.join(linha.codigos_posicao) or '—',
         linha.codigo_produto,
         linha.descricao,
@@ -288,6 +291,7 @@ def gerar_pasta(comparativo, *, canal: str, filtros, usuario) -> tuple[Workbook,
         ('Contagem', TEXTO),
         ('Inventário', NUMERO),
         ('Posição', TEXTO),
+        ('Código da posição', TEXTO),
         ('SKU', TEXTO),
         ('Descrição', TEXTO),
         ('Quantidade', NUMERO),
@@ -306,6 +310,7 @@ def gerar_pasta(comparativo, *, canal: str, filtros, usuario) -> tuple[Workbook,
                 lancamento.id,
                 lancamento.rotulo_ordem,
                 lancamento.inventario_id,
+                lancamento.descricao_posicao or lancamento.codigo_posicao,
                 lancamento.codigo_posicao,
                 linha.codigo_produto,
                 linha.descricao,

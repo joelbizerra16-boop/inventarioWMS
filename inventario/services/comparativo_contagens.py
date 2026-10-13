@@ -798,6 +798,11 @@ class LinhaComparativo:
     def codigos_posicao(self) -> list[str]:
         return [codigo for codigo, _ in self.posicoes]
 
+    @property
+    def nomes_posicao(self) -> list[str]:
+        """Posição de armazenagem (ex.: 01.03.101); cai no código se vazia."""
+        return [descricao or codigo for codigo, descricao in self.posicoes]
+
     def texto_busca(self) -> str:
         partes = [self.codigo_produto, self.descricao]
         for codigo, descricao in self.posicoes:
@@ -872,7 +877,9 @@ def montar_linhas_sku(dados: DadosComparativo, canal: str) -> list[LinhaComparat
                 ))
                 atual = detalhe.quantidades[ordem]
                 detalhe.quantidades[ordem] = (atual or Decimal('0')) + lancamento.quantidade
-        detalhe_posicoes = sorted(posicoes_map.values(), key=lambda d: d.codigo)
+        detalhe_posicoes = sorted(
+            posicoes_map.values(), key=lambda d: (d.descricao or d.codigo, d.codigo),
+        )
 
         if dados.comparativo.referencia_sap_id is None:
             sap = {'cosan': None, 'brida': None, 'total': None}
@@ -941,7 +948,9 @@ def montar_linhas_posicao(dados: DadosComparativo) -> list[LinhaComparativo]:
             medicoes=medicoes,
             contagens=classificacao,
         ))
-    linhas.sort(key=lambda l: (l.posicoes[0][0], l.codigo_produto, l.produto_id))
+    linhas.sort(key=lambda l: (
+        l.posicoes[0][1] or l.posicoes[0][0], l.posicoes[0][0], l.codigo_produto, l.produto_id,
+    ))
     return linhas
 
 

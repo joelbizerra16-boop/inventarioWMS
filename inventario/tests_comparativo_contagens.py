@@ -318,6 +318,15 @@ class ConsolidacaoTestCase(ComparativoBaseTestCase):
         self.assertEqual(posicoes.linhas[0].medicoes[1].quantidade, D(60))
         self.assertEqual(posicoes.linhas[0].contagens.status, StatusContagem.DIVERGENTE)
 
+    def test_posicao_exibe_nome_e_codigo(self):
+        self.item(self.inv1, self.pos_a, self.produto, '5', self.ana)
+        comparativo = self.criar_comparativo()
+        for visao in ('sku', 'posicao'):
+            with self.subTest(visao=visao):
+                corpo = self.client.get(self.url(comparativo, visao=visao)).content.decode().split('<tbody>', 1)[1]
+                self.assertIn('<span class="fw-semibold">Rua A</span>', corpo)
+                self.assertIn('Cód. A-01-01', corpo)
+
     def test_precisao_decimal_e_zeros_a_esquerda(self):
         self.item(self.inv1, self.pos_a, self.produto, '0.125', self.ana)
         self.item(self.inv2, self.pos_a, self.produto, '0.125', self.bruno)
@@ -525,29 +534,31 @@ class ExcelTestCase(ComparativoBaseTestCase):
         self.assertIn('Comparativo_conferencia-outubro_COSAN_', resposta['Content-Disposition'])
         aba = pasta['Por SKU']
         cabecalhos = [c.value for c in aba[1]]
-        self.assertEqual(cabecalhos[:7], ['Posição', 'SKU', 'Descrição', 'COSAN', 'C1', 'C2', 'C3'])
+        self.assertEqual(cabecalhos[:8], ['Posição', 'Código da posição', 'SKU', 'Descrição', 'COSAN', 'C1', 'C2', 'C3'])
         self.assertNotIn('Total SAP', cabecalhos)
         self.assertNotIn('BRIDA', cabecalhos)
         self.assertEqual(aba.freeze_panes, 'A2')
         self.assertTrue(aba.auto_filter.ref)
-        linhas = {row[1].value: row for row in aba.iter_rows(min_row=2)}
+        linhas = {row[2].value: row for row in aba.iter_rows(min_row=2)}
         linha = linhas['00123']
-        self.assertEqual(linha[1].data_type, 's')
-        self.assertEqual(D(str(linha[3].value)), D(80))
-        self.assertEqual(D(str(linha[4].value)), D(100))
-        self.assertEqual(linha[6].fill.fgColor.rgb[-6:], 'FEE2E2')  # C3 divergente
-        self.assertEqual(linha[4].fill.fgColor.rgb[-6:], 'DCFCE7')
+        self.assertEqual(linha[0].value, 'Rua A')  # posição de armazenagem
+        self.assertEqual(linha[1].value, 'A-01-01')  # código da posição
+        self.assertEqual(linha[2].data_type, 's')
+        self.assertEqual(D(str(linha[4].value)), D(80))
+        self.assertEqual(D(str(linha[5].value)), D(100))
+        self.assertEqual(linha[7].fill.fgColor.rgb[-6:], 'FEE2E2')  # C3 divergente
+        self.assertEqual(linha[5].fill.fgColor.rgb[-6:], 'DCFCE7')
         self.assertIsInstance(linha[cabecalhos.index('Contagem 1 · primeira data/hora')].value, datetime)
         self.assertEqual(linha[cabecalhos.index('Contagem 1 · primeira data/hora')].value.strftime('%H:%M'), '09:12')
         self.assertEqual(linha[cabecalhos.index('Status SAP')].value, 'SAP não coincide')
         self.assertEqual(linha[cabecalhos.index('Dupla coincidente')].value, 'C1 = C2')
         perigosa = linhas['0042']
-        self.assertEqual(perigosa[2].value, '=1+1')
-        self.assertEqual(perigosa[2].data_type, 's')
-        self.assertEqual(perigosa[4].value, '—')  # ausência não vira zero
+        self.assertEqual(perigosa[3].value, '=1+1')
+        self.assertEqual(perigosa[3].data_type, 's')
+        self.assertEqual(perigosa[5].value, '—')  # ausência não vira zero
 
         posicao = [c.value for c in pasta['Por posição'][1]]
-        self.assertEqual(posicao[:6], ['Posição', 'SKU', 'Descrição', 'C1', 'C2', 'C3'])
+        self.assertEqual(posicao[:7], ['Posição', 'Código da posição', 'SKU', 'Descrição', 'C1', 'C2', 'C3'])
         self.assertNotIn('Status SAP', posicao)
         self.assertNotIn('COSAN', posicao)
         self.assertEqual(pasta['Lançamentos válidos'].max_row, 4)
@@ -556,20 +567,20 @@ class ExcelTestCase(ComparativoBaseTestCase):
         _resposta, pasta = self.exportar(canal='ambas')
         aba = pasta['Por SKU']
         cabecalhos = [c.value for c in aba[1]]
-        self.assertEqual(cabecalhos[3:6], ['COSAN', 'BRIDA', 'Total SAP'])
-        linha = next(r for r in aba.iter_rows(min_row=2) if r[1].value == '00123')
-        self.assertEqual(D(str(linha[5].value)), D(100))
+        self.assertEqual(cabecalhos[4:7], ['COSAN', 'BRIDA', 'Total SAP'])
+        linha = next(r for r in aba.iter_rows(min_row=2) if r[2].value == '00123')
+        self.assertEqual(D(str(linha[6].value)), D(100))
         tela = self.client.get(self.url(self.comparativo, canal='ambas'))
         linha_tela = next(l for l in tela.context['linhas'] if l.codigo_produto == '00123')
         self.assertEqual(linha[cabecalhos.index('Status SAP')].value, linha_tela.status_sap.rotulo)
         self.assertEqual(linha[cabecalhos.index('Status das contagens')].value, linha_tela.contagens.rotulo)
         _cabecalhos_tela = _cabecalhos_html(tela.content.decode())
-        self.assertEqual(_cabecalhos_tela[2:5], cabecalhos[3:6])
+        self.assertEqual(_cabecalhos_tela[2:5], cabecalhos[4:7])
 
     def test_filtros_aplicados_em_todas_as_linhas(self):
         _resposta, pasta = self.exportar(canal='ambas', q='0042')
         aba = pasta['Por SKU']
-        self.assertEqual([r[1].value for r in aba.iter_rows(min_row=2)], ['0042'])
+        self.assertEqual([r[2].value for r in aba.iter_rows(min_row=2)], ['0042'])
         resumo = {r[0].value: r[1].value for r in pasta['Resumo'].iter_rows(min_row=2)}
         self.assertEqual(resumo['Filtros'], 'Pesquisa: 0042')
         self.assertIn('America/Sao_Paulo', resumo['Fuso horário'])
