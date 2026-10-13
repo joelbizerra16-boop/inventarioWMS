@@ -1,0 +1,114 @@
+{% extends base_template %}
+{% load static %}
+
+{% block title %}Consultas | Pocket{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pocket.css' %}?v={{ POCKET_STATIC_VERSION }}">
+{% endblock %}
+
+{% block content %}
+<div class="pocket-page pocket-page--wms">
+    <header class="pocket-header">
+        <span class="pocket-header-title">Consultas</span>
+    </header>
+
+    {% if sem_inventario %}
+    <div class="pocket-scan-panel">
+        <p class="pocket-consulta-aviso">{{ mensagem_sem_inventario }}</p>
+        <a href="{{ selecionar_url }}" class="btn btn-primary w-100 pocket-btn">Selecionar inventário</a>
+    </div>
+    {% else %}
+    <p class="pocket-consulta-inventario">
+        Inventário #{{ inventario.pk }} — {{ inventario.get_status_display }}
+    </p>
+
+    <div class="pocket-scan-panel">
+        <form method="get" id="pocket-consultas-form" class="pocket-scan-form" action="">
+            <section class="pocket-scan-sec">
+                <label class="pocket-scan-sec-title" for="pocket-consultas-tipo">SKU / Posição</label>
+                <select name="tipo" id="pocket-consultas-tipo" class="form-select pocket-input">
+                    <option value="sku" {% if tipo != 'posicao' %}selected{% endif %}>SKU</option>
+                    <option value="posicao" {% if tipo == 'posicao' %}selected{% endif %}>Posição</option>
+                </select>
+            </section>
+
+            <section class="pocket-scan-sec">
+                <label class="pocket-scan-sec-title" for="pocket-consultas-q">Código</label>
+                <input
+                    type="text"
+                    name="q"
+                    id="pocket-consultas-q"
+                    class="form-control pocket-input"
+                    value="{{ termo }}"
+                    maxlength="50"
+                    autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    placeholder="Bipar ou digitar"
+                >
+                {% if aviso %}
+                <p class="pocket-consulta-aviso" id="pocket-consultas-aviso">{{ aviso }}</p>
+                {% endif %}
+            </section>
+
+            <button type="submit" class="pocket-btn-salvar" id="pocket-consultas-btn">Consultar</button>
+        </form>
+    </div>
+
+    {% if falha %}
+    <p class="pocket-consulta-falha" role="alert">{{ mensagem }}</p>
+    {% elif mensagem %}
+    <p class="pocket-consulta-vazio">{{ mensagem }}</p>
+    {% endif %}
+
+    {% if linhas %}
+    <div class="pocket-consulta-lista">
+        {% for linha in linhas %}
+        <article class="pocket-consulta-card">
+            <p class="pocket-consulta-rotulo">SKU</p>
+            <p class="pocket-consulta-valor">{{ linha.codigo_produto }}</p>
+            <p class="pocket-consulta-rotulo">Descrição</p>
+            <p class="pocket-consulta-valor">{{ linha.descricao }}</p>
+            <p class="pocket-consulta-rotulo">Posição</p>
+            <p class="pocket-consulta-valor">{{ linha.codigo_posicao }}{% if linha.alocacao %} — {{ linha.alocacao }}{% endif %}</p>
+            <p class="pocket-consulta-rotulo">Quantidade contada</p>
+            <p class="pocket-consulta-valor">{{ linha.quantidade }}</p>
+            {% if linha.operador %}
+            <p class="pocket-consulta-rotulo">Operador</p>
+            <p class="pocket-consulta-valor">{{ linha.operador }}</p>
+            {% endif %}
+            {% if linha.data_hora %}
+            <p class="pocket-consulta-rotulo">Data/Hora</p>
+            <p class="pocket-consulta-valor">{{ linha.data_hora|date:"d/m/Y H:i" }}</p>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if page_obj and page_obj.has_other_pages %}
+    <nav class="pocket-consulta-paginas" aria-label="Paginação da consulta">
+        <span>Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        <div class="pocket-consulta-paginas-acoes">
+            {% if page_obj.has_previous %}
+            <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">Anterior</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Próxima</a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
+
+    <a href="{{ voltar_url }}" class="btn btn-outline-secondary w-100 pocket-btn pocket-consulta-voltar">Voltar à contagem</a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if not sem_inventario %}
+<script src="{% static 'js/pocket-consultas.js' %}?v={{ POCKET_STATIC_VERSION }}"></script>
+{% endif %}
+{% endblock %}

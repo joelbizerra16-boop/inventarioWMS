@@ -35,7 +35,13 @@ from inventario.services.contagem import (
 )
 from inventario.services.locks import LockError
 from inventario.services.tarefas import TarefaError
+from inventario.services.consulta_contagem import queryset_contagens
 from inventario.services.confronto import CanalConfronto, executar_confronto
+from inventario.services.exportacao_excel import (
+    parametros_confronto,
+    resposta_excel_confronto,
+    resposta_excel_contagem,
+)
 from inventario.services.aprovacao import (
     AprovacaoError,
     consultar_aprovacao,
@@ -325,26 +331,10 @@ class ContagemListView(AcessoOperacionalMixin, InventarioContagemMixin, ListView
     ordering = ['posicao__codigo', 'produto__codigo_produto']
 
     def get_queryset(self):
-        inventario = self.get_inventario()
-        queryset = InventarioItem.objects.filter(
-            inventario=inventario,
-        ).select_related(
-            'posicao',
-            'produto',
-            'usuario_contagem',
-            'usuario_contagem__perfil_operacional',
+        return queryset_contagens(
+            self.get_inventario(),
+            self.request.GET.get('q', ''),
         )
-
-        termo = self.request.GET.get('q', '').strip()
-        if termo:
-            queryset = queryset.filter(
-                Q(produto__codigo_produto__icontains=termo)
-                | Q(produto__descricao__icontains=termo)
-                | Q(posicao__codigo__icontains=termo)
-                | Q(posicao__posicao__icontains=termo)
-            )
-
-        return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -353,6 +343,13 @@ class ContagemListView(AcessoOperacionalMixin, InventarioContagemMixin, ListView
         context['termo_busca'] = self.request.GET.get('q', '')
         context['permite_contagem'] = self.inventario_permite_contagem(inventario)
         return context
+
+
+class ContagemExportarView(AcessoOperacionalMixin, InventarioContagemMixin, View):
+    def get(self, request, pk):
+        inventario = self.get_inventario()
+        contagens = queryset_contagens(inventario, request.GET.get('q', ''))
+        return resposta_excel_contagem(inventario, contagens)
 
 
 class ContagemCreateView(RequerEscritaInventarioMixin, InventarioContagemMixin, CreateView):
@@ -478,10 +475,11 @@ class ConfrontoListView(AcessoOperacionalMixin, View):
 
     def get(self, request):
         inventarios = Inventario.objects.select_related('usuario').order_by('-data_criacao')
-        inventario_id = request.GET.get('inventario', '').strip()
-        filtro_status = request.GET.get('filtro', 'todos')
-        termo_busca = request.GET.get('q', '')
-        canal = CanalConfronto.normalizar(request.GET.get('canal', ''))
+        consulta = parametros_confronto(request.GET)
+        inventario_id = consulta['inventario_id']
+        filtro_status = consulta['filtro_status']
+        termo_busca = consulta['termo_busca']
+        canal = consulta['canal']
 
         resultado = None
         inventario_selecionado = None
@@ -505,6 +503,24 @@ class ConfrontoListView(AcessoOperacionalMixin, View):
             'canal_opcoes': CanalConfronto.CHOICES,
             'resultado': resultado,
         })
+
+
+class ConfrontoExportarView(AcessoOperacionalMixin, View):
+    def get(self, request):
+        consulta = parametros_confronto(request.GET)
+        inventario_id = consulta['inventario_id']
+        if not inventario_id.isdigit():
+            messages.error(request, 'Selecione um inventário para exportar.')
+            return redirect('confronto')
+
+        inventario = get_object_or_404(Inventario, pk=int(inventario_id))
+        resultado = executar_confronto(
+            inventario_id=inventario.pk,
+            filtro_status=consulta['filtro_status'],
+            termo_busca=consulta['termo_busca'],
+            canal=consulta['canal'],
+        )
+        return resposta_excel_confronto(inventario, resultado.linhas, consulta['canal'])
 
 
 class AprovacaoView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, View):

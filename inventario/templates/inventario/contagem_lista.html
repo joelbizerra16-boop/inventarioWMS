@@ -26,7 +26,7 @@
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-10">
+            <div class="col-md-7">
                 <label for="q" class="form-label">Pesquisar</label>
                 <input
                     type="text"
@@ -41,6 +41,14 @@
                 <button type="submit" class="btn btn-outline-primary">
                     <i class="bi bi-search me-1"></i>Buscar
                 </button>
+            </div>
+            <div class="col-md-3 d-grid">
+                <a
+                    href="{% url 'inventario:contagem_exportar' inventario.pk %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}"
+                    class="btn btn-outline-success"
+                >
+                    <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+                </a>
             </div>
         </form>
     </div>

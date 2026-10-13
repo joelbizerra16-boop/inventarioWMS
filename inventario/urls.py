@@ -3,6 +3,7 @@ from django.urls import path
 from inventario.views import (
     ContagemCreateView,
     ContagemDeleteView,
+    ContagemExportarView,
     ContagemListView,
     ContagemUpdateView,
     InventarioCreateView,
@@ -21,6 +22,11 @@ urlpatterns = [
     path('<int:pk>/excluir/', InventarioDeleteView.as_view(), name='excluir'),
     path('<int:pk>/finalizar/', InventarioFinalizarView.as_view(), name='finalizar'),
     path('<int:pk>/contagem/', ContagemListView.as_view(), name='contagem_lista'),
+    path(
+        '<int:pk>/contagem/exportar/',
+        ContagemExportarView.as_view(),
+        name='contagem_exportar',
+    ),
     path('<int:pk>/contagem/novo/', ContagemCreateView.as_view(), name='contagem_criar'),
     path(
         '<int:pk>/contagem/<int:item_id>/editar/',

@@ -7,6 +7,10 @@ from inventario.pocket_precadastro_views import (
     PocketPrecadastroPosicaoView,
     PocketPrecadastroProdutoView,
 )
+from inventario.pocket_consultas_views import (
+    PocketConsultasIndiceView,
+    PocketConsultasView,
+)
 from inventario.pocket_views import (
     PocketContagemView,
     PocketMestresSyncView,
@@ -19,9 +23,15 @@ urlpatterns = [
     path('', PocketSelecionarView.as_view(), name='selecionar'),
     path('dados-mestres/', PocketMestresSyncView.as_view(), name='dados_mestres'),
     path('validar-codigo-posicao/', PocketValidarCodigoPosicaoView.as_view(), name='validar_codigo_posicao'),
+    path('consultas/', PocketConsultasIndiceView.as_view(), name='consultas'),
     path('operador/precadastro/produto/', OperadorPrecadastroProdutoView.as_view(), name='operador_precadastro_produto'),
     path('operador/precadastro/posicao/', OperadorPrecadastroPosicaoView.as_view(), name='operador_precadastro_posicao'),
     path('<int:inventario_id>/', PocketContagemView.as_view(), name='contagem'),
+    path(
+        '<int:inventario_id>/consultas/',
+        PocketConsultasView.as_view(),
+        name='consultas_inventario',
+    ),
     path('<int:inventario_id>/precadastro/produto/', PocketPrecadastroProdutoView.as_view(), name='precadastro_produto'),
     path('<int:inventario_id>/precadastro/posicao/', PocketPrecadastroPosicaoView.as_view(), name='precadastro_posicao'),
 ]

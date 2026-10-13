@@ -78,7 +78,7 @@
                 </select>
             </div>
 
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="q" class="form-label">Pesquisar</label>
                 <input
                     type="text"
@@ -90,10 +90,16 @@
                 >
             </div>
 
-            <div class="col-md-2 d-grid">
+            <div class="col-md-3 d-grid gap-2">
                 <button type="submit" class="btn btn-primary">
                     <i class="bi bi-arrow-repeat me-1"></i>Executar Confronto
                 </button>
+                <a
+                    href="{% url 'confronto_exportar' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}"
+                    class="btn btn-outline-success"
+                >
+                    <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+                </a>
             </div>
         </form>
     </div>

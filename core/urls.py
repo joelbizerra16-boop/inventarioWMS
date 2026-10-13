@@ -22,6 +22,7 @@ from dashboard.views import HomeView
 from dashboard.views_operacional import DashboardOperacionalApiView
 from inventario.views import (
     AprovacaoView,
+    ConfrontoExportarView,
     ConfrontoListView,
     ConsolidacaoView,
 )
@@ -43,6 +44,7 @@ urlpatterns = [
         name='dashboard_operacional_api',
     ),
     path('confronto/', ConfrontoListView.as_view(), name='confronto'),
+    path('confronto/exportar/', ConfrontoExportarView.as_view(), name='confronto_exportar'),
     path('aprovacao/', AprovacaoView.as_view(), name='aprovacao'),
     path('consolidacao/', ConsolidacaoView.as_view(), name='consolidacao'),
     path('historico/', HistoricoUnificadoView.as_view(), name='historico_unificado'),
