@@ -1,6 +1,7 @@
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from core.logging_auditoria import registrar_evento
 from inventario.models import Inventario, InventarioItem
 from inventario.models_operacional import InventarioAuditoriaEvento, InventarioLock, InventarioTarefa
 from inventario.services.auditoria_operacional import registrar_evento_operacional
@@ -184,10 +185,18 @@ def salvar_contagem(
             )
 
         item = item_existente
+        quantidade_anterior = item.quantidade_fisica
+        if item.data_registro is None and item.usuario_registro_id is None:
+            # Registro anterior à captura de autoria: preserva o que existia
+            # antes de sobrescrever (pode ser vazio em lançamentos legados).
+            item.usuario_registro_id = item.usuario_contagem_id
+            item.data_registro = item.data_contagem
         item.posicao = posicao
         item.produto = produto
         item.quantidade_fisica = quantidade_fisica
         item.data_contagem = agora
+        item.data_alteracao = agora
+        item.usuario_alteracao = usuario_contagem
         if usuario_contagem is not None:
             item.usuario_contagem = usuario_contagem
         if origem_contagem:
@@ -200,6 +209,10 @@ def salvar_contagem(
                 'data_contagem',
                 'usuario_contagem',
                 'origem_contagem',
+                'usuario_registro',
+                'data_registro',
+                'usuario_alteracao',
+                'data_alteracao',
             ])
         except IntegrityError as exc:
             raise ContagemDuplicadaError(
@@ -232,15 +245,18 @@ def salvar_contagem(
             ),
         )
     else:
+        quantidade_anterior = None
         campos = {
             'inventario': inventario,
             'posicao': posicao,
             'produto': produto,
             'quantidade_fisica': quantidade_fisica,
             'data_contagem': agora,
+            'data_registro': agora,
         }
         if usuario_contagem is not None:
             campos['usuario_contagem'] = usuario_contagem
+            campos['usuario_registro'] = usuario_contagem
         if origem_contagem:
             campos['origem_contagem'] = origem_contagem
         try:
@@ -291,11 +307,29 @@ def salvar_contagem(
             produto=produto,
             quantidade=quantidade_fisica,
             status_novo=InventarioTarefa.Status.CONTADA,
+            dados_extras=(
+                {
+                    'acao': 'CORRECAO',
+                    'item_id': item.pk,
+                    'quantidade_anterior': str(quantidade_anterior),
+                }
+                if item_existente is not None
+                else {'acao': 'REGISTRO', 'item_id': item.pk}
+            ),
         )
 
     return item
 
 
 @transaction.atomic
-def excluir_contagem(item: InventarioItem) -> None:
+def excluir_contagem(item: InventarioItem, usuario=None) -> None:
+    registrar_evento(
+        'contagem_excluida',
+        usuario=usuario,
+        item_id=item.pk,
+        inventario_id=item.inventario_id,
+        posicao_id=item.posicao_id,
+        produto_id=item.produto_id,
+        quantidade=str(item.quantidade_fisica),
+    )
     item.delete()

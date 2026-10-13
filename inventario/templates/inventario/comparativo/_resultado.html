@@ -1,0 +1,167 @@
+{% load comparativo_tags %}
+<div class="comparativo-resumo mb-3" data-atualizado-em="{{ atualizado_em|date:'d/m/Y H:i:s' }}">
+    <span class="cmp-chip">Linhas <strong>{{ resultado.resumo.total }}</strong></span>
+    <span class="cmp-chip cmp-status-ok">Contagem OK <strong>{{ resultado.resumo.contagem_ok }}</strong></span>
+    <span class="cmp-chip cmp-status-divergente">Divergentes <strong>{{ resultado.resumo.contagem_divergente }}</strong></span>
+    <span class="cmp-chip cmp-status-neutro">Aguardando <strong>{{ resultado.resumo.contagem_aguardando }}</strong></span>
+    <span class="cmp-chip">Necessita C3 <strong>{{ resultado.resumo.necessita_c3 }}</strong></span>
+    {% if visao == 'sku' %}
+    <span class="cmp-chip cmp-status-ok">SAP OK <strong>{{ resultado.resumo.sap_ok }}</strong></span>
+    <span class="cmp-chip cmp-status-parcial">SAP = 1 contagem <strong>{{ resultado.resumo.sap_parcial }}</strong></span>
+    <span class="cmp-chip cmp-status-divergente">SAP não coincide <strong>{{ resultado.resumo.sap_divergente }}</strong></span>
+    {% endif %}
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive comparativo-tabela-wrap" id="comparativoTabelaWrap">
+            <table class="table align-middle mb-0 comparativo-tabela">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Posição</th>
+                        <th>SKU / descrição</th>
+                        {% for chave, rotulo in colunas_sap %}
+                        <th class="text-end cmp-col-sap">{{ rotulo }}</th>
+                        {% endfor %}
+                        {% for ordem in ordens %}
+                        <th class="text-center">C{{ ordem }}</th>
+                        {% endfor %}
+                        {% for ordem in ordens %}
+                        <th>Contagem {{ ordem }}<div class="cmp-sub">Operador · data/hora</div></th>
+                        {% endfor %}
+                        <th class="cmp-col-status">Status das contagens</th>
+                        {% if visao == 'sku' %}<th class="cmp-col-status">Status SAP</th>{% endif %}
+                        <th class="pe-3 text-end"><span class="visually-hidden">Lançamentos</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in linhas %}
+                    <tr data-chave="{{ linha.chave }}">
+                        <td class="ps-3 cmp-posicao">
+                            {% if linha.posicoes %}
+                            {{ linha.posicoes.0.0 }}
+                            {% if linha.posicoes|length > 1 %}<div class="cmp-sub">+{{ linha.posicoes|length|add:"-1" }} posição(ões)</div>{% endif %}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% if visao == 'sku' %}<div class="cmp-sub">Sem contagem</div>{% endif %}
+                            {% endif %}
+                        </td>
+                        <td class="cmp-sku">
+                            <span class="fw-semibold">{{ linha.codigo_produto }}</span>
+                            <div class="cmp-sub">{{ linha.descricao }}</div>
+                        </td>
+                        {% for chave, rotulo in colunas_sap %}
+                        <td class="text-end cmp-num cmp-col-sap">{{ linha.sap|item:chave|qtd }}</td>
+                        {% endfor %}
+                        {% for ordem in ordens %}
+                        {% with medicao=linha.medicoes|item:ordem %}
+                        <td class="text-center">
+                            <span class="cmp-qtd cmp-{{ medicao.celula }}" title="C{{ ordem }}{% if medicao.celula == 'ok' %} · coincide{% elif medicao.celula == 'divergente' %} · divergente{% elif medicao.celula == 'ausente' %} · sem lançamento{% endif %}">{{ medicao.quantidade|qtd }}</span>
+                        </td>
+                        {% endwith %}
+                        {% endfor %}
+                        {% for ordem in ordens %}
+                        {% with medicao=linha.medicoes|item:ordem %}
+                        <td class="cmp-operador">
+                            {% if medicao.registrada %}
+                            <div>{{ medicao.operadores_texto }}</div>
+                            {% if medicao.intervalo %}
+                            <div class="cmp-sub">{{ medicao.primeira|data_hora }} a {{ medicao.ultima|data_hora }}</div>
+                            {% else %}
+                            <div class="cmp-sub">{{ medicao.primeira|data_hora }}</div>
+                            {% endif %}
+                            {% if medicao.sem_data and medicao.primeira %}<div class="cmp-sub">Parte sem data registrada</div>{% endif %}
+                            {% if medicao.alterada %}<div class="cmp-sub text-warning-emphasis">Quantidade corrigida</div>{% endif %}
+                            {% else %}
+                            <div>—</div>
+                            <div class="cmp-sub">{% if medicao.associada %}Sem lançamento{% else %}Não associada{% endif %}</div>
+                            {% endif %}
+                        </td>
+                        {% endwith %}
+                        {% endfor %}
+                        <td>
+                            <span class="cmp-badge cmp-status-{% if linha.contagens.status == 'OK' %}ok{% elif linha.contagens.status == 'DIVERGENTE' %}divergente{% else %}neutro{% endif %}">
+                                {% if linha.contagens.status == 'OK' %}OK · {{ linha.contagens.dupla }}{% elif linha.contagens.status == 'DIVERGENTE' %}Divergentes{% else %}Aguardando{% endif %}
+                            </span>
+                            {% if linha.contagens.orientacao %}<div class="cmp-sub">{{ linha.contagens.orientacao }}</div>{% endif %}
+                            {% for diferenca in linha.contagens.diferencas %}<div class="cmp-sub">{{ diferenca }}</div>{% endfor %}
+                            {% if linha.distribuicao_divergente %}<div class="cmp-sub text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{ linha.distribuicao_divergente }}</div>{% endif %}
+                        </td>
+                        {% if visao == 'sku' %}
+                        <td>
+                            <span class="cmp-badge cmp-status-{% if linha.status_sap.status == 'OK' %}ok{% elif linha.status_sap.status == 'PARCIAL' %}parcial{% elif linha.status_sap.status == 'DIVERGENTE' %}divergente{% else %}neutro{% endif %}">{{ linha.status_sap.rotulo }}</span>
+                            {% if linha.status_sap.detalhe %}<div class="cmp-sub">{{ linha.status_sap.detalhe }}</div>{% endif %}
+                            {% if linha.status_sap.provisoria %}<div class="cmp-sub">Resultado provisório</div>{% endif %}
+                        </td>
+                        {% endif %}
+                        <td class="pe-3 text-end">
+                            {% if linha.lancamentos %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary cmp-toggle" data-alvo="det-{{ linha.chave }}" aria-expanded="false" aria-controls="det-{{ linha.chave }}">
+                                Lançamentos ({{ linha.lancamentos|length }})
+                            </button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if linha.lancamentos %}
+                    <tr class="cmp-detalhe" id="det-{{ linha.chave }}" hidden>
+                        <td colspan="30" class="px-3 py-3">
+                            {% if visao == 'sku' and linha.detalhe_posicoes|length > 1 %}
+                            <p class="small fw-semibold mb-1">Distribuição por posição</p>
+                            <table class="table table-sm cmp-subtabela mb-3">
+                                <thead><tr><th>Posição</th>{% for ordem in ordens %}<th class="text-end">C{{ ordem }}</th>{% endfor %}</tr></thead>
+                                <tbody>
+                                    {% for detalhe in linha.detalhe_posicoes %}
+                                    <tr>
+                                        <td>{{ detalhe.codigo }} <span class="text-muted">{{ detalhe.descricao }}</span></td>
+                                        {% for ordem in ordens %}<td class="text-end cmp-num">{{ detalhe.quantidades|item:ordem|qtd }}</td>{% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% endif %}
+                            <p class="small fw-semibold mb-1">Lançamentos válidos</p>
+                            <div class="table-responsive">
+                                <table class="table table-sm cmp-subtabela mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th><th>Contagem</th><th>Inventário</th><th>Posição</th><th>SKU</th>
+                                            <th class="text-end">Quantidade</th><th>Embalagem</th>
+                                            <th>Operador original</th><th>Data/hora original</th>
+                                            <th>Alteração</th><th>Situação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for lancamento in linha.lancamentos %}
+                                        <tr>
+                                            <td>{{ lancamento.id }}</td>
+                                            <td>{{ lancamento.rotulo_ordem }}</td>
+                                            <td>#{{ lancamento.inventario_id }}</td>
+                                            <td>{{ lancamento.codigo_posicao }}</td>
+                                            <td>{{ linha.codigo_produto }}</td>
+                                            <td class="text-end cmp-num">{{ lancamento.quantidade|qtd }}</td>
+                                            <td>{{ linha.embalagem|default:"—" }}</td>
+                                            <td>{{ lancamento.operador }}</td>
+                                            <td>{{ lancamento.data_registro|data_hora }}</td>
+                                            <td>{% if lancamento.data_alteracao %}{{ lancamento.autor_alteracao }} · {{ lancamento.data_alteracao|data_hora }}{% else %}—{% endif %}</td>
+                                            <td>{{ lancamento.situacao }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% empty %}
+                    <tr>
+                        <td colspan="30" class="text-center text-muted py-5">
+                            {% if resultado.dados.contagens %}Nenhuma linha para os filtros selecionados.{% else %}Associe ao menos a C1 para iniciar o acompanhamento.{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'includes/paginacao.html' %}
+    </div>
+</div>

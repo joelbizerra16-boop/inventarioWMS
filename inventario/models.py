@@ -140,6 +140,34 @@ class InventarioItem(models.Model):
         blank=True,
         choices=OrigemContagem.choices,
     )
+    # Autoria original do lançamento: gravada na criação e nunca sobrescrita.
+    # `usuario_contagem`/`data_contagem` continuam refletindo a última gravação.
+    usuario_registro = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='itens_inventario_registrados',
+        verbose_name='usuário do registro original',
+    )
+    data_registro = models.DateTimeField(
+        'data do registro original',
+        null=True,
+        blank=True,
+    )
+    usuario_alteracao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='itens_inventario_alterados',
+        verbose_name='usuário da última alteração',
+    )
+    data_alteracao = models.DateTimeField(
+        'data da última alteração',
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         verbose_name = 'item de inventário'
@@ -827,4 +855,11 @@ from inventario.models_operacional import (  # noqa: E402, F401
     InventarioAuditoriaEvento,
     InventarioLock,
     InventarioTarefa,
+)
+from inventario.models_comparativo import (  # noqa: E402, F401
+    ComparativoContagem,
+    ComparativoContagemEvento,
+    ComparativoContagemInventario,
+    ReferenciaSAP,
+    ReferenciaSAPItem,
 )

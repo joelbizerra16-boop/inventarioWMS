@@ -91,6 +91,12 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link text-white-50{% if request.resolver_match.namespace == 'comparativo' %} active{% endif %}" href="{% url 'comparativo:lista' %}" title="Comparativo de contagens">
+                    <i class="bi bi-layout-three-columns sidebar-icon" aria-hidden="true"></i>
+                    <span class="sidebar-label">Comparativo de contagens</span>
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link text-white-50" href="{% url 'aprovacao' %}" title="Aprovação">
                     <i class="bi bi-check2-square sidebar-icon" aria-hidden="true"></i>
                     <span class="sidebar-label">Aprovação</span>
@@ -184,6 +190,7 @@
         </p>
         <ul class="nav nav-pills flex-column gap-1 mb-4">
             <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'confronto' %}">Confronto</a></li>
+            <li class="nav-item"><a class="nav-link text-white-50{% if request.resolver_match.namespace == 'comparativo' %} active{% endif %}" href="{% url 'comparativo:lista' %}">Comparativo de contagens</a></li>
             <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'aprovacao' %}">Aprovação</a></li>
             <li class="nav-item"><a class="nav-link text-white-50" href="{% url 'consolidacao' %}">Consolidação</a></li>
         </ul>

@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% load static comparativo_tags %}
+
+{% block title %}{{ comparativo.nome }} · Comparativo de contagens | Sistema de Inventário{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/comparativo.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+    <div>
+        <a href="{% url 'comparativo:lista' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Comparativo de contagens</a>
+        <h1 class="h3 fw-semibold text-dark mt-1 mb-1">{{ comparativo.nome }}</h1>
+        <p class="text-muted small mb-0">
+            Conferência #{{ comparativo.pk }} · {{ comparativo.get_estado_display }}
+            · Somente acompanhamento: não ajusta estoque nem altera contagens.
+        </p>
+    </div>
+    {% if pode_editar %}
+    <a href="{% url 'comparativo:editar' comparativo.pk %}" class="btn btn-outline-secondary">
+        <i class="bi bi-gear me-1"></i>Configurar
+    </a>
+    {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+    {% for contagem in contagens %}
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+                <p class="text-muted small mb-1">C{{ forloop.counter }}{% if forloop.counter == 3 %} · opcional{% endif %}</p>
+                {% if contagem %}
+                <p class="fw-semibold mb-1">Inventário #{{ contagem.inventario.pk }}</p>
+                <span class="badge text-bg-{% if contagem.provisoria %}warning{% else %}success{% endif %}">{{ contagem.inventario.get_status_display }}</span>
+                {% if contagem.provisoria %}<span class="small text-muted">· provisória</span>{% endif %}
+                <p class="small text-muted mb-0 mt-1">{{ contagem.total_lancamentos }} lançamento(s)</p>
+                {% else %}
+                <p class="text-muted mb-0">Não associada</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+                <p class="text-muted small mb-1">Base SAP</p>
+                {% if comparativo.referencia_sap %}
+                <p class="fw-semibold small mb-1">{{ comparativo.referencia_sap.arquivo_origem|default:"SAP" }}</p>
+                <p class="small text-muted mb-0">
+                    Importação {{ comparativo.referencia_sap.data_importacao_origem|date:"d/m/Y H:i"|default:"Não registrado" }}
+                    · fotografia #{{ comparativo.referencia_sap.pk }}
+                </p>
+                {% else %}
+                <p class="text-muted mb-0">Sem referência SAP</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
+            <div class="btn-group" role="group" aria-label="Visão">
+                <a href="?{{ qs_visao.posicao }}" class="btn {% if visao == 'posicao' %}btn-primary{% else %}btn-outline-secondary{% endif %}" {% if visao == 'posicao' %}aria-current="page"{% endif %}>Por posição</a>
+                <a href="?{{ qs_visao.sku }}" class="btn {% if visao == 'sku' %}btn-primary{% else %}btn-outline-secondary{% endif %}" {% if visao == 'sku' %}aria-current="page"{% endif %}>Por SKU · SAP</a>
+            </div>
+            {% if visao == 'sku' %}
+            <div class="btn-group" role="group" aria-label="Canal SAP">
+                {% for valor, rotulo in canais %}
+                <a href="?{{ qs_canal|item:valor }}" class="btn {% if canal == valor %}btn-primary{% else %}btn-outline-secondary{% endif %}" {% if canal == valor %}aria-current="page"{% endif %}>{{ rotulo }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="ms-auto d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-primary" id="comparativoAtualizar">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+                </button>
+                <a href="{% url 'comparativo:exportar' comparativo.pk %}?{{ querystring }}" class="btn btn-outline-success">
+                    <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+                </a>
+            </div>
+        </div>
+
+        <form method="get" class="row g-2 align-items-end" id="comparativoFiltros">
+            <input type="hidden" name="visao" value="{{ visao }}">
+            <input type="hidden" name="canal" value="{{ canal }}">
+            <div class="col-md-4">
+                <label for="q" class="form-label small mb-1">Pesquisar</label>
+                <input type="search" name="q" id="q" class="form-control" value="{{ filtros.termo }}" placeholder="SKU, descrição ou posição">
+            </div>
+            <div class="col-sm-6 col-md-3">
+                <label for="status_contagem" class="form-label small mb-1">Status das contagens</label>
+                <select name="status_contagem" id="status_contagem" class="form-select">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in status_contagem_opcoes %}
+                    <option value="{{ valor }}" {% if filtros.status_contagem == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if visao == 'sku' %}
+            <div class="col-sm-6 col-md-2">
+                <label for="status_sap" class="form-label small mb-1">Status SAP</label>
+                <select name="status_sap" id="status_sap" class="form-select">
+                    <option value="">Todos</option>
+                    {% for valor, rotulo in status_sap_opcoes %}
+                    <option value="{{ valor }}" {% if filtros.status_sap == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-sm-6 col-md-auto">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="necessita_c3" value="1" id="necessita_c3" {% if filtros.necessita_c3 %}checked{% endif %}>
+                    <label class="form-check-label" for="necessita_c3">Necessita C3</label>
+                </div>
+            </div>
+            <div class="col-sm-6 col-md-auto d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+                <a href="?visao={{ visao }}&canal={{ canal }}" class="btn btn-outline-secondary">Limpar</a>
+            </div>
+        </form>
+
+        <p class="small text-muted mt-3 mb-0">
+            {% if visao == 'sku' %}
+            Saldo SAP logo após SKU / descrição ({{ canal|upper }}{% if canal == 'ambas' %}: COSAN + BRIDA = Total SAP{% endif %}).
+            As contagens físicas não têm canal: a aba muda somente a referência SAP.
+            Duas contagens iguais ao saldo selecionado deixam o SAP OK, sem exigir a terceira.
+            {% else %}
+            Visão por posição: acompanhamento somente das contagens físicas (sem SAP). Para comparar com o SAP use a visão Por SKU.
+            {% endif %}
+        </p>
+    </div>
+</div>
+
+<div class="comparativo-legenda small mb-2" aria-label="Legenda">
+    <span><span class="cmp-qtd cmp-ok">10</span> dupla coincidente</span>
+    <span><span class="cmp-qtd cmp-divergente">8</span> divergente</span>
+    <span><span class="cmp-qtd cmp-neutra">7</span> sem par</span>
+    <span><span class="cmp-qtd cmp-ausente">—</span> sem lançamento (não é zero)</span>
+</div>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center small text-muted mb-2 gap-2">
+    <span id="comparativoStatusAtualizacao" aria-live="polite">
+        Última atualização: <span id="comparativoAtualizadoEm">{{ atualizado_em|date:"d/m/Y H:i:s" }}</span> · {{ fuso_rotulo }}
+    </span>
+    <span>Atualização automática a cada 5 s enquanto a tela estiver visível.</span>
+</div>
+
+<div id="comparativoResultado" data-url="{% url 'comparativo:acompanhamento' comparativo.pk %}?{{ querystring }}{% if page_obj.number > 1 %}&page={{ page_obj.number }}{% endif %}&parcial=1">
+    {% include 'inventario/comparativo/_resultado.html' %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/comparativo-contagens.js' %}"></script>
+{% endblock %}

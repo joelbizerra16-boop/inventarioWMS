@@ -464,7 +464,7 @@ class ContagemDeleteView(
         return context
 
     def executar_exclusao_segura(self, objeto):
-        excluir_contagem(objeto)
+        excluir_contagem(objeto, usuario=self.request.user)
 
     def get_success_url(self):
         return reverse('inventario:contagem_lista', kwargs={'pk': self.get_inventario().pk})

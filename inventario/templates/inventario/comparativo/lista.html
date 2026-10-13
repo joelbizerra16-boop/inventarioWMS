@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Comparativo de contagens | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="h3 fw-semibold text-dark mb-1">Comparativo de contagens</h1>
+        <p class="text-muted mb-0">Conferências que associam inventários como C1, C2 e C3 e comparam as contagens entre si e com a fotografia SAP.</p>
+    </div>
+    {% if pode_editar %}
+    <a href="{% url 'comparativo:criar' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i>Nova conferência
+    </a>
+    {% endif %}
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Nome</th>
+                        <th>Inventários</th>
+                        <th>Estado</th>
+                        <th>Referência SAP</th>
+                        <th>Criação</th>
+                        <th class="pe-4 text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for comparativo in comparativos %}
+                    <tr>
+                        <td class="ps-4 fw-semibold">{{ comparativo.nome }}</td>
+                        <td>
+                            {% for associacao in comparativo.contagens_ordenadas %}
+                            <div class="small">
+                                <span class="fw-semibold">C{{ associacao.ordem }}</span>
+                                · #{{ associacao.inventario.pk }}
+                                · {{ associacao.inventario.get_status_display }}
+                            </div>
+                            {% empty %}
+                            <span class="text-muted small">Sem inventários</span>
+                            {% endfor %}
+                        </td>
+                        <td><span class="badge text-bg-{% if comparativo.estado == 'ABERTA' %}primary{% else %}secondary{% endif %}">{{ comparativo.get_estado_display }}</span></td>
+                        <td class="small">
+                            {% if comparativo.referencia_sap %}
+                            {{ comparativo.referencia_sap.descricao }}
+                            {% else %}
+                            <span class="text-muted">Sem referência SAP</span>
+                            {% endif %}
+                        </td>
+                        <td class="small">
+                            {{ comparativo.usuario_criacao.perfil_operacional.nome|default:comparativo.usuario_criacao.username|default:"Não registrado" }}
+                            <div class="text-muted">{{ comparativo.data_criacao|date:"d/m/Y H:i" }}</div>
+                        </td>
+                        <td class="pe-4 text-end text-nowrap">
+                            <a href="{% url 'comparativo:acompanhamento' comparativo.pk %}" class="btn btn-sm btn-primary">Abrir</a>
+                            {% if pode_editar %}
+                            <a href="{% url 'comparativo:editar' comparativo.pk %}" class="btn btn-sm btn-outline-secondary">Configurar</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-5">Nenhuma conferência cadastrada.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'includes/paginacao.html' %}
+    </div>
+</div>
+{% endblock %}

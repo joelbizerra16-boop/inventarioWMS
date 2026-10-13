@@ -45,6 +45,7 @@ urlpatterns = [
     ),
     path('confronto/', ConfrontoListView.as_view(), name='confronto'),
     path('confronto/exportar/', ConfrontoExportarView.as_view(), name='confronto_exportar'),
+    path('comparativo-contagens/', include('inventario.comparativo_urls')),
     path('aprovacao/', AprovacaoView.as_view(), name='aprovacao'),
     path('consolidacao/', ConsolidacaoView.as_view(), name='consolidacao'),
     path('historico/', HistoricoUnificadoView.as_view(), name='historico_unificado'),
