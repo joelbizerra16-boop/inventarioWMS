@@ -685,3 +685,101 @@ class AcuracidadeTestCase(ComparativoBaseTestCase):
         self.assertEqual(len(historico), 1)
         self.assertEqual(historico[0][1], 'Ambas')
         self.assertEqual(D(str(historico[0][2])), D('66.67'))
+
+
+class FinalizacaoTestCase(ComparativoBaseTestCase):
+    """Salvar = gravar o resultado atual e finalizar a conferência."""
+
+    def setUp(self):
+        super().setUp()
+        self.item(self.inv1, self.pos_a, self.produto, '100', self.ana)
+        self.item(self.inv2, self.pos_a, self.produto, '100', self.bruno)
+        self.comparativo = self.criar_comparativo()
+        self.url_finalizar = reverse('comparativo:finalizar', args=[self.comparativo.pk])
+
+    def test_salvar_grava_resultado_e_finaliza(self):
+        resposta = self.client.post(self.url_finalizar)
+        self.assertRedirects(resposta, reverse('comparativo:acompanhamento', args=[self.comparativo.pk]))
+        self.comparativo.refresh_from_db()
+        self.assertTrue(self.comparativo.finalizado)
+        self.assertEqual(self.comparativo.estado, ComparativoContagem.Estado.ENCERRADA)
+        self.assertEqual(self.comparativo.usuario_finalizacao, self.user)
+        self.assertIsNotNone(self.comparativo.data_finalizacao)
+        self.assertEqual(len(self.comparativo.snapshot_resultado['lancamentos']), 2)
+        canais = set(ComparativoAcuracidade.objects.values_list('canal', flat=True))
+        self.assertEqual(canais, {'cosan', 'brida', 'ambas'})
+        self.assertTrue(ComparativoContagemEvento.objects.filter(acao='FINALIZADA').exists())
+        # Inventários de origem não mudam de estado.
+        self.inv2.refresh_from_db()
+        self.assertEqual(self.inv2.status, Inventario.Status.EM_ANDAMENTO)
+
+    def test_resultado_gravado_nao_muda_com_novas_contagens(self):
+        antes = analisar(self.comparativo, canal='ambas', visao='sku', filtros=FiltrosComparativo())
+        self.client.post(self.url_finalizar)
+        self.comparativo.refresh_from_db()
+        # Depois de salvar: nova contagem, correção e mudança de nome do operador.
+        novo = Produto.objects.create(codigo_produto='0999', descricao='Novo', setor='A')
+        self.item(self.inv1, self.pos_b, novo, '4', self.ana)
+        InventarioItem.objects.filter(inventario=self.inv2, produto=self.produto).update(quantidade_fisica=D('55'))
+        depois = analisar(self.comparativo, canal='ambas', visao='sku', filtros=FiltrosComparativo())
+        self.assertEqual(
+            [(l.codigo_produto, l.medicoes[1].quantidade, l.medicoes[2].quantidade, l.status_sap.status) for l in depois.linhas],
+            [(l.codigo_produto, l.medicoes[1].quantidade, l.medicoes[2].quantidade, l.status_sap.status) for l in antes.linhas],
+        )
+        self.assertEqual(depois.linhas[0].medicoes[1].operadores, ['Ana'])
+        self.assertEqual(depois.linhas[0].medicoes[1].primeira, self.momento)
+        self.assertEqual(depois.acuracidade.percentual, D('100.00'))
+        posicao = analisar(self.comparativo, canal='ambas', visao='posicao', filtros=FiltrosComparativo())
+        self.assertEqual(len(posicao.linhas), 1)
+        # O Excel também lê o resultado gravado.
+        pasta = load_workbook(io.BytesIO(
+            self.client.get(reverse('comparativo:exportar', args=[self.comparativo.pk])).content
+        ))
+        self.assertEqual([r[2].value for r in pasta['Por SKU'].iter_rows(min_row=2)], ['00123'])
+
+    def test_tela_finalizada_sem_atualizacao_nem_configuracao(self):
+        self.client.post(self.url_finalizar)
+        conteudo = self.client.get(self.url(self.comparativo)).content.decode()
+        self.assertIn('Conferência salva e finalizada', conteudo)
+        self.assertIn('data-url=""', conteudo)
+        self.assertNotIn('Salvar e finalizar', conteudo)
+        self.assertNotIn('Salvar acuracidade', conteudo)
+        resposta = self.client.get(reverse('comparativo:editar', args=[self.comparativo.pk]))
+        self.assertRedirects(resposta, reverse('comparativo:acompanhamento', args=[self.comparativo.pk]))
+        with self.assertRaisesMessage(ComparativoError, 'não pode ser alterada'):
+            salvar_comparativo(
+                comparativo=self.comparativo, nome='X', inventarios={1: self.inv1, 2: None, 3: None},
+                referencia_opcao='', estado=None, usuario=self.user,
+            )
+
+    def test_salvar_duas_vezes_nao_regrava(self):
+        self.client.post(self.url_finalizar)
+        self.comparativo.refresh_from_db()
+        gravado_em = self.comparativo.data_finalizacao
+        resposta = self.client.post(self.url_finalizar, follow=True)
+        self.assertContains(resposta, 'já foi salva e finalizada')
+        self.comparativo.refresh_from_db()
+        self.assertEqual(self.comparativo.data_finalizacao, gravado_em)
+        self.assertEqual(ComparativoAcuracidade.objects.count(), 3)
+
+    def test_lista_com_icones_e_confirmacao(self):
+        lista = self.client.get(reverse('comparativo:lista')).content.decode()
+        self.assertIn('grid-acao grid-acao-abrir', lista)
+        self.assertIn('grid-acao grid-acao-editar', lista)
+        self.assertIn('grid-acao grid-acao-salvar', lista)
+        self.assertIn('Tem certeza que deseja salvar esta contagem?', lista)
+        self.client.post(self.url_finalizar, {'voltar': 'lista'})
+        lista = self.client.get(reverse('comparativo:lista')).content.decode()
+        self.assertIn('Finalizada', lista)
+        self.assertIn('grid-acao grid-acao-abrir', lista)
+        self.assertNotIn('grid-acao grid-acao-editar', lista)
+        self.assertNotIn('grid-acao grid-acao-salvar', lista)
+
+    def test_consulta_nao_finaliza(self):
+        consulta, _ = criar_usuario_teste('consulta.fin', perfil=Usuario.Perfil.CONSULTA)
+        self.client.force_login(consulta)
+        self.client.post(self.url_finalizar)
+        self.comparativo.refresh_from_db()
+        self.assertFalse(self.comparativo.finalizado)
+        lista = self.client.get(reverse('comparativo:lista')).content.decode()
+        self.assertNotIn('grid-acao grid-acao-salvar', lista)

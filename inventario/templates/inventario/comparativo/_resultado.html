@@ -19,7 +19,7 @@
         <strong>—</strong> <span class="cmp-chip-detalhe">{{ acc.motivo }}</span>
         {% endif %}
     </span>
-    {% if pode_editar and acc.disponivel %}
+    {% if pode_editar and acc.disponivel and not comparativo.finalizado %}
     <form method="post" action="{% url 'comparativo:acuracidade_salvar' comparativo.pk %}" class="d-inline">
         {% csrf_token %}
         <input type="hidden" name="canal" value="{{ canal }}">

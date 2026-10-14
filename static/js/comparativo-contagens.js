@@ -14,6 +14,7 @@
     var status = document.getElementById('comparativoStatusAtualizacao');
     var atualizadoEm = document.getElementById('comparativoAtualizadoEm');
     var url = container.getAttribute('data-url');
+    var polling = Boolean(url);
     var emAndamento = false;
     var sequencia = 0;
     var ultimaAplicada = 0;
@@ -98,7 +99,7 @@
     }
 
     function atualizar() {
-        if (emAndamento) { return; }
+        if (!polling || emAndamento) { return; }
         emAndamento = true;
         var minha = ++sequencia;
         container.classList.add('comparativo-atualizando');

@@ -13,16 +13,36 @@
         <a href="{% url 'comparativo:lista' %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> Comparativo de contagens</a>
         <h1 class="h3 fw-semibold text-dark mt-1 mb-1">{{ comparativo.nome }}</h1>
         <p class="text-muted small mb-0">
-            Conferência #{{ comparativo.pk }} · {{ comparativo.get_estado_display }}
+            Conferência #{{ comparativo.pk }} · {% if comparativo.finalizado %}Finalizada{% elif comparativo.estado == 'ABERTA' %}Aberta{% else %}Encerrada · sem gravação{% endif %}
             · Somente acompanhamento: não ajusta estoque nem altera contagens.
         </p>
     </div>
-    {% if pode_editar %}
-    <a href="{% url 'comparativo:editar' comparativo.pk %}" class="btn btn-outline-secondary">
-        <i class="bi bi-gear me-1"></i>Configurar
-    </a>
+    {% if pode_editar and not comparativo.finalizado %}
+    <div class="d-flex gap-2">
+        <a href="{% url 'comparativo:editar' comparativo.pk %}" class="btn btn-outline-secondary">
+            <i class="bi bi-pencil-square me-1"></i>Configurar
+        </a>
+        <form method="post" action="{% url 'comparativo:finalizar' comparativo.pk %}"
+              onsubmit="return confirm('Tem certeza que deseja salvar esta contagem?\n\nO resultado ficará gravado e a conferência será finalizada.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-floppy me-1"></i>Salvar e finalizar
+            </button>
+        </form>
+    </div>
     {% endif %}
 </div>
+
+{% if comparativo.finalizado %}
+<div class="alert alert-success d-flex align-items-center gap-2 py-2" role="status">
+    <i class="bi bi-lock-fill"></i>
+    <div>
+        <strong>Conferência salva e finalizada</strong> em {{ comparativo.data_finalizacao|data_hora }}
+        por {{ comparativo.usuario_finalizacao.perfil_operacional.nome|default:comparativo.usuario_finalizacao.username|default:"Não registrado" }}.
+        Os valores abaixo são o resultado gravado e não mudam mais.
+    </div>
+</div>
+{% endif %}
 
 <div class="row g-3 mb-3">
     {% for contagem in contagens %}
@@ -75,9 +95,11 @@
             </div>
             {% endif %}
             <div class="ms-auto d-flex flex-wrap gap-2">
+                {% if not comparativo.finalizado %}
                 <button type="button" class="btn btn-outline-primary" id="comparativoAtualizar">
                     <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
                 </button>
+                {% endif %}
                 <a href="{% url 'comparativo:exportar' comparativo.pk %}?{{ querystring }}" class="btn btn-outline-success">
                     <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
                 </a>
@@ -144,12 +166,13 @@
 
 <div class="d-flex flex-wrap justify-content-between align-items-center small text-muted mb-2 gap-2">
     <span id="comparativoStatusAtualizacao" aria-live="polite">
-        Última atualização: <span id="comparativoAtualizadoEm">{{ atualizado_em|date:"d/m/Y H:i:s" }}</span> · {{ fuso_rotulo }}
+        {% if comparativo.finalizado %}Resultado gravado em{% else %}Última atualização:{% endif %}
+        <span id="comparativoAtualizadoEm">{{ atualizado_em|date:"d/m/Y H:i:s" }}</span> · {{ fuso_rotulo }}
     </span>
-    <span>Atualização automática a cada 5 s enquanto a tela estiver visível.</span>
+    {% if not comparativo.finalizado %}<span>Atualização automática a cada 5 s enquanto a tela estiver visível.</span>{% endif %}
 </div>
 
-<div id="comparativoResultado" data-url="{% url 'comparativo:acompanhamento' comparativo.pk %}?{{ querystring }}{% if page_obj.number > 1 %}&page={{ page_obj.number }}{% endif %}&parcial=1">
+<div id="comparativoResultado" data-url="{% if not comparativo.finalizado %}{% url 'comparativo:acompanhamento' comparativo.pk %}?{{ querystring }}{% if page_obj.number > 1 %}&page={{ page_obj.number }}{% endif %}&parcial=1{% endif %}">
     {% include 'inventario/comparativo/_resultado.html' %}
 </div>
 

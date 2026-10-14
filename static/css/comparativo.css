@@ -44,3 +44,9 @@
 .cmp-subtabela { font-size: 0.82rem; background: transparent; }
 .comparativo-atualizando { opacity: 0.85; }
 .cmp-falha { color: #9a3412; }
+
+/* Ações em ícone da lista (padrão grid-acao do projeto). */
+.grid-acao-abrir { color: #0f766e; }
+.grid-acao-abrir:hover, .grid-acao-abrir:focus-visible { background: #ccfbf1; color: #115e59; }
+.grid-acao-salvar { color: #15803d; }
+.grid-acao-salvar:hover, .grid-acao-salvar:focus-visible { background: #dcfce7; color: #14532d; }

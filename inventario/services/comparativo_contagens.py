@@ -449,6 +449,8 @@ def salvar_comparativo(
         )
     else:
         comparativo = ComparativoContagem.objects.select_for_update().get(pk=comparativo.pk)
+        if comparativo.snapshot_resultado is not None:
+            raise ComparativoError('Conferência salva e finalizada não pode ser alterada.')
 
     referencia_anterior = comparativo.referencia_sap_id
     if referencia_opcao == OPCAO_NOVA_REFERENCIA:
@@ -654,7 +656,11 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
     Os registros vigentes de `InventarioItem` são os lançamentos válidos: a
     edição substitui a quantidade no mesmo registro e a exclusão o remove,
     então não há histórico ou versões substituídas a descartar.
+
+    Conferência finalizada: usa somente o resultado gravado na finalização.
     """
+    if comparativo.snapshot_resultado is not None:
+        return dados_do_snapshot(comparativo)
     gerado_em = timezone.now()
     associacoes = list(
         comparativo.associacoes.select_related('inventario', 'inventario__usuario')
@@ -753,6 +759,111 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
         produtos=produtos,
         sap=sap,
         gerado_em=gerado_em,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Resultado gravado (finalização)
+# ---------------------------------------------------------------------------
+
+VERSAO_SNAPSHOT = 1
+
+
+def _iso(valor: datetime | None) -> str | None:
+    return valor.isoformat() if valor is not None else None
+
+
+def _data(valor: str | None) -> datetime | None:
+    return datetime.fromisoformat(valor) if valor else None
+
+
+def serializar_dados(dados: DadosComparativo) -> dict:
+    """Tudo o que o cálculo usa, em JSON (quantidades como texto/Decimal)."""
+    return {
+        'versao': VERSAO_SNAPSHOT,
+        'gerado_em': _iso(dados.gerado_em),
+        'contagens': {
+            str(ordem): {
+                'inventario_id': c.inventario.pk,
+                'inventario_status': c.inventario.status,
+                'total_lancamentos': c.total_lancamentos,
+            }
+            for ordem, c in dados.contagens.items()
+        },
+        'lancamentos': [
+            {
+                'id': l.id,
+                'inventario_id': l.inventario_id,
+                'ordem': l.ordem,
+                'posicao_id': l.posicao_id,
+                'codigo_posicao': l.codigo_posicao,
+                'descricao_posicao': l.descricao_posicao,
+                'produto_id': l.produto_id,
+                'quantidade': str(l.quantidade),
+                'operador': l.operador,
+                'data_registro': _iso(l.data_registro),
+                'autor_alteracao': l.autor_alteracao,
+                'data_alteracao': _iso(l.data_alteracao),
+                'origem': l.origem,
+            }
+            for l in dados.lancamentos
+        ],
+        'produtos': {
+            str(pid): {
+                'id': p['id'],
+                'codigo_produto': p['codigo_produto'],
+                'descricao': p['descricao'],
+                'embalagem': p['embalagem'],
+                'ativo': p['ativo'],
+            }
+            for pid, p in dados.produtos.items()
+        },
+        'sap': {
+            str(pid): {chave: str(valor) for chave, valor in saldo.items()}
+            for pid, saldo in dados.sap.items()
+        },
+    }
+
+
+def dados_do_snapshot(comparativo: ComparativoContagem) -> DadosComparativo:
+    snap = comparativo.snapshot_resultado
+    contagens = {}
+    for ordem, info in snap['contagens'].items():
+        # Instância não salva: só carrega id e estado no momento da gravação.
+        inventario = Inventario(pk=info['inventario_id'], status=info['inventario_status'])
+        contagens[int(ordem)] = ContagemAssociada(
+            ordem=int(ordem),
+            inventario=inventario,
+            total_lancamentos=info['total_lancamentos'],
+        )
+    lancamentos = [
+        Lancamento(
+            id=l['id'],
+            inventario_id=l['inventario_id'],
+            ordem=l['ordem'],
+            posicao_id=l['posicao_id'],
+            codigo_posicao=l['codigo_posicao'],
+            descricao_posicao=l['descricao_posicao'],
+            produto_id=l['produto_id'],
+            quantidade=Decimal(l['quantidade']),
+            operador=l['operador'],
+            data_registro=_data(l['data_registro']),
+            autor_alteracao=l['autor_alteracao'],
+            data_alteracao=_data(l['data_alteracao']),
+            origem=l['origem'],
+        )
+        for l in snap['lancamentos']
+    ]
+    return DadosComparativo(
+        comparativo=comparativo,
+        contagens=contagens,
+        lancamentos=lancamentos,
+        produtos={int(pid): p for pid, p in snap['produtos'].items()},
+        sap={
+            int(pid): {chave: Decimal(valor) for chave, valor in saldo.items()}
+            for pid, saldo in snap['sap'].items()
+        },
+        gerado_em=_data(snap['gerado_em']),
     )
 
 
@@ -1107,10 +1218,15 @@ def calcular_acuracidade(
     )
 
 
-def salvar_acuracidade(comparativo: ComparativoContagem, canal: str, usuario) -> ComparativoAcuracidade:
+def salvar_acuracidade(
+    comparativo: ComparativoContagem,
+    canal: str,
+    usuario,
+    dados: DadosComparativo | None = None,
+) -> ComparativoAcuracidade:
     """Grava o cálculo atual (somente leitura das contagens) como registro."""
     canal = Canal.normalizar(canal)
-    dados = carregar_dados(comparativo)
+    dados = dados or carregar_dados(comparativo)
     acuracidade = calcular_acuracidade(
         montar_linhas_sku(dados, canal), canal, comparativo.referencia_sap_id is not None,
     )
@@ -1133,6 +1249,43 @@ def salvar_acuracidade(comparativo: ComparativoContagem, canal: str, usuario) ->
         canal=canal, percentual=str(acuracidade.percentual), registro=registro.pk,
     )
     return registro
+
+
+@transaction.atomic
+def finalizar_comparativo(comparativo: ComparativoContagem, usuario) -> ComparativoContagem:
+    """Grava o resultado atual e finaliza a conferência.
+
+    Não altera contagens, estoque nem os inventários de origem. A acuracidade
+    de cada canal disponível é registrada com os mesmos dados gravados.
+    """
+    comparativo = ComparativoContagem.objects.select_for_update().get(pk=comparativo.pk)
+    if comparativo.snapshot_resultado is not None:
+        raise ComparativoError('Esta conferência já foi salva e finalizada.')
+    if not comparativo.associacoes.exists():
+        raise ComparativoError('Associe ao menos a C1 antes de salvar.')
+    dados = carregar_dados(comparativo)
+    acuracidades = []
+    for canal in (Canal.COSAN, Canal.BRIDA, Canal.AMBAS):
+        acuracidade = calcular_acuracidade(
+            montar_linhas_sku(dados, canal), canal, comparativo.referencia_sap_id is not None,
+        )
+        if acuracidade.disponivel:
+            acuracidades.append(salvar_acuracidade(comparativo, canal, usuario, dados=dados))
+    estado_anterior = comparativo.estado
+    comparativo.snapshot_resultado = serializar_dados(dados)
+    comparativo.data_finalizacao = dados.gerado_em
+    comparativo.usuario_finalizacao = usuario if getattr(usuario, 'is_authenticated', False) else None
+    comparativo.estado = ComparativoContagem.Estado.ENCERRADA
+    comparativo.save(update_fields=[
+        'snapshot_resultado', 'data_finalizacao', 'usuario_finalizacao', 'estado', 'data_atualizacao',
+    ])
+    _registrar_evento(
+        comparativo, usuario, 'FINALIZADA',
+        estado_anterior=estado_anterior,
+        lancamentos=len(dados.lancamentos),
+        acuracidades=[a.pk for a in acuracidades],
+    )
+    return comparativo
 
 
 @dataclass

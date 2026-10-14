@@ -74,7 +74,7 @@ class ReferenciaSAPItem(models.Model):
 class ComparativoContagem(models.Model):
     class Estado(models.TextChoices):
         ABERTA = 'ABERTA', 'Aberta'
-        ENCERRADA = 'ENCERRADA', 'Encerrada'
+        ENCERRADA = 'ENCERRADA', 'Finalizada'
 
     nome = models.CharField('nome', max_length=150)
     referencia_sap = models.ForeignKey(
@@ -101,6 +101,18 @@ class ComparativoContagem(models.Model):
     )
     data_criacao = models.DateTimeField('data de criação', auto_now_add=True)
     data_atualizacao = models.DateTimeField('data de alteração', auto_now=True)
+    # Resultado gravado ao salvar/finalizar: lançamentos, saldos SAP e
+    # produtos usados no cálculo. Depois de gravado, telas e Excel leem daqui.
+    snapshot_resultado = models.JSONField('resultado gravado', null=True, blank=True)
+    data_finalizacao = models.DateTimeField('data da finalização', null=True, blank=True)
+    usuario_finalizacao = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='comparativos_contagem_finalizados',
+        verbose_name='usuário da finalização',
+    )
 
     class Meta:
         verbose_name = 'comparativo de contagens'
@@ -109,6 +121,10 @@ class ComparativoContagem(models.Model):
 
     def __str__(self):
         return self.nome
+
+    @property
+    def finalizado(self) -> bool:
+        return self.snapshot_resultado is not None
 
 
 class ComparativoContagemInventario(models.Model):

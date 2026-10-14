@@ -4,6 +4,7 @@ from inventario.comparativo_views import (
     ComparativoAcompanhamentoView,
     ComparativoAcuracidadeSalvarView,
     ComparativoExportarView,
+    ComparativoFinalizarView,
     ComparativoFormularioView,
     ComparativoListaView,
 )
@@ -16,6 +17,7 @@ urlpatterns = [
     path('<int:pk>/', ComparativoAcompanhamentoView.as_view(), name='acompanhamento'),
     path('<int:pk>/configurar/', ComparativoFormularioView.as_view(), name='editar'),
     path('<int:pk>/exportar/', ComparativoExportarView.as_view(), name='exportar'),
+    path('<int:pk>/finalizar/', ComparativoFinalizarView.as_view(), name='finalizar'),
     path(
         '<int:pk>/acuracidade/salvar/',
         ComparativoAcuracidadeSalvarView.as_view(),

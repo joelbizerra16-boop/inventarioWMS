@@ -27,6 +27,7 @@ from inventario.services.comparativo_contagens import (
     analisar,
     formatar_quantidade,
     obter_ultima_importacao_sap,
+    finalizar_comparativo,
     salvar_acuracidade,
     salvar_comparativo,
 )
@@ -52,7 +53,6 @@ class ComparativoForm(forms.Form):
         label='C3 · terceira contagem (opcional)', queryset=Inventario.objects.none(), required=False,
     )
     referencia_sap = forms.ChoiceField(label='Referência SAP', required=False)
-    estado = forms.ChoiceField(label='Estado operacional', choices=ComparativoContagem.Estado.choices)
 
     def __init__(self, *args, comparativo=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -90,7 +90,10 @@ class ComparativoListaView(ComparativoAcessoMixin, View):
     def get(self, request):
         comparativos = (
             ComparativoContagem.objects
-            .select_related('referencia_sap', 'usuario_criacao', 'usuario_criacao__perfil_operacional')
+            .select_related(
+                'referencia_sap', 'usuario_criacao', 'usuario_criacao__perfil_operacional',
+                'usuario_finalizacao', 'usuario_finalizacao__perfil_operacional',
+            )
             .prefetch_related('associacoes__inventario', 'acuracidades')
             .order_by('-data_criacao')
         )
@@ -121,21 +124,33 @@ class ComparativoFormularioView(RequerEscritaInventarioMixin, ComparativoAcessoM
         pk = self.kwargs.get('pk')
         return get_object_or_404(ComparativoContagem, pk=pk) if pk else None
 
+    def _bloquear_finalizado(self, request, comparativo):
+        if comparativo is not None and comparativo.finalizado:
+            messages.error(request, 'Conferência salva e finalizada não pode ser alterada.')
+            return redirect('comparativo:acompanhamento', pk=comparativo.pk)
+        return None
+
     def _inicial(self, comparativo):
         if comparativo is None:
-            return {'referencia_sap': OPCAO_NOVA_REFERENCIA, 'estado': ComparativoContagem.Estado.ABERTA}
-        inicial = {'nome': comparativo.nome, 'referencia_sap': '', 'estado': comparativo.estado}
+            return {'referencia_sap': OPCAO_NOVA_REFERENCIA}
+        inicial = {'nome': comparativo.nome, 'referencia_sap': ''}
         for associacao in comparativo.associacoes.all():
             inicial[f'c{associacao.ordem}'] = associacao.inventario_id
         return inicial
 
     def get(self, request, pk=None):
         comparativo = self._comparativo()
+        bloqueio = self._bloquear_finalizado(request, comparativo)
+        if bloqueio:
+            return bloqueio
         form = ComparativoForm(initial=self._inicial(comparativo), comparativo=comparativo)
         return self._render(request, form, comparativo)
 
     def post(self, request, pk=None):
         comparativo = self._comparativo()
+        bloqueio = self._bloquear_finalizado(request, comparativo)
+        if bloqueio:
+            return bloqueio
         form = ComparativoForm(request.POST, comparativo=comparativo)
         if form.is_valid():
             dados = form.cleaned_data
@@ -145,7 +160,7 @@ class ComparativoFormularioView(RequerEscritaInventarioMixin, ComparativoAcessoM
                     nome=dados['nome'],
                     inventarios={o: dados.get(f'c{o}') for o in ORDENS},
                     referencia_opcao=dados.get('referencia_sap') or '',
-                    estado=dados.get('estado'),
+                    estado=None,
                     usuario=request.user,
                 )
             except ComparativoError as exc:
@@ -191,7 +206,10 @@ class ComparativoAcompanhamentoView(ComparativoAcessoMixin, View):
 
     def get(self, request, pk):
         comparativo = get_object_or_404(
-            ComparativoContagem.objects.select_related('referencia_sap', 'usuario_criacao'),
+            ComparativoContagem.objects.select_related(
+                'referencia_sap', 'usuario_criacao',
+                'usuario_finalizacao', 'usuario_finalizacao__perfil_operacional',
+            ),
             pk=pk,
         )
         canal, visao, filtros = _parametros(request)
@@ -259,6 +277,29 @@ class ComparativoAcuracidadeSalvarView(RequerEscritaInventarioMixin, Comparativo
                 f'({registro.skus_acertos} de {registro.skus_avaliados} SKUs).',
             )
         return redirect(destino)
+
+
+class ComparativoFinalizarView(RequerEscritaInventarioMixin, ComparativoAcessoMixin, View):
+    """Salva (grava o resultado atual) e finaliza a conferência."""
+
+    def post(self, request, pk):
+        comparativo = get_object_or_404(ComparativoContagem, pk=pk)
+        if not usuario_pode_escrever_inventario(request.user):
+            messages.error(request, 'Seu perfil não pode salvar a conferência.')
+            return redirect('comparativo:lista')
+        try:
+            finalizar_comparativo(comparativo, request.user)
+        except ComparativoError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(
+                request,
+                f'Conferência "{comparativo.nome}" salva e finalizada. O resultado ficou gravado.',
+            )
+        destino = request.POST.get('voltar') or ''
+        if destino == 'lista':
+            return redirect('comparativo:lista')
+        return redirect('comparativo:acompanhamento', pk=pk)
 
 
 class ComparativoExportarView(ComparativoAcessoMixin, View):
