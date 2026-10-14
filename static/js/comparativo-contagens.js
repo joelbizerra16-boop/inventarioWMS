@@ -16,6 +16,7 @@
     var url = container.getAttribute('data-url');
     var polling = Boolean(url);
     var emAndamento = false;
+    var forcarPendente = false;
     var sequencia = 0;
     var ultimaAplicada = 0;
     var abertos = new Set();
@@ -98,12 +99,28 @@
         });
     }
 
-    function atualizar() {
-        if (!polling || emAndamento) { return; }
+    function versaoExibida() {
+        var resumo = container.querySelector('.comparativo-resumo');
+        return resumo ? (resumo.getAttribute('data-versao') || '') : '';
+    }
+
+    function horaAgora() {
+        return new Date().toLocaleTimeString('pt-BR');
+    }
+
+    // forcar=true (botão Atualizar): servidor relê SAP e contagens e recalcula
+    // mesmo sem mudança de versão. Sem forçar, responde 204 se nada mudou.
+    function atualizar(forcar) {
+        if (!polling) { return; }
+        if (emAndamento) {
+            if (forcar) { forcarPendente = true; }
+            return;
+        }
         emAndamento = true;
         var minha = ++sequencia;
+        var endereco = url + '&versao=' + encodeURIComponent(versaoExibida()) + (forcar ? '&forcar=1' : '');
         container.classList.add('comparativo-atualizando');
-        fetch(url, {
+        fetch(endereco, {
             credentials: 'same-origin',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             cache: 'no-store'
@@ -111,24 +128,46 @@
             if (resposta.redirected || !resposta.ok) {
                 throw new Error('HTTP ' + resposta.status);
             }
+            if (resposta.status === 204) { return null; }
             return resposta.text();
         }).then(function (html) {
             if (minha < ultimaAplicada) { return; }
             ultimaAplicada = minha;
+            if (html === null) {
+                marcarFalha('');
+                marcarVerificado('sem alterações · verificado às ' + horaAgora());
+                return;
+            }
             aplicar(html);
+            marcarVerificado(forcar ? 'reconciliado às ' + horaAgora() : '');
         }).catch(function () {
             marcarFalha('Falha ao atualizar; exibindo os últimos dados recebidos.');
         }).finally(function () {
             emAndamento = false;
             container.classList.remove('comparativo-atualizando');
+            if (forcarPendente) {
+                forcarPendente = false;
+                atualizar(true);
+            }
         });
     }
 
+    function marcarVerificado(texto) {
+        if (!status) { return; }
+        var nota = status.querySelector('.cmp-verificado');
+        if (!nota) {
+            nota = document.createElement('span');
+            nota.className = 'cmp-verificado';
+            status.appendChild(nota);
+        }
+        nota.textContent = texto ? ' · ' + texto : '';
+    }
+
     setInterval(function () {
-        if (document.visibilityState === 'visible') { atualizar(); }
+        if (document.visibilityState === 'visible') { atualizar(false); }
     }, INTERVALO_MS);
     document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') { atualizar(); }
+        if (document.visibilityState === 'visible') { atualizar(false); }
     });
-    if (botao) { botao.addEventListener('click', atualizar); }
+    if (botao) { botao.addEventListener('click', function () { atualizar(true); }); }
 }());

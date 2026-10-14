@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 from django import forms
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -30,6 +31,9 @@ from inventario.services.comparativo_contagens import (
     finalizar_comparativo,
     salvar_acuracidade,
     salvar_comparativo,
+    sincronizar_referencia_sap,
+    versao_dados,
+    NOME_CANAL,
 )
 from inventario.services.comparativo_exportacao import resposta_excel_comparativo
 
@@ -213,9 +217,30 @@ class ComparativoAcompanhamentoView(ComparativoAcessoMixin, View):
             pk=pk,
         )
         canal, visao, filtros = _parametros(request)
+        parcial = request.GET.get('parcial') == '1'
+        forcar = request.GET.get('forcar') == '1'
+        # Conferência aberta acompanha a importação SAP concluída mais recente
+        # (troca auditada; fotografia anterior preservada).
+        _alterou, aviso_sap = sincronizar_referencia_sap(
+            comparativo, request.user, motivo='atualizar' if forcar else 'automatica',
+        )
+        versao = versao_dados(comparativo)
+        if parcial and not forcar and request.GET.get('versao') == versao:
+            # Nada mudou desde a última resposta: evita recalcular e redesenhar.
+            resposta = HttpResponse(status=204)
+            resposta['X-Comparativo-Versao'] = versao
+            resposta['Cache-Control'] = 'no-store'
+            return resposta
         resultado = analisar(comparativo, canal=canal, visao=visao, filtros=filtros)
         pagina = Paginator(resultado.linhas, LINHAS_POR_PAGINA).get_page(request.GET.get('page'))
+        dados = resultado.dados
         contexto = {
+            'versao': versao,
+            'aviso_sap': aviso_sap,
+            'canais_status': [
+                (NOME_CANAL[chave], dados.canal_carregado(chave)) for chave in ('cosan', 'brida')
+            ],
+            'motivo_sap': dados.motivo_sap(canal),
             'comparativo': comparativo,
             'resultado': resultado,
             'page_obj': pagina,
@@ -246,9 +271,10 @@ class ComparativoAcompanhamentoView(ComparativoAcessoMixin, View):
             ),
             'rotulos_canal': Canal.ROTULOS,
         }
-        if request.GET.get('parcial') == '1':
+        if parcial:
             resposta = render(request, self.template_parcial, contexto)
             resposta['Cache-Control'] = 'no-store'
+            resposta['X-Comparativo-Versao'] = versao
             return resposta
         return render(request, self.template_name, contexto)
 
@@ -309,6 +335,7 @@ class ComparativoExportarView(ComparativoAcessoMixin, View):
         )
         canal, _visao, _filtros = _parametros(request)
         filtros = FiltrosComparativo.de_parametros(request.GET, Visao.SKU)
+        sincronizar_referencia_sap(comparativo, request.user)
         return resposta_excel_comparativo(
             comparativo, canal=canal, filtros=filtros, usuario=request.user,
         )

@@ -29,6 +29,9 @@ class ReferenciaSAP(models.Model):
         verbose_name='usuário da captura',
     )
     quantidade_skus = models.PositiveIntegerField('quantidade de SKUs', default=0)
+    # Campos de canal carregados na importação de origem (ex.: canal_1,
+    # canal_110). None: importação anterior ao registro de canais.
+    canais_carregados = models.JSONField('canais carregados', null=True, blank=True)
 
     class Meta:
         verbose_name = 'referência SAP (fotografia)'

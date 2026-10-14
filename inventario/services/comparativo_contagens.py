@@ -14,6 +14,7 @@ Regras centrais (compartilhadas entre a tela e o Excel):
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -21,6 +22,7 @@ from itertools import combinations
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Count, Max, Sum
 from django.utils import timezone
 
 from estoque_sap.models import EstoqueSAP
@@ -37,6 +39,11 @@ from produtos.models import Produto
 
 ORDENS = (1, 2, 3)
 NAO_REGISTRADO = 'Não registrado'
+DESCRICAO_NAO_CADASTRADA = 'Descrição não cadastrada'
+
+# Canais SAP do comparativo: chave interna -> campo da importação.
+CAMPO_CANAL = {'cosan': 'canal_110', 'brida': 'canal_1'}
+NOME_CANAL = {'cosan': 'COSAN', 'brida': 'BRIDA'}
 FUSO_ROTULO = 'Horário de Brasília (America/Sao_Paulo)'
 
 
@@ -342,14 +349,32 @@ def obter_ultima_importacao_sap() -> EstoqueSAP | None:
     return EstoqueSAP.objects.order_by('-data_importacao').first()
 
 
+def _canais_da_importacao(ultima: EstoqueSAP) -> list[str] | None:
+    """Campos de canal presentes na planilha da importação (None = não registrado)."""
+    importacao = getattr(ultima, 'importacao', None)
+    if importacao is None or importacao.canais_carregados is None:
+        return None
+    return list(importacao.canais_carregados)
+
+
+def _canais_faltantes(canais: list[str] | None) -> list[str]:
+    """Canais do comparativo ausentes de uma importação ([] se completa ou legado)."""
+    if canais is None:
+        return []
+    return [chave for chave, campo in CAMPO_CANAL.items() if campo not in canais]
+
+
 @transaction.atomic
 def capturar_referencia_sap(usuario=None) -> ReferenciaSAP:
-    """Fotografa os saldos dos canais 1 e 110 da base SAP vigente.
+    """Fotografa os saldos dos canais 1 (BRIDA) e 110 (COSAN) da base SAP vigente.
 
     A importação SAP substitui a tabela inteira; por isso a conferência guarda
     a própria cópia. Se a importação vigente já foi fotografada, reutiliza.
+    Todas as linhas são copiadas (inclusive de produtos inativos e sem saldo
+    nesses canais): a política de inativos e o filtro por canal são aplicados
+    na análise, que informa quantos SKUs ficaram de fora.
     """
-    ultima = obter_ultima_importacao_sap()
+    ultima = EstoqueSAP.objects.select_related('importacao').order_by('-data_importacao').first()
     if ultima is None:
         raise ComparativoError('Não há base SAP importada para fotografar.')
 
@@ -360,9 +385,7 @@ def capturar_referencia_sap(usuario=None) -> ReferenciaSAP:
     if existente is not None:
         return existente
 
-    registros = EstoqueSAP.objects.filter(
-        produto__in=Produto.objects.elegiveis_para_inventario(),
-    ).select_related('produto').order_by('produto_id', '-data_importacao')
+    registros = EstoqueSAP.objects.select_related('produto').order_by('produto_id', '-data_importacao')
     vistos: set[int] = set()
     itens: list[ReferenciaSAPItem] = []
     referencia = ReferenciaSAP.objects.create(
@@ -373,6 +396,7 @@ def capturar_referencia_sap(usuario=None) -> ReferenciaSAP:
         arquivo_origem=ultima.arquivo_origem,
         data_importacao_origem=ultima.data_importacao,
         usuario_captura=usuario if getattr(usuario, 'is_authenticated', False) else None,
+        canais_carregados=_canais_da_importacao(ultima),
     )
     for registro in registros:
         if registro.produto_id in vistos:
@@ -389,6 +413,77 @@ def capturar_referencia_sap(usuario=None) -> ReferenciaSAP:
     referencia.quantidade_skus = len(itens)
     referencia.save(update_fields=['quantidade_skus'])
     return referencia
+
+
+def _referencia_completa(referencia: ReferenciaSAP | None) -> bool:
+    return referencia is not None and not _canais_faltantes(referencia.canais_carregados)
+
+
+def sincronizar_referencia_sap(comparativo: ComparativoContagem, usuario=None, motivo: str = 'automatica'):
+    """Mantém a conferência aberta na importação SAP concluída mais recente.
+
+    Retorna (alterou, aviso). A referência anterior é preservada (as
+    fotografias não são apagadas) e a troca é registrada como evento.
+    Importação sem COSAN ou BRIDA não substitui uma referência completa.
+    Conferência finalizada mantém a referência histórica.
+    """
+    if comparativo.snapshot_resultado is not None:
+        return False, ''
+    ultima = EstoqueSAP.objects.select_related('importacao').order_by('-data_importacao').first()
+    if ultima is None:
+        return False, ''
+    atual = comparativo.referencia_sap
+    if (
+        atual is not None
+        and atual.arquivo_origem == ultima.arquivo_origem
+        and atual.data_importacao_origem == ultima.data_importacao
+    ):
+        return False, ''
+    faltantes = _canais_faltantes(_canais_da_importacao(ultima))
+    if faltantes and _referencia_completa(atual):
+        nomes = ' e '.join(NOME_CANAL[c] for c in faltantes)
+        return False, (
+            f'A importação SAP mais recente ({ultima.arquivo_origem}, '
+            f'{formatar_data_hora(ultima.data_importacao)}) não trouxe {nomes}: '
+            'a referência anterior completa foi mantida.'
+        )
+    with transaction.atomic():
+        travado = ComparativoContagem.objects.select_for_update().get(pk=comparativo.pk)
+        if travado.snapshot_resultado is not None:
+            return False, ''
+        nova = capturar_referencia_sap(usuario)
+        if travado.referencia_sap_id == nova.pk:
+            comparativo.referencia_sap = nova
+            return False, ''
+        anterior = travado.referencia_sap_id
+        travado.referencia_sap = nova
+        travado.save(update_fields=['referencia_sap', 'data_atualizacao'])
+        _registrar_evento(
+            travado, usuario, 'REFERENCIA_SAP_ATUALIZADA',
+            antes=anterior, depois=nova.pk, motivo=motivo,
+            arquivo=nova.arquivo_origem, canais=nova.canais_carregados,
+        )
+    comparativo.referencia_sap = nova
+    return True, ''
+
+
+def versao_dados(comparativo: ComparativoContagem) -> str:
+    """Impressão leve das fontes: muda quando contagens, SAP ou associação mudam."""
+    if comparativo.snapshot_resultado is not None:
+        return f'final{comparativo.pk}x{comparativo.data_finalizacao:%Y%m%d%H%M%S%f}'
+    inventarios = sorted(comparativo.associacoes.values_list('ordem', 'inventario_id'))
+    agregado = InventarioItem.objects.filter(
+        inventario_id__in=[inv for _, inv in inventarios],
+    ).aggregate(
+        n=Count('id'), maior=Max('id'), soma=Sum('quantidade_fisica'),
+        contagem=Max('data_contagem'), alteracao=Max('data_alteracao'),
+    )
+    ultima = EstoqueSAP.objects.order_by('-data_importacao').values_list('data_importacao', flat=True).first()
+    bruto = '|'.join(str(v) for v in (
+        comparativo.referencia_sap_id, ultima, inventarios,
+        agregado['n'], agregado['maior'], agregado['soma'], agregado['contagem'], agregado['alteracao'],
+    ))
+    return hashlib.sha1(bruto.encode('utf-8')).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------------------
@@ -619,16 +714,87 @@ class ContagemAssociada:
 
 @dataclass
 class DadosComparativo:
+    """Fontes já agregadas por SKU.
+
+    `sap`: {produto_id: {'cosan': Decimal, 'brida': Decimal}} somente para SKUs
+    com saldo diferente de zero em COSAN ou BRIDA. Na importação completa
+    (uma planilha com todos os canais) ausência de registro no canal é saldo
+    zero; `canais_carregados` indica quais canais vieram de fato.
+    """
+
     comparativo: ComparativoContagem
     contagens: dict[int, ContagemAssociada]
     lancamentos: list[Lancamento]
     produtos: dict[int, dict]
     sap: dict[int, dict]
     gerado_em: datetime
+    canais_carregados: frozenset[str] | None = None
+    canais_registrados: bool = True
+    sap_inativos_excluidos: int = 0
+    sap_fora_canais: int = 0
 
     @property
     def ordens_associadas(self) -> frozenset[int]:
         return frozenset(self.contagens)
+
+    @property
+    def tem_referencia(self) -> bool:
+        return self.canais_carregados is not None
+
+    def canal_carregado(self, chave: str) -> bool:
+        return self.canais_carregados is not None and chave in self.canais_carregados
+
+    def canais_da_selecao(self, canal: str) -> tuple[str, ...]:
+        canal = Canal.normalizar(canal)
+        return ('cosan', 'brida') if canal == Canal.AMBAS else (Canal.chave_saldo(canal),)
+
+    def skus_canal(self, chave: str) -> set[int]:
+        if not self.canal_carregado(chave):
+            return set()
+        return {pid for pid, saldo in self.sap.items() if saldo[chave] != 0}
+
+    def skus_sap(self, canal: str) -> set[int]:
+        """SKUs SAP do universo da aba: união dos canais selecionados."""
+        resultado: set[int] = set()
+        for chave in self.canais_da_selecao(canal):
+            resultado |= self.skus_canal(chave)
+        return resultado
+
+    def motivo_sap(self, canal: str) -> str:
+        """Por que o SAP selecionado não pode ser comparado ('' = pode)."""
+        if not self.tem_referencia:
+            return 'Sem referência SAP'
+        faltantes = [c for c in self.canais_da_selecao(canal) if not self.canal_carregado(c)]
+        if not faltantes:
+            return ''
+        nomes = ' e '.join(NOME_CANAL[c] for c in faltantes)
+        if Canal.normalizar(canal) == Canal.AMBAS:
+            return f'Base SAP parcial: {nomes} não carregado na importação'
+        return f'Canal {nomes} não carregado na importação SAP'
+
+    def saldos(self, produto_id: int) -> tuple[dict, dict]:
+        """(valores, presença) de COSAN, BRIDA e Total para um SKU.
+
+        Canal não carregado: valor None (nunca zero). Canal carregado sem
+        registro do SKU: valor 0 e presença False (regra da importação completa).
+        """
+        bruto = self.sap.get(produto_id)
+        valores: dict[str, Decimal | None] = {}
+        presenca: dict[str, bool] = {}
+        for chave in ('cosan', 'brida'):
+            if not self.canal_carregado(chave):
+                valores[chave] = None
+                presenca[chave] = False
+            else:
+                valor = bruto[chave] if bruto else Decimal('0')
+                valores[chave] = valor
+                presenca[chave] = valor != 0
+        if valores['cosan'] is None or valores['brida'] is None:
+            valores['total'] = None
+        else:
+            valores['total'] = valores['cosan'] + valores['brida']
+        presenca['total'] = presenca['cosan'] or presenca['brida']
+        return valores, presenca
 
     @property
     def c3_associada(self) -> bool:
@@ -718,16 +884,34 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
             origem=registro['origem_contagem'] or 'Legado',
         ))
 
+    # SAP agregado por SKU e canal a partir da fotografia (uma linha por SKU).
     sap: dict[int, dict] = {}
-    if comparativo.referencia_sap_id:
+    canais_carregados = None
+    canais_registrados = True
+    fora_canais = 0
+    referencia = comparativo.referencia_sap if comparativo.referencia_sap_id else None
+    if referencia is not None:
+        if referencia.canais_carregados is None:
+            # Fotografia anterior ao registro de canais: planilha única, tratada
+            # como completa e sinalizada na tela.
+            canais_carregados = frozenset(CAMPO_CANAL)
+            canais_registrados = False
+        else:
+            canais_carregados = frozenset(
+                chave for chave, campo in CAMPO_CANAL.items()
+                if campo in referencia.canais_carregados
+            )
         for item in ReferenciaSAPItem.objects.filter(
-            referencia_id=comparativo.referencia_sap_id,
+            referencia_id=referencia.pk,
         ).values('produto_id', 'canal_1', 'canal_110'):
-            sap[item['produto_id']] = {
-                'cosan': Decimal(item['canal_110']),
-                'brida': Decimal(item['canal_1']),
-                'total': Decimal(item['canal_110']) + Decimal(item['canal_1']),
-            }
+            cosan = Decimal(item['canal_110'])
+            brida = Decimal(item['canal_1'])
+            if cosan == 0 and brida == 0:
+                fora_canais += 1  # saldo só em outros canais (0, 2, 66...) ou zerado
+                continue
+            atual = sap.setdefault(item['produto_id'], {'cosan': Decimal('0'), 'brida': Decimal('0')})
+            atual['cosan'] += cosan
+            atual['brida'] += brida
 
     ids_produtos = {l.produto_id for l in lancamentos} | set(sap)
     produtos = {
@@ -739,10 +923,11 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
     # Política de inativos (igual ao confronto): saldo SAP só entra para
     # produto elegível; lançamentos físicos existentes são sempre exibidos.
     contados = {l.produto_id for l in lancamentos}
-    sap = {
-        pid: saldo for pid, saldo in sap.items()
-        if pid in contados or produtos.get(pid, {}).get('ativo')
+    inativos = {
+        pid for pid in sap
+        if pid not in contados and not produtos.get(pid, {}).get('ativo')
     }
+    sap = {pid: saldo for pid, saldo in sap.items() if pid not in inativos}
 
     contagens = {
         a.ordem: ContagemAssociada(
@@ -759,6 +944,10 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
         produtos=produtos,
         sap=sap,
         gerado_em=gerado_em,
+        canais_carregados=canais_carregados,
+        canais_registrados=canais_registrados,
+        sap_inativos_excluidos=len(inativos),
+        sap_fora_canais=fora_canais,
     )
 
 
@@ -766,7 +955,7 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
 # Resultado gravado (finalização)
 # ---------------------------------------------------------------------------
 
-VERSAO_SNAPSHOT = 1
+VERSAO_SNAPSHOT = 2
 
 
 def _iso(valor: datetime | None) -> str | None:
@@ -819,8 +1008,16 @@ def serializar_dados(dados: DadosComparativo) -> dict:
             for pid, p in dados.produtos.items()
         },
         'sap': {
-            str(pid): {chave: str(valor) for chave, valor in saldo.items()}
+            str(pid): {chave: str(saldo[chave]) for chave in ('cosan', 'brida')}
             for pid, saldo in dados.sap.items()
+        },
+        'sap_meta': {
+            'canais_carregados': (
+                sorted(dados.canais_carregados) if dados.canais_carregados is not None else None
+            ),
+            'canais_registrados': dados.canais_registrados,
+            'inativos_excluidos': dados.sap_inativos_excluidos,
+            'fora_canais': dados.sap_fora_canais,
         },
     }
 
@@ -854,16 +1051,32 @@ def dados_do_snapshot(comparativo: ComparativoContagem) -> DadosComparativo:
         )
         for l in snap['lancamentos']
     ]
+    meta = snap.get('sap_meta')
+    if meta is None:
+        # Gravação da versão 1: canais não registrados.
+        canais = frozenset(CAMPO_CANAL) if comparativo.referencia_sap_id else None
+        meta = {'canais_registrados': False, 'inativos_excluidos': 0, 'fora_canais': 0}
+    else:
+        canais = (
+            frozenset(meta['canais_carregados']) if meta['canais_carregados'] is not None else None
+        )
+    sap = {}
+    for pid, saldo in snap['sap'].items():
+        cosan = Decimal(saldo.get('cosan', '0'))
+        brida = Decimal(saldo.get('brida', '0'))
+        if cosan != 0 or brida != 0:
+            sap[int(pid)] = {'cosan': cosan, 'brida': brida}
     return DadosComparativo(
         comparativo=comparativo,
         contagens=contagens,
         lancamentos=lancamentos,
         produtos={int(pid): p for pid, p in snap['produtos'].items()},
-        sap={
-            int(pid): {chave: Decimal(valor) for chave, valor in saldo.items()}
-            for pid, saldo in snap['sap'].items()
-        },
+        sap=sap,
         gerado_em=_data(snap['gerado_em']),
+        canais_carregados=canais,
+        canais_registrados=meta['canais_registrados'],
+        sap_inativos_excluidos=meta['inativos_excluidos'],
+        sap_fora_canais=meta['fora_canais'],
     )
 
 
@@ -890,6 +1103,9 @@ class LinhaComparativo:
     medicoes: dict[int, Medicao]
     contagens: ClassificacaoContagens
     sap: dict[str, Decimal | None] = field(default_factory=dict)
+    sap_presenca: dict[str, bool] = field(default_factory=dict)
+    presente_sap: bool = False
+    presente_fisico: bool = False
     saldo_selecionado: Decimal | None = None
     status_sap: ClassificacaoSAP | None = None
     distribuicao_divergente: str = ''
@@ -925,7 +1141,7 @@ class LinhaComparativo:
 def _produto_info(dados: DadosComparativo, produto_id: int) -> dict:
     return dados.produtos.get(produto_id) or {
         'codigo_produto': str(produto_id),
-        'descricao': 'PRODUTO NÃO CADASTRADO',
+        'descricao': DESCRICAO_NAO_CADASTRADA,
         'embalagem': '',
         'ativo': False,
     }
@@ -966,7 +1182,11 @@ def montar_linhas_sku(dados: DadosComparativo, canal: str) -> list[LinhaComparat
             lancamento.ordem, [],
         ).append(lancamento)
 
-    universo = set(por_produto) | set(dados.sap)
+    # Universo da aba: SKUs SAP dos canais selecionados + SKUs contados.
+    # Total SAP nunca é fonte de SKUs; nenhuma junção descarta exclusivos.
+    sap_selecionado = dados.skus_sap(canal)
+    universo = sap_selecionado | set(por_produto)
+    motivo = dados.motivo_sap(canal)
     linhas = []
     for produto_id in universo:
         info = _produto_info(dados, produto_id)
@@ -993,29 +1213,30 @@ def montar_linhas_sku(dados: DadosComparativo, canal: str) -> list[LinhaComparat
             posicoes_map.values(), key=lambda d: (d.descricao or d.codigo, d.codigo),
         )
 
-        if dados.comparativo.referencia_sap_id is None:
-            sap = {'cosan': None, 'brida': None, 'total': None}
-            motivo = 'Sem referência SAP'
-        elif produto_id not in dados.sap:
-            sap = {'cosan': None, 'brida': None, 'total': None}
-            motivo = 'SKU ausente na base SAP'
-        else:
-            sap = dados.sap[produto_id]
-            motivo = ''
+        sap, presenca = dados.saldos(produto_id)
         saldo = sap[chave_saldo]
+        status_sap = classificar_sap(quantidades, saldo, classificacao, motivo)
+        presente_sap = produto_id in sap_selecionado
+        if not motivo and not presente_sap and status_sap.status != StatusSAP.NEUTRO:
+            status_sap.detalhe = ' · '.join(
+                parte for parte in ('Sem registro no SAP selecionado', status_sap.detalhe) if parte
+            )
 
         linhas.append(LinhaComparativo(
             chave=f'sku-{produto_id}',
             produto_id=produto_id,
             codigo_produto=str(info['codigo_produto']),
-            descricao=info['descricao'] or '',
+            descricao=info['descricao'] or DESCRICAO_NAO_CADASTRADA,
             embalagem=info['embalagem'] or '',
             posicoes=[(d.codigo, d.descricao) for d in detalhe_posicoes],
             medicoes=medicoes,
             contagens=classificacao,
             sap=sap,
+            sap_presenca=presenca,
+            presente_sap=presente_sap,
+            presente_fisico=bool(por_ordem),
             saldo_selecionado=saldo,
-            status_sap=classificar_sap(quantidades, saldo, classificacao, motivo),
+            status_sap=status_sap,
             distribuicao_divergente=(
                 _distribuicao_divergente(por_ordem, classificacao.pares_iguais)
                 if len(detalhe_posicoes) > 1 else ''
@@ -1054,9 +1275,10 @@ def montar_linhas_posicao(dados: DadosComparativo) -> list[LinhaComparativo]:
             chave=f'pos-{posicao_id}-{produto_id}',
             produto_id=produto_id,
             codigo_produto=str(info['codigo_produto']),
-            descricao=info['descricao'] or '',
+            descricao=info['descricao'] or DESCRICAO_NAO_CADASTRADA,
             embalagem=info['embalagem'] or '',
             posicoes=[(primeiro.codigo_posicao, primeiro.descricao_posicao)],
+            presente_fisico=True,
             medicoes=medicoes,
             contagens=classificacao,
         ))
@@ -1181,8 +1403,9 @@ class Acuracidade:
 def calcular_acuracidade(
     linhas_sku: list[LinhaComparativo],
     canal: str,
-    tem_referencia: bool,
+    tem_referencia: bool | str,
 ) -> Acuracidade:
+    """`tem_referencia`: True/False ou o motivo de indisponibilidade da base."""
     canal = Canal.normalizar(canal)
     chave = Canal.chave_saldo(canal)
     avaliados = acertos = sem_consenso = 0
@@ -1196,7 +1419,9 @@ def calcular_acuracidade(
         # Ausente na base SAP: só acerta se o estoque contado também for zero.
         if consenso == (saldo if saldo is not None else Decimal('0')):
             acertos += 1
-    if not tem_referencia:
+    if isinstance(tem_referencia, str) and tem_referencia:
+        motivo = tem_referencia
+    elif tem_referencia is False:
         motivo = 'Sem referência SAP'
     elif not avaliados:
         motivo = 'Nenhum SKU com duas contagens iguais'
@@ -1228,7 +1453,7 @@ def salvar_acuracidade(
     canal = Canal.normalizar(canal)
     dados = dados or carregar_dados(comparativo)
     acuracidade = calcular_acuracidade(
-        montar_linhas_sku(dados, canal), canal, comparativo.referencia_sap_id is not None,
+        montar_linhas_sku(dados, canal), canal, dados.motivo_sap(canal) or True,
     )
     if not acuracidade.disponivel:
         raise ComparativoError(f'Acuracidade indisponível: {acuracidade.motivo}.')
@@ -1267,7 +1492,7 @@ def finalizar_comparativo(comparativo: ComparativoContagem, usuario) -> Comparat
     acuracidades = []
     for canal in (Canal.COSAN, Canal.BRIDA, Canal.AMBAS):
         acuracidade = calcular_acuracidade(
-            montar_linhas_sku(dados, canal), canal, comparativo.referencia_sap_id is not None,
+            montar_linhas_sku(dados, canal), canal, dados.motivo_sap(canal) or True,
         )
         if acuracidade.disponivel:
             acuracidades.append(salvar_acuracidade(comparativo, canal, usuario, dados=dados))
@@ -1289,6 +1514,39 @@ def finalizar_comparativo(comparativo: ComparativoContagem, usuario) -> Comparat
 
 
 @dataclass
+class Cobertura:
+    """Quantidades de SKUs distintos (não de registros nem de unidades)."""
+
+    skus_cosan: int
+    skus_brida: int
+    skus_sap_selecionado: int
+    skus_fisicos: int
+    intersecao: int
+    somente_sap: int
+    somente_fisico: int
+    total: int
+    sap_inativos_excluidos: int
+    sap_fora_canais: int
+
+
+def calcular_cobertura(dados: DadosComparativo, canal: str) -> Cobertura:
+    sap = dados.skus_sap(canal)
+    fisicos = {l.produto_id for l in dados.lancamentos}
+    return Cobertura(
+        skus_cosan=len(dados.skus_canal('cosan')),
+        skus_brida=len(dados.skus_canal('brida')),
+        skus_sap_selecionado=len(sap),
+        skus_fisicos=len(fisicos),
+        intersecao=len(sap & fisicos),
+        somente_sap=len(sap - fisicos),
+        somente_fisico=len(fisicos - sap),
+        total=len(sap | fisicos),
+        sap_inativos_excluidos=dados.sap_inativos_excluidos,
+        sap_fora_canais=dados.sap_fora_canais,
+    )
+
+
+@dataclass
 class ResultadoComparativo:
     dados: DadosComparativo
     canal: str
@@ -1297,6 +1555,12 @@ class ResultadoComparativo:
     linhas: list[LinhaComparativo]
     resumo: ResumoComparativo
     acuracidade: Acuracidade | None = None
+    cobertura: Cobertura | None = None
+    total_sem_filtro: int = 0
+
+    @property
+    def filtrado(self) -> bool:
+        return len(self.linhas) != self.total_sem_filtro
 
     @property
     def colunas_sap(self) -> list[tuple[str, str]]:
@@ -1317,13 +1581,13 @@ def analisar(
     visao = Visao.normalizar(visao)
     dados = dados or carregar_dados(comparativo)
     acuracidade = None
+    cobertura = None
     if visao == Visao.POSICAO:
         todas = montar_linhas_posicao(dados)
     else:
         todas = montar_linhas_sku(dados, canal)
-        acuracidade = calcular_acuracidade(
-            todas, canal, comparativo.referencia_sap_id is not None,
-        )
+        acuracidade = calcular_acuracidade(todas, canal, dados.motivo_sap(canal) or True)
+        cobertura = calcular_cobertura(dados, canal)
     return ResultadoComparativo(
         dados=dados,
         canal=canal,
@@ -1332,4 +1596,6 @@ def analisar(
         linhas=filtrar_linhas(todas, filtros),
         resumo=resumir(todas),
         acuracidade=acuracidade,
+        cobertura=cobertura,
+        total_sem_filtro=len(todas),
     )

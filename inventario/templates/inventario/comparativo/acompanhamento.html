@@ -44,6 +44,10 @@
 </div>
 {% endif %}
 
+{% if aviso_sap %}
+<div class="alert alert-warning py-2 small" role="status"><i class="bi bi-exclamation-triangle me-1"></i>{{ aviso_sap }}</div>
+{% endif %}
+
 <div class="row g-3 mb-3">
     {% for contagem in contagens %}
     <div class="col-sm-6 col-xl-3">
@@ -68,12 +72,22 @@
                 <p class="text-muted small mb-1">Base SAP</p>
                 {% if comparativo.referencia_sap %}
                 <p class="fw-semibold small mb-1">{{ comparativo.referencia_sap.arquivo_origem|default:"SAP" }}</p>
-                <p class="small text-muted mb-0">
-                    Importação {{ comparativo.referencia_sap.data_importacao_origem|date:"d/m/Y H:i"|default:"Não registrado" }}
+                <p class="small text-muted mb-1">
+                    Importação {{ comparativo.referencia_sap.data_importacao_origem|data_hora }}
                     · fotografia #{{ comparativo.referencia_sap.pk }}
+                </p>
+                <p class="small mb-0">
+                    {% for nome, carregado in canais_status %}
+                    <span class="me-2">{% if carregado %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle-fill text-danger"></i>{% endif %} {{ nome }}{% if not carregado %} · não carregado{% endif %}</span>
+                    {% endfor %}
+                </p>
+                <p class="small text-muted mb-0">
+                    {% if resultado.dados.canais_registrados %}COSAN e BRIDA da mesma importação.{% else %}Importação anterior ao registro de canais: tratada como planilha única.{% endif %}
+                    {% if not comparativo.finalizado %}Atualiza sozinha com a importação SAP mais recente.{% endif %}
                 </p>
                 {% else %}
                 <p class="text-muted mb-0">Sem referência SAP</p>
+                <p class="small text-muted mb-0">Nenhuma importação SAP disponível.</p>
                 {% endif %}
             </div>
         </div>

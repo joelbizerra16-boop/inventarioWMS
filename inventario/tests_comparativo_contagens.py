@@ -291,8 +291,12 @@ class ConsolidacaoTestCase(ComparativoBaseTestCase):
         self.assertIsNone(linha_sap.medicoes[1].quantidade)
         self.assertEqual(linha_sap.status_sap.status, StatusSAP.NEUTRO)
         linha_c1 = self.linha(resultado, '0002')
-        self.assertEqual(linha_c1.status_sap.rotulo, 'SKU ausente na base SAP')
-        self.assertIsNone(linha_c1.sap['total'])
+        # Importação completa: sem registro no canal vale zero, sinalizado.
+        self.assertEqual(linha_c1.status_sap.status, StatusSAP.DIVERGENTE)
+        self.assertIn('Sem registro no SAP selecionado', linha_c1.status_sap.detalhe)
+        self.assertEqual(linha_c1.sap['total'], D(0))
+        self.assertFalse(linha_c1.sap_presenca['total'])
+        self.assertFalse(linha_c1.presente_sap)
         self.assertEqual(self.linha(resultado, '0003').medicoes[2].quantidade, D(4))
 
     def test_varias_posicoes_sem_multiplicar_saldo_e_distribuicao_divergente(self):
@@ -783,3 +787,306 @@ class FinalizacaoTestCase(ComparativoBaseTestCase):
         self.assertFalse(self.comparativo.finalizado)
         lista = self.client.get(reverse('comparativo:lista')).content.decode()
         self.assertNotIn('grid-acao grid-acao-salvar', lista)
+
+
+from estoque_sap.models import ImportacaoEstoqueSAP  # noqa: E402
+from estoque_sap.services.importacao_estoque_sap import CAMPOS_CANAIS, importar_dados  # noqa: E402
+from inventario.services.comparativo_contagens import (  # noqa: E402
+    calcular_cobertura,
+    carregar_dados,
+    finalizar_comparativo,
+    sincronizar_referencia_sap,
+)
+
+TODOS_CANAIS = list(CAMPOS_CANAIS)
+
+
+def _linha_sap(codigo, cosan='0', brida='0', outros=None):
+    linha = {campo: '0' for campo in CAMPOS_CANAIS}
+    linha.update({'codigo_produto': codigo, 'canal_110': str(cosan), 'canal_1': str(brida)})
+    for campo, valor in (outros or {}).items():
+        linha[campo] = str(valor)
+    linha['total'] = str(sum(D(linha[c]) for c in CAMPOS_CANAIS))
+    return linha
+
+
+class SapPorCanalTestCase(TestCase):
+    """Teste obrigatório: COSAN A=10 B=20; BRIDA B=5 C=7; C1 B=25 D=4; C2 B=25 E=6."""
+
+    def setUp(self):
+        self.user, self.operacional = criar_usuario_teste()
+        self.client.force_login(self.user)
+        self.ana, _ = criar_usuario_teste('ana.sap', perfil=Usuario.Perfil.INVENTARIO)
+        self.momento = datetime(2026, 10, 14, 12, 0, tzinfo=dt_timezone.utc)
+        self.inv1 = Inventario.objects.create(usuario=self.operacional, status=Inventario.Status.EM_ANDAMENTO)
+        self.inv2 = Inventario.objects.create(usuario=self.operacional, status=Inventario.Status.EM_ANDAMENTO)
+        self.pos = Posicao.objects.create(codigo='11', posicao='01.03.101')
+        self.pos2 = Posicao.objects.create(codigo='12', posicao='01.03.102')
+        self.p = {
+            codigo: Produto.objects.create(codigo_produto=codigo, descricao=f'Produto {codigo}', setor='A')
+            for codigo in ('A', 'B', 'C', 'D', 'E')
+        }
+        importar_dados(
+            [_linha_sap('A', cosan=10), _linha_sap('B', cosan=20, brida=5), _linha_sap('C', brida=7)],
+            arquivo_origem='sap_completo.xlsx',
+            canais_carregados=TODOS_CANAIS,
+        )
+        self.item(self.inv1, 'B', '25')
+        self.item(self.inv1, 'D', '4')
+        self.item(self.inv2, 'B', '25')
+        self.item(self.inv2, 'E', '6')
+        self.comparativo = salvar_comparativo(
+            comparativo=None, nome='Canais', inventarios={1: self.inv1, 2: self.inv2, 3: None},
+            referencia_opcao='nova', estado=None, usuario=self.user,
+        )
+
+    def item(self, inventario, codigo, quantidade, posicao=None):
+        return InventarioItem.objects.create(
+            inventario=inventario, posicao=posicao or self.pos, produto=self.p[codigo],
+            quantidade_fisica=D(quantidade), usuario_contagem=self.ana, data_contagem=self.momento,
+            usuario_registro=self.ana, data_registro=self.momento,
+        )
+
+    def resultado(self, canal):
+        return analisar(self.comparativo, canal=canal, visao='sku', filtros=FiltrosComparativo())
+
+    def linhas(self, canal):
+        return {l.codigo_produto: l for l in self.resultado(canal).linhas}
+
+    def url(self, **params):
+        return reverse('comparativo:acompanhamento', args=[self.comparativo.pk]) + '?' + '&'.join(
+            f'{k}={v}' for k, v in params.items()
+        )
+
+    def test_lote_registra_canais_e_referencia_herda(self):
+        importacao = ImportacaoEstoqueSAP.objects.get()
+        self.assertIn('canal_110', importacao.canais_carregados)
+        self.assertIn('canal_1', importacao.canais_carregados)
+        self.assertEqual(self.comparativo.referencia_sap.canais_carregados, importacao.canais_carregados)
+
+    def test_aba_ambas(self):
+        linhas = self.linhas('ambas')
+        self.assertEqual(sorted(linhas), ['A', 'B', 'C', 'D', 'E'])
+        a, b, c = linhas['A'], linhas['B'], linhas['C']
+        self.assertEqual((a.sap['cosan'], a.sap['brida'], a.sap['total']), (D(10), D(0), D(10)))
+        self.assertEqual((a.sap_presenca['cosan'], a.sap_presenca['brida']), (True, False))
+        self.assertEqual((b.sap['cosan'], b.sap['brida'], b.sap['total']), (D(20), D(5), D(25)))
+        self.assertEqual((c.sap['cosan'], c.sap['brida'], c.sap['total']), (D(0), D(7), D(7)))
+        self.assertEqual(b.contagens.status, StatusContagem.OK)
+        self.assertEqual(b.status_sap.status, StatusSAP.OK)
+        for codigo in ('D', 'E'):
+            self.assertFalse(linhas[codigo].presente_sap)
+            self.assertTrue(linhas[codigo].presente_fisico)
+            self.assertIn('Sem registro no SAP selecionado', linhas[codigo].status_sap.detalhe)
+        for codigo in ('A', 'C'):
+            self.assertIsNone(linhas[codigo].medicoes[1].quantidade)
+            self.assertEqual(linhas[codigo].contagens.status, StatusContagem.AGUARDANDO)
+            self.assertEqual(linhas[codigo].status_sap.status, StatusSAP.NEUTRO)  # não contado não fica vermelho
+        cob = self.resultado('ambas').cobertura
+        self.assertEqual(
+            (cob.skus_cosan, cob.skus_brida, cob.skus_sap_selecionado, cob.skus_fisicos,
+             cob.intersecao, cob.somente_sap, cob.somente_fisico, cob.total),
+            (2, 2, 3, 3, 1, 2, 2, 5),
+        )
+
+    def test_aba_cosan(self):
+        linhas = self.linhas('cosan')
+        self.assertEqual(sorted(linhas), ['A', 'B', 'D', 'E'])
+        b = linhas['B']
+        self.assertEqual(b.saldo_selecionado, D(20))
+        self.assertEqual(b.contagens.status, StatusContagem.OK)
+        self.assertEqual(b.status_sap.status, StatusSAP.DIVERGENTE)
+        cob = self.resultado('cosan').cobertura
+        self.assertEqual((cob.skus_sap_selecionado, cob.total, cob.intersecao), (2, 4, 1))
+        cabecalhos = _cabecalhos_html(self.client.get(self.url(canal='cosan', visao='sku')).content.decode())
+        self.assertEqual(cabecalhos[:4], ['Posição', 'SKU / descrição', 'COSAN', 'C1'])
+        self.assertNotIn('BRIDA', cabecalhos)
+        self.assertNotIn('Total SAP', cabecalhos)
+
+    def test_aba_brida(self):
+        linhas = self.linhas('brida')
+        self.assertEqual(sorted(linhas), ['B', 'C', 'D', 'E'])
+        b = linhas['B']
+        self.assertEqual(b.saldo_selecionado, D(5))
+        self.assertEqual(b.contagens.status, StatusContagem.OK)
+        self.assertEqual(b.status_sap.status, StatusSAP.DIVERGENTE)
+        cabecalhos = _cabecalhos_html(self.client.get(self.url(canal='brida', visao='sku')).content.decode())
+        self.assertEqual(cabecalhos[:4], ['Posição', 'SKU / descrição', 'BRIDA', 'C1'])
+        self.assertNotIn('COSAN', cabecalhos)
+        self.assertNotIn('Total SAP', cabecalhos)
+
+    def test_tela_mostra_sem_registro_e_sem_posicao(self):
+        html = self.client.get(self.url(canal='ambas', visao='sku')).content.decode()
+        corpo = html.split('<tbody>', 1)[1]
+        self.assertIn('sem registro', corpo)
+        self.assertIn('Sem posição contada', corpo)
+        self.assertIn('SKUs distintos', html)
+        self.assertIn('Total do comparativo <strong>5</strong>', html)
+
+    def test_conferencia_sem_contagens_exibe_skus_sap(self):
+        vazio = Inventario.objects.create(usuario=self.operacional, status=Inventario.Status.ABERTO)
+        comp = salvar_comparativo(
+            comparativo=None, nome='Vazia', inventarios={1: vazio, 2: None, 3: None},
+            referencia_opcao='nova', estado=None, usuario=self.user,
+        )
+        for canal, esperado in (('cosan', ['A', 'B']), ('brida', ['B', 'C']), ('ambas', ['A', 'B', 'C'])):
+            linhas = analisar(comp, canal=canal, visao='sku', filtros=FiltrosComparativo()).linhas
+            self.assertEqual([l.codigo_produto for l in linhas], esperado)
+
+    def test_nova_importacao_entra_auditada_e_preserva_anterior(self):
+        anterior = self.comparativo.referencia_sap_id
+        novo = Produto.objects.create(codigo_produto='F', descricao='Novo', setor='A')
+        importar_dados(
+            [_linha_sap('A', cosan=10), _linha_sap('B', cosan=30, brida=5), _linha_sap('C', brida=7),
+             _linha_sap('F', brida=3)],
+            arquivo_origem='sap_novo.xlsx', canais_carregados=TODOS_CANAIS,
+        )
+        self.client.get(self.url(canal='ambas', visao='sku'))  # leitura sincroniza
+        self.comparativo.refresh_from_db()
+        self.assertNotEqual(self.comparativo.referencia_sap_id, anterior)
+        self.assertTrue(ReferenciaSAP.objects.filter(pk=anterior).exists())
+        evento = ComparativoContagemEvento.objects.get(acao='REFERENCIA_SAP_ATUALIZADA')
+        self.assertEqual((evento.dados['antes'], evento.dados['depois']), (anterior, self.comparativo.referencia_sap_id))
+        linhas = self.linhas('ambas')
+        self.assertIn('F', linhas)
+        self.assertEqual(linhas['B'].sap['total'], D(35))  # COSAN 30 + BRIDA 5 recalculado
+        self.assertEqual(linhas['B'].status_sap.status, StatusSAP.DIVERGENTE)
+        self.assertEqual(novo.pk, linhas['F'].produto_id)
+
+    def test_importacao_parcial_nao_substitui_referencia_completa(self):
+        anterior = self.comparativo.referencia_sap_id
+        importar_dados(
+            [_linha_sap('A', cosan=99)], arquivo_origem='so_cosan.xlsx',
+            canais_carregados=['canal_110'],
+        )
+        alterou, aviso = sincronizar_referencia_sap(self.comparativo, self.user)
+        self.assertFalse(alterou)
+        self.assertIn('não trouxe BRIDA', aviso)
+        self.comparativo.refresh_from_db()
+        self.assertEqual(self.comparativo.referencia_sap_id, anterior)
+        html = self.client.get(self.url(canal='ambas', visao='sku')).content.decode()
+        self.assertIn('referência anterior completa foi mantida', html)
+        self.assertEqual(self.linhas('ambas')['A'].sap['cosan'], D(10))
+
+    def test_importacao_parcial_sem_referencia_marca_canal_nao_carregado(self):
+        ComparativoContagem.objects.filter(pk=self.comparativo.pk).update(referencia_sap=None)
+        self.comparativo.refresh_from_db()
+        importar_dados(
+            [_linha_sap('A', cosan=10), _linha_sap('B', cosan=20)], arquivo_origem='so_cosan.xlsx',
+            canais_carregados=['canal_110'],
+        )
+        alterou, _aviso = sincronizar_referencia_sap(self.comparativo, self.user)
+        self.assertTrue(alterou)
+        brida = self.resultado('brida')
+        b = {l.codigo_produto: l for l in brida.linhas}['B']
+        self.assertIsNone(b.sap['brida'])  # não carregado nunca vira zero
+        self.assertIsNone(b.sap['total'])
+        self.assertEqual(b.status_sap.status, StatusSAP.NEUTRO)
+        self.assertEqual(b.status_sap.rotulo, 'Canal BRIDA não carregado na importação SAP')
+        self.assertFalse(brida.acuracidade.disponivel)
+        ambas = {l.codigo_produto: l for l in self.resultado('ambas').linhas}
+        self.assertEqual(ambas['B'].status_sap.rotulo, 'Base SAP parcial: BRIDA não carregado na importação')
+        cosan = {l.codigo_produto: l for l in self.resultado('cosan').linhas}
+        self.assertEqual(cosan['B'].status_sap.status, StatusSAP.DIVERGENTE)  # COSAN válido
+
+    def test_varias_posicoes_e_registros_sem_duplicar_saldo(self):
+        self.item(self.inv1, 'A', '4', posicao=self.pos)
+        self.item(self.inv1, 'A', '6', posicao=self.pos2)
+        self.item(self.inv2, 'A', '10', posicao=self.pos2)
+        a = self.linhas('ambas')['A']
+        self.assertEqual(a.sap['cosan'], D(10))
+        self.assertEqual(a.sap['total'], D(10))
+        self.assertEqual(a.medicoes[1].quantidade, D(10))
+        self.assertEqual(a.status_sap.status, StatusSAP.OK)
+        self.assertEqual(len(a.codigos_posicao), 2)
+        dados = carregar_dados(self.comparativo)
+        self.assertEqual(sum(1 for l in self.resultado('ambas').linhas if l.codigo_produto == 'A'), 1)
+        self.assertEqual(calcular_cobertura(dados, 'ambas').intersecao, 2)
+
+    def test_novo_sku_fisico_e_versao_do_polling(self):
+        url = self.url(canal='ambas', visao='sku', parcial='1')
+        primeira = self.client.get(url)
+        versao = primeira['X-Comparativo-Versao']
+        sem_mudanca = self.client.get(url + f'&versao={versao}')
+        self.assertEqual(sem_mudanca.status_code, 204)
+        forcado = self.client.get(url + f'&versao={versao}&forcar=1')
+        self.assertEqual(forcado.status_code, 200)
+        novo = Produto.objects.create(codigo_produto='G', descricao='Contado agora', setor='A')
+        self.p['G'] = novo
+        self.item(self.inv2, 'G', '2')
+        depois = self.client.get(url + f'&versao={versao}')
+        self.assertEqual(depois.status_code, 200)
+        self.assertNotEqual(depois['X-Comparativo-Versao'], versao)
+        self.assertIn('>G<', depois.content.decode())
+
+    def test_inativo_e_outros_canais_excluidos_com_contagem(self):
+        inativo = Produto.objects.create(codigo_produto='H', descricao='Inativo', setor='A', ativo=False)
+        outro = Produto.objects.create(codigo_produto='J', descricao='Outro canal', setor='A')
+        sem_desc = Produto.objects.create(codigo_produto='0042', descricao='', setor='A')
+        importar_dados(
+            [_linha_sap('A', cosan=10), _linha_sap('B', cosan=20, brida=5), _linha_sap('C', brida=7),
+             _linha_sap('H', cosan=3), _linha_sap('J', outros={'canal_66': 9}), _linha_sap('0042', brida=1)],
+            arquivo_origem='sap_completo2.xlsx', canais_carregados=TODOS_CANAIS,
+        )
+        sincronizar_referencia_sap(self.comparativo, self.user)
+        resultado = self.resultado('ambas')
+        codigos = [l.codigo_produto for l in resultado.linhas]
+        self.assertNotIn('H', codigos)
+        self.assertNotIn('J', codigos)
+        self.assertEqual(resultado.cobertura.sap_inativos_excluidos, 1)
+        self.assertEqual(resultado.cobertura.sap_fora_canais, 1)
+        linha = {l.codigo_produto: l for l in resultado.linhas}['0042']
+        self.assertEqual(linha.descricao, 'Descrição não cadastrada')
+        self.assertEqual(inativo.pk, Produto.objects.get(codigo_produto='H').pk)
+        self.assertEqual(outro.pk, Produto.objects.get(codigo_produto='J').pk)
+        self.assertEqual(sem_desc.codigo_produto, '0042')
+
+    def test_finalizada_preserva_referencia_historica(self):
+        finalizar_comparativo(self.comparativo, self.user)
+        self.comparativo.refresh_from_db()
+        anterior = self.comparativo.referencia_sap_id
+        importar_dados(
+            [_linha_sap('A', cosan=1)], arquivo_origem='posterior.xlsx', canais_carregados=TODOS_CANAIS,
+        )
+        self.client.get(self.url(canal='ambas', visao='sku'))
+        self.comparativo.refresh_from_db()
+        self.assertEqual(self.comparativo.referencia_sap_id, anterior)
+        linhas = self.linhas('ambas')
+        self.assertEqual(sorted(linhas), ['A', 'B', 'C', 'D', 'E'])
+        self.assertEqual(linhas['A'].sap['cosan'], D(10))
+        cob = self.resultado('ambas').cobertura
+        self.assertEqual((cob.skus_sap_selecionado, cob.total), (3, 5))
+
+    def test_excel_igual_a_tela(self):
+        for canal, colunas_sap in (('cosan', ['COSAN']), ('brida', ['BRIDA']), ('ambas', ['COSAN', 'BRIDA', 'Total SAP'])):
+            with self.subTest(canal=canal):
+                resposta = self.client.get(
+                    reverse('comparativo:exportar', args=[self.comparativo.pk]), {'canal': canal},
+                )
+                pasta = load_workbook(io.BytesIO(resposta.content))
+                aba = pasta['Por SKU']
+                cab = [c.value for c in aba[1]]
+                self.assertEqual(cab[4:4 + len(colunas_sap)], colunas_sap)
+                excel = sorted(r[2].value for r in aba.iter_rows(min_row=2))
+                tela = sorted(l.codigo_produto for l in self.resultado(canal).linhas)
+                self.assertEqual(excel, tela)
+                resumo = {r[0].value: r[1].value for r in pasta['Resumo'].iter_rows(min_row=2)}
+                cob = self.resultado(canal).cobertura
+                self.assertEqual(resumo['Total de SKUs do comparativo'], cob.total)
+                self.assertEqual(resumo['SKUs SAP únicos da seleção'], cob.skus_sap_selecionado)
+                self.assertEqual(resumo['Canal BRIDA (1)'], 'carregado')
+        pasta = load_workbook(io.BytesIO(self.client.get(
+            reverse('comparativo:exportar', args=[self.comparativo.pk]), {'canal': 'ambas'},
+        ).content))
+        linhas = {r[2].value: r for r in pasta['Por SKU'].iter_rows(min_row=2)}
+        self.assertEqual(linhas['A'][5].value, 'sem registro')  # BRIDA de A
+        self.assertEqual(D(str(linhas['A'][6].value)), D(10))  # Total SAP de A
+        self.assertEqual(linhas['D'][6].value, 'sem registro')
+
+    def test_consulta_visualiza_e_sincroniza(self):
+        consulta, _ = criar_usuario_teste('consulta.sap', perfil=Usuario.Perfil.CONSULTA)
+        self.client.force_login(consulta)
+        self.assertEqual(self.client.get(self.url(canal='ambas', visao='sku')).status_code, 200)
+        self.assertEqual(
+            self.client.get(reverse('comparativo:exportar', args=[self.comparativo.pk])).status_code, 200,
+        )

@@ -50,3 +50,10 @@
 .grid-acao-abrir:hover, .grid-acao-abrir:focus-visible { background: #ccfbf1; color: #115e59; }
 .grid-acao-salvar { color: #15803d; }
 .grid-acao-salvar:hover, .grid-acao-salvar:focus-visible { background: #dcfce7; color: #14532d; }
+
+/* Cobertura de SKUs (quantidades de SKUs distintos, não de unidades). */
+.comparativo-cobertura { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; align-items: baseline; font-size: 0.82rem; color: #475569; }
+.cmp-cob-titulo { font-weight: 600; color: #1f2933; }
+.cmp-cob strong { color: #1f2933; }
+.cmp-cob-total strong { color: #1d4ed8; }
+.cmp-cob-nota { flex-basis: 100%; font-size: 0.78rem; color: #64748b; }

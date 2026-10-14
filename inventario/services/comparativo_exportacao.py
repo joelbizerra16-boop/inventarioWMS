@@ -71,8 +71,9 @@ def _data_excel(valor: datetime | None):
 
 def _escrever(cell, valor, tipo: str, fundo: PatternFill | None = None):
     if tipo == NUMERO:
-        if valor is None:
-            cell.value = '—'
+        if valor is None or isinstance(valor, str):
+            # Ausência nunca vira zero: '—' ou o motivo ('sem registro'...).
+            cell.value = valor or '—'
             cell.data_type = 's'
             cell.alignment = Alignment(horizontal='right')
         else:
@@ -154,7 +155,14 @@ def _valores_contagem(linha, ordens, incluir_sap_status: bool, colunas_sap) -> l
         linha.codigo_produto,
         linha.descricao,
     ]
-    valores.extend(linha.sap.get(chave) for chave, _rotulo in colunas_sap)
+    for chave, _rotulo in colunas_sap:
+        valor = linha.sap.get(chave)
+        if valor is None:
+            valores.append('indisponível')  # canal não carregado ou sem referência
+        elif not linha.sap_presenca.get(chave):
+            valores.append('sem registro')
+        else:
+            valores.append(valor)
     for ordem in ordens:
         medicao = linha.medicoes[ordem]
         valores.append((medicao.quantidade, _FUNDO_CELULA.get(medicao.celula)))
@@ -248,6 +256,22 @@ def gerar_pasta(comparativo, *, canal: str, filtros, usuario) -> tuple[Workbook,
         ('Base SAP', referencia.descricao if referencia else 'Sem referência SAP', TEXTO),
         ('Data da base SAP', _data_excel(referencia.data_importacao_origem) if referencia else None, DATA),
         ('Canal SAP', Canal.DESCRICOES[canal], TEXTO),
+        ('Canal COSAN (110)', 'carregado' if dados.canal_carregado('cosan') else 'não carregado', TEXTO),
+        ('Canal BRIDA (1)', 'carregado' if dados.canal_carregado('brida') else 'não carregado', TEXTO),
+        ('Registro de canais', 'mesma importação para COSAN e BRIDA' if dados.canais_registrados
+         else 'importação anterior ao registro de canais (planilha única)', TEXTO),
+        ('Comparação SAP', dados.motivo_sap(canal) or 'disponível', TEXTO),
+        ('SKUs COSAN (distintos)', resultado.cobertura.skus_cosan, NUMERO),
+        ('SKUs BRIDA (distintos)', resultado.cobertura.skus_brida, NUMERO),
+        ('SKUs SAP únicos da seleção', resultado.cobertura.skus_sap_selecionado, NUMERO),
+        ('SKUs físicos distintos', resultado.cobertura.skus_fisicos, NUMERO),
+        ('SKUs no SAP e no físico', resultado.cobertura.intersecao, NUMERO),
+        ('SKUs somente no SAP', resultado.cobertura.somente_sap, NUMERO),
+        ('SKUs somente no físico', resultado.cobertura.somente_fisico, NUMERO),
+        ('Total de SKUs do comparativo', resultado.cobertura.total, NUMERO),
+        ('SKUs SAP de produtos inativos (excluídos)', resultado.cobertura.sap_inativos_excluidos, NUMERO),
+        ('SKUs SAP sem saldo em COSAN/BRIDA (excluídos)', resultado.cobertura.sap_fora_canais, NUMERO),
+        ('Horário do cálculo', _data_excel(dados.gerado_em), DATA),
         ('Filtros', filtros.descricao(), TEXTO),
         ('Linhas por SKU', len(linhas_sku), NUMERO),
         ('Linhas por posição', len(linhas_posicao), NUMERO),

@@ -1,5 +1,5 @@
 {% load comparativo_tags %}
-<div class="comparativo-resumo mb-3" data-atualizado-em="{{ atualizado_em|date:'d/m/Y H:i:s' }}">
+<div class="comparativo-resumo mb-3" data-atualizado-em="{{ atualizado_em|date:'d/m/Y H:i:s' }}" data-versao="{{ versao }}">
     <span class="cmp-chip">Linhas <strong>{{ resultado.resumo.total }}</strong></span>
     <span class="cmp-chip cmp-status-ok">Contagem OK <strong>{{ resultado.resumo.contagem_ok }}</strong></span>
     <span class="cmp-chip cmp-status-divergente">Divergentes <strong>{{ resultado.resumo.contagem_divergente }}</strong></span>
@@ -31,6 +31,31 @@
     {% endwith %}
     {% endif %}
 </div>
+
+{% if visao == 'sku' and resultado.cobertura %}
+{% with cob=resultado.cobertura %}
+<div class="comparativo-cobertura mb-3" aria-label="Cobertura de SKUs">
+    <span class="cmp-cob-titulo">SKUs distintos</span>
+    <span class="cmp-cob">COSAN <strong>{{ cob.skus_cosan }}</strong></span>
+    <span class="cmp-cob">BRIDA <strong>{{ cob.skus_brida }}</strong></span>
+    <span class="cmp-cob">SAP {{ rotulos_canal|item:canal }} (únicos) <strong>{{ cob.skus_sap_selecionado }}</strong></span>
+    <span class="cmp-cob">Físicos <strong>{{ cob.skus_fisicos }}</strong></span>
+    <span class="cmp-cob">SAP e físico <strong>{{ cob.intersecao }}</strong></span>
+    <span class="cmp-cob">Só SAP <strong>{{ cob.somente_sap }}</strong></span>
+    <span class="cmp-cob">Só físico <strong>{{ cob.somente_fisico }}</strong></span>
+    <span class="cmp-cob cmp-cob-total">Total do comparativo <strong>{{ cob.total }}</strong></span>
+    {% if cob.sap_inativos_excluidos or cob.sap_fora_canais %}
+    <span class="cmp-cob-nota">
+        Fora do universo SAP:
+        {% if cob.sap_inativos_excluidos %}{{ cob.sap_inativos_excluidos }} produto(s) inativo(s){% endif %}{% if cob.sap_inativos_excluidos and cob.sap_fora_canais %} · {% endif %}{% if cob.sap_fora_canais %}{{ cob.sap_fora_canais }} SKU(s) sem saldo em COSAN/BRIDA (outros canais ou zerados){% endif %}
+    </span>
+    {% endif %}
+</div>
+{% endwith %}
+{% endif %}
+{% if resultado.filtrado %}
+<p class="small text-muted mb-2"><i class="bi bi-funnel"></i> Exibindo {{ resultado.linhas|length }} de {{ resultado.total_sem_filtro }} linha(s): pesquisa ou filtros ativos.</p>
+{% endif %}
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
@@ -64,7 +89,7 @@
                             {% if linha.posicoes|length > 1 %}<div class="cmp-sub">+{{ linha.posicoes|length|add:"-1" }} posição(ões)</div>{% endif %}
                             {% else %}
                             <span class="text-muted">—</span>
-                            {% if visao == 'sku' %}<div class="cmp-sub">Sem contagem</div>{% endif %}
+                            {% if visao == 'sku' %}<div class="cmp-sub">Sem posição contada</div>{% endif %}
                             {% endif %}
                         </td>
                         <td class="cmp-sku">
@@ -72,7 +97,17 @@
                             <div class="cmp-sub">{{ linha.descricao }}</div>
                         </td>
                         {% for chave, rotulo in colunas_sap %}
-                        <td class="text-end cmp-num cmp-col-sap">{{ linha.sap|item:chave|qtd }}</td>
+                        {% with valor=linha.sap|item:chave %}
+                        <td class="text-end cmp-num cmp-col-sap">
+                            {% if valor is None %}
+                            —<div class="cmp-sub">{% if motivo_sap == 'Sem referência SAP' %}sem referência{% else %}não carregado{% endif %}</div>
+                            {% elif not linha.sap_presenca|item:chave %}
+                            —<div class="cmp-sub">sem registro</div>
+                            {% else %}
+                            {{ valor|qtd }}
+                            {% endif %}
+                        </td>
+                        {% endwith %}
                         {% endfor %}
                         {% for ordem in ordens %}
                         {% with medicao=linha.medicoes|item:ordem %}
