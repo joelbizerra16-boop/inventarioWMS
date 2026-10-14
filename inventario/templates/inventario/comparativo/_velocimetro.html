@@ -1,0 +1,35 @@
+{% load l10n %}
+<section class="cmp-gauge cmp-gauge-{{ tamanho }} cmp-faixa-{% if disponivel %}{{ ind.faixa }}{% else %}neutro{% endif %}" aria-label="{{ ind.titulo }}">
+    <header class="cmp-gauge-cab">
+        <h2 class="cmp-gauge-titulo">{{ ind.titulo }}</h2>
+        <p class="cmp-gauge-sub">{{ ind.subtitulo }}</p>
+    </header>
+    {% localize off %}
+    <svg class="cmp-gauge-svg" viewBox="-8 2 216 110" role="img" aria-labelledby="gauge-{{ ind.chave }}-{{ tamanho }}" focusable="false">
+        <title id="gauge-{{ ind.chave }}-{{ tamanho }}">{{ ind.descricao_acessivel }}</title>
+        {% for f in faixas %}
+        <path d="{{ f.d }}" class="cmp-gauge-faixa cmp-gauge-faixa-{{ f.faixa }}{% if not disponivel %} cmp-gauge-faixa-inativa{% endif %}" />
+        {% endfor %}
+        {% if progresso %}<path d="{{ progresso }}" class="cmp-gauge-progresso" />{% endif %}
+        {% for m in marcas %}
+        <text x="{{ m.x }}" y="{{ m.y }}" class="cmp-gauge-marca" text-anchor="middle">{{ m.valor }}</text>
+        {% endfor %}
+        {% if ponteiro %}
+        <line x1="{{ cx }}" y1="{{ cy }}" x2="{{ ponteiro.x }}" y2="{{ ponteiro.y }}" class="cmp-gauge-ponteiro" />
+        {% endif %}
+        <circle cx="{{ cx }}" cy="{{ cy }}" r="{% if ponteiro %}7{% else %}5{% endif %}" class="cmp-gauge-eixo{% if not ponteiro %} cmp-gauge-eixo-inativo{% endif %}" />
+    </svg>
+    {% endlocalize %}
+    <div class="cmp-gauge-valor">
+        <span class="cmp-gauge-percentual">{{ ind.percentual_texto }}</span>
+        {% if disponivel and ind.provisorio %}<span class="cmp-gauge-provisorio" title="Inclui itens ainda não contados ou sem consenso">Provisório</span>{% endif %}
+    </div>
+    {% if disponivel %}
+    <ul class="cmp-gauge-linhas">
+        {% for linha in ind.linhas %}<li>{{ linha }}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p class="cmp-gauge-motivo">Sem dados · {{ ind.motivo }}</p>
+    {% endif %}
+    <p class="cmp-gauge-base">{{ ind.descricao_base }}</p>
+</section>

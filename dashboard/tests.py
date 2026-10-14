@@ -374,8 +374,10 @@ class DashboardViewTestCase(ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         self.autenticar_cliente()
 
-    def test_home_exibe_dashboard(self):
-        response = self.client.get(reverse('home'))
+    def test_dashboard_classico_preservado(self):
+        # A tela inicial agora é o Painel geral do inventário; o dashboard
+        # anterior continua disponível em rota própria.
+        response = self.client.get(reverse('dashboard_classico'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Dashboard Operacional')

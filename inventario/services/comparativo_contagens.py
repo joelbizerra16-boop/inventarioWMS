@@ -27,6 +27,7 @@ from django.utils import timezone
 
 from estoque_sap.models import EstoqueSAP
 from inventario.models import Inventario, InventarioItem
+from inventario.models_operacional import InventarioTarefa
 from inventario.models_comparativo import (
     ComparativoAcuracidade,
     ComparativoContagem,
@@ -732,6 +733,9 @@ class DadosComparativo:
     canais_registrados: bool = True
     sap_inativos_excluidos: int = 0
     sap_fora_canais: int = 0
+    # Posições atribuídas por tarefa nos inventários associados:
+    # {posicao_id: (codigo, descricao)}. Vazio quando não há planejamento.
+    posicoes_planejadas: dict[int, tuple[str, str]] = field(default_factory=dict)
 
     @property
     def ordens_associadas(self) -> frozenset[int]:
@@ -937,6 +941,13 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
         )
         for a in associacoes
     }
+    posicoes_planejadas = {
+        t['posicao_id']: (t['posicao__codigo'] or '', t['posicao__posicao'] or '')
+        for t in InventarioTarefa.objects.filter(
+            tipo_inventario=InventarioTarefa.TipoInventario.GERAL,
+            inventario_id__in=list(ordem_por_inventario),
+        ).values('posicao_id', 'posicao__codigo', 'posicao__posicao').distinct()
+    }
     return DadosComparativo(
         comparativo=comparativo,
         contagens=contagens,
@@ -948,6 +959,7 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
         canais_registrados=canais_registrados,
         sap_inativos_excluidos=len(inativos),
         sap_fora_canais=fora_canais,
+        posicoes_planejadas=posicoes_planejadas,
     )
 
 
@@ -1019,6 +1031,9 @@ def serializar_dados(dados: DadosComparativo) -> dict:
             'inativos_excluidos': dados.sap_inativos_excluidos,
             'fora_canais': dados.sap_fora_canais,
         },
+        'posicoes_planejadas': [
+            [pid, codigo, descricao] for pid, (codigo, descricao) in dados.posicoes_planejadas.items()
+        ],
     }
 
 
@@ -1077,6 +1092,9 @@ def dados_do_snapshot(comparativo: ComparativoContagem) -> DadosComparativo:
         canais_registrados=meta['canais_registrados'],
         sap_inativos_excluidos=meta['inativos_excluidos'],
         sap_fora_canais=meta['fora_canais'],
+        posicoes_planejadas={
+            pid: (codigo, descricao) for pid, codigo, descricao in snap.get('posicoes_planejadas', [])
+        },
     )
 
 
@@ -1107,6 +1125,7 @@ class LinhaComparativo:
     presente_sap: bool = False
     presente_fisico: bool = False
     saldo_selecionado: Decimal | None = None
+    posicao_id: int | None = None
     status_sap: ClassificacaoSAP | None = None
     distribuicao_divergente: str = ''
     detalhe_posicoes: list[PosicaoDetalhe] = field(default_factory=list)
@@ -1279,6 +1298,7 @@ def montar_linhas_posicao(dados: DadosComparativo) -> list[LinhaComparativo]:
             embalagem=info['embalagem'] or '',
             posicoes=[(primeiro.codigo_posicao, primeiro.descricao_posicao)],
             presente_fisico=True,
+            posicao_id=posicao_id,
             medicoes=medicoes,
             contagens=classificacao,
         ))
@@ -1546,6 +1566,175 @@ def calcular_cobertura(dados: DadosComparativo, canal: str) -> Cobertura:
     )
 
 
+# ---------------------------------------------------------------------------
+# Indicadores gerais (velocímetros)
+# ---------------------------------------------------------------------------
+
+FAIXA_VERMELHA = 'vermelho'
+FAIXA_LARANJA = 'laranja'
+FAIXA_AMARELA = 'amarelo'
+FAIXA_VERDE = 'verde'
+FAIXA_NEUTRA = 'neutro'
+
+
+def faixa_acuracidade(percentual: Decimal | None) -> str:
+    """Faixa pelo valor exato (antes do arredondamento de exibição).
+
+    0–60 inclusive: vermelho; >60–90 inclusive: laranja;
+    >90 e <98: amarelo-esverdeado; 98–100: verde. 97,99 não é verde.
+    """
+    if percentual is None:
+        return FAIXA_NEUTRA
+    if percentual <= 60:
+        return FAIXA_VERMELHA
+    if percentual <= 90:
+        return FAIXA_LARANJA
+    if percentual < 98:
+        return FAIXA_AMARELA
+    return FAIXA_VERDE
+
+
+def formatar_percentual(percentual: Decimal | None) -> str:
+    if percentual is None:
+        return '—'
+    arredondado = percentual.quantize(Decimal('0.1'))
+    return f'{arredondado:f}'.replace('.', ',') + '%'
+
+
+@dataclass
+class Indicador:
+    """Indicador geral da conferência (não depende de pesquisa, filtros ou página)."""
+
+    chave: str
+    titulo: str
+    subtitulo: str
+    numerador: int | None
+    denominador: int | None
+    percentual: Decimal | None  # valor exato, sem arredondamento
+    motivo: str
+    descricao_base: str
+    linhas: list[str]
+    provisorio: bool
+    # SKU: SKUs com alguma contagem; posição: posições com algum registro.
+    auxiliar: int | None = None
+    rotulo_escopo: str = ''
+
+    @property
+    def disponivel(self) -> bool:
+        return self.percentual is not None
+
+    @property
+    def faixa(self) -> str:
+        return faixa_acuracidade(self.percentual)
+
+    @property
+    def percentual_texto(self) -> str:
+        return formatar_percentual(self.percentual)
+
+    @property
+    def descricao_acessivel(self) -> str:
+        if not self.disponivel:
+            return f'{self.titulo}: sem dados. {self.motivo}.'
+        texto = f'{self.titulo}: {self.percentual_texto}. ' + '. '.join(self.linhas)
+        return texto + ('. Resultado provisório.' if self.provisorio else '.')
+
+
+def _percentual(numerador: int, denominador: int) -> Decimal | None:
+    if not denominador:
+        return None
+    return Decimal(numerador) * 100 / Decimal(denominador)
+
+
+def calcular_indicador_sku(
+    linhas_sku: list[LinhaComparativo],
+    dados: DadosComparativo,
+    canal: str,
+) -> Indicador:
+    """SKUs com Status SAP verde / todos os SKUs do universo da aba × 100.
+
+    O universo inclui conformes, divergentes, não contados e exclusivos
+    físicos (uma linha por SKU), por isso é provisório durante a operação.
+    """
+    canal = Canal.normalizar(canal)
+    total = len(linhas_sku)
+    conformes = sum(
+        1 for l in linhas_sku if l.status_sap is not None and l.status_sap.status == StatusSAP.OK
+    )
+    contados = sum(1 for l in linhas_sku if any(m.registrada for m in l.medicoes.values()))
+    motivo = dados.motivo_sap(canal)
+    if not motivo and not total:
+        motivo = 'Nenhum SKU no comparativo'
+    percentual = None if motivo else _percentual(conformes, total)
+    return Indicador(
+        chave='sku',
+        titulo='Acuracidade por SKU',
+        subtitulo=f'Contagens × SAP {Canal.ROTULOS[canal]}',
+        numerador=conformes if not motivo else None,
+        denominador=total if not motivo else None,
+        percentual=percentual,
+        motivo=motivo,
+        descricao_base=(
+            'SKUs com duas contagens iguais ao SAP ÷ todos os SKUs do SAP selecionado '
+            'e das contagens (inclui não contados).'
+        ),
+        linhas=[
+            f'{conformes} de {total} SKUs conformes com SAP',
+            f'{contados} de {total} SKUs com alguma contagem',
+        ],
+        provisorio=dados.comparativo.snapshot_resultado is None,
+        auxiliar=contados,
+        rotulo_escopo='SKUs do SAP selecionado e das contagens',
+    )
+
+
+def calcular_indicador_posicao(
+    linhas_posicao: list[LinhaComparativo],
+    dados: DadosComparativo,
+) -> Indicador:
+    """Posições conformes / posições do escopo × 100 (concordância física).
+
+    Posição conforme: tem registros e todos os SKUs dela têm uma dupla de
+    contagens coincidente. Escopo: posições planejadas (tarefas dos
+    inventários associados) somadas às posições com registros. Não usa SAP,
+    então não muda ao trocar o canal.
+    """
+    por_posicao: dict[int, list[LinhaComparativo]] = {}
+    for linha in linhas_posicao:
+        por_posicao.setdefault(linha.posicao_id, []).append(linha)
+    escopo = set(por_posicao) | set(dados.posicoes_planejadas)
+    conformes = sum(
+        1 for pid in escopo
+        if por_posicao.get(pid)
+        and all(l.contagens.status == StatusContagem.OK for l in por_posicao[pid])
+    )
+    com_registro = len(por_posicao)
+    total = len(escopo)
+    planejadas = bool(dados.posicoes_planejadas)
+    rotulo_escopo = 'posições planejadas e com registros' if planejadas else 'posições com registros'
+    motivo = '' if total else 'Nenhuma posição com registros'
+    linhas = [f'{conformes} de {total} {rotulo_escopo} conformes']
+    if planejadas:
+        linhas.append(f'{com_registro} de {total} posições com algum registro')
+    return Indicador(
+        chave='posicao',
+        titulo='Acuracidade por posição',
+        subtitulo='Concordância entre contagens',
+        numerador=conformes if total else None,
+        denominador=total if total else None,
+        percentual=_percentual(conformes, total),
+        motivo=motivo,
+        descricao_base=(
+            'Posições em que todos os SKUs têm duas contagens iguais ÷ '
+            + ('posições planejadas (tarefas) e com registros.' if planejadas else 'posições com registros.')
+            + ' Não usa SAP.'
+        ),
+        linhas=linhas,
+        provisorio=dados.comparativo.snapshot_resultado is None,
+        auxiliar=com_registro,
+        rotulo_escopo=rotulo_escopo.capitalize(),
+    )
+
+
 @dataclass
 class ResultadoComparativo:
     dados: DadosComparativo
@@ -1557,6 +1746,8 @@ class ResultadoComparativo:
     acuracidade: Acuracidade | None = None
     cobertura: Cobertura | None = None
     total_sem_filtro: int = 0
+    indicador_sku: Indicador | None = None
+    indicador_posicao: Indicador | None = None
 
     @property
     def filtrado(self) -> bool:
@@ -1580,12 +1771,14 @@ def analisar(
     canal = Canal.normalizar(canal)
     visao = Visao.normalizar(visao)
     dados = dados or carregar_dados(comparativo)
+    # Indicadores gerais: calculados sobre todas as linhas (antes de pesquisa,
+    # filtros e paginação) e a partir da mesma leitura de dados da tabela.
+    linhas_sku = montar_linhas_sku(dados, canal)
+    linhas_posicao = montar_linhas_posicao(dados)
+    todas = linhas_posicao if visao == Visao.POSICAO else linhas_sku
     acuracidade = None
     cobertura = None
-    if visao == Visao.POSICAO:
-        todas = montar_linhas_posicao(dados)
-    else:
-        todas = montar_linhas_sku(dados, canal)
+    if visao == Visao.SKU:
         acuracidade = calcular_acuracidade(todas, canal, dados.motivo_sap(canal) or True)
         cobertura = calcular_cobertura(dados, canal)
     return ResultadoComparativo(
@@ -1598,4 +1791,6 @@ def analisar(
         acuracidade=acuracidade,
         cobertura=cobertura,
         total_sem_filtro=len(todas),
+        indicador_sku=calcular_indicador_sku(linhas_sku, dados, canal),
+        indicador_posicao=calcular_indicador_posicao(linhas_posicao, dados),
     )
