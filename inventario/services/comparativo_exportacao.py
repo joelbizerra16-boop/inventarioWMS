@@ -2,6 +2,8 @@
 
 Usa as mesmas linhas e classificações da tela (`comparativo_contagens`), a
 partir de uma única carga de dados, para todas as abas serem consistentes.
+A aba Consolidado traz só SKU, descrição, COSAN e as três contagens: a última
+coluna repete o valor que coincidiu; sem coincidência, fica "nao consolidado".
 """
 
 import io
@@ -204,6 +206,52 @@ def _corrigir_linhas_sem_lancamento(planilha, colunas):
                 cell.value = None
 
 
+ABA_CONSOLIDADO = 'Consolidado'
+TEXTO_NAO_CONSOLIDADO = 'nao consolidado'
+
+COLUNAS_CONSOLIDADO = [
+    ('SKU', TEXTO),
+    ('Descrição', TEXTO),
+    ('COSAN', NUMERO),
+    ('C1', NUMERO),
+    ('C2', NUMERO),
+    ('C3', NUMERO),
+    ('Consolidado', NUMERO),
+]
+
+
+def _cosan_consolidado(linha):
+    valor = linha.sap.get('cosan')
+    if valor is None or not linha.sap_presenca.get('cosan'):
+        return '—'
+    return valor
+
+
+def _quantidade_consolidado(linha, ordem: int):
+    valor = linha.medicoes[ordem].quantidade
+    if valor is None:
+        return '—'
+    return valor
+
+
+def _valor_consolidado(linha):
+    """Valor repetido em pelo menos duas contagens; senão, sem consenso."""
+    valor = linha.contagens.valor_consenso
+    if valor is None:
+        return TEXTO_NAO_CONSOLIDADO
+    return valor
+
+
+def _linha_consolidado(linha) -> list:
+    return [
+        linha.codigo_produto,
+        linha.descricao,
+        _cosan_consolidado(linha),
+        *(_quantidade_consolidado(linha, ordem) for ordem in ORDENS),
+        _valor_consolidado(linha),
+    ]
+
+
 def nome_arquivo(comparativo, canal: str, momento: datetime) -> str:
     base = slugify(comparativo.nome) or f'conferencia-{comparativo.pk}'
     base = re.sub(r'[^A-Za-z0-9_-]', '', base)[:60]
@@ -305,6 +353,11 @@ def gerar_pasta(comparativo, *, canal: str, filtros, usuario) -> tuple[Workbook,
         _escrever(resumo.cell(numero, 2), valor, tipo)
     resumo.column_dimensions['A'].width = 46
     resumo.column_dimensions['B'].width = 70
+
+    aba_consolidado = pasta.create_sheet(ABA_CONSOLIDADO)
+    _escrever_aba(aba_consolidado, COLUNAS_CONSOLIDADO, [
+        _linha_consolidado(linha) for linha in linhas_sku
+    ])
 
     aba_sku = pasta.create_sheet('Por SKU')
     colunas = _colunas_contagem(ordens, True, colunas_sap)

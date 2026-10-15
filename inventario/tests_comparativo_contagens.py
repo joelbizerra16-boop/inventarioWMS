@@ -537,7 +537,10 @@ class ExcelTestCase(ComparativoBaseTestCase):
 
     def test_abas_colunas_e_valores(self):
         resposta, pasta = self.exportar(canal='cosan')
-        self.assertEqual(pasta.sheetnames, ['Resumo', 'Por SKU', 'Por posição', 'Lançamentos válidos', 'Acuracidade salva'])
+        self.assertEqual(
+            pasta.sheetnames,
+            ['Resumo', 'Consolidado', 'Por SKU', 'Por posição', 'Lançamentos válidos', 'Acuracidade salva'],
+        )
         self.assertIn('Comparativo_conferencia-outubro_COSAN_', resposta['Content-Disposition'])
         aba = pasta['Por SKU']
         cabecalhos = [c.value for c in aba[1]]
@@ -569,6 +572,37 @@ class ExcelTestCase(ComparativoBaseTestCase):
         self.assertNotIn('Status SAP', posicao)
         self.assertNotIn('COSAN', posicao)
         self.assertEqual(pasta['Lançamentos válidos'].max_row, 4)
+
+    def test_aba_consolidado(self):
+        divergente = Produto.objects.create(codigo_produto='0099', descricao='Sem consenso', setor='A')
+        self.sap(divergente, cosan='1')
+        self.item(self.inv1, self.pos_b, divergente, '1', self.ana)
+        self.item(self.inv2, self.pos_b, divergente, '2', self.bruno)
+        self.item(self.inv3, self.pos_b, divergente, '3', self.carla)
+
+        _resposta, pasta = self.exportar(canal='cosan')
+        aba = pasta['Consolidado']
+        self.assertEqual(
+            [c.value for c in aba[1]],
+            ['SKU', 'Descrição', 'COSAN', 'C1', 'C2', 'C3', 'Consolidado'],
+        )
+        self.assertEqual(aba.freeze_panes, 'A2')
+        self.assertTrue(aba.auto_filter.ref)
+        linhas = {row[0].value: row for row in aba.iter_rows(min_row=2)}
+        linha = linhas['00123']
+        self.assertEqual(linha[1].value, 'M-SUPER 1000')
+        self.assertEqual(D(str(linha[2].value)), D(80))
+        self.assertEqual(D(str(linha[3].value)), D(100))
+        self.assertEqual(D(str(linha[4].value)), D(100))
+        self.assertEqual(D(str(linha[5].value)), D(90))
+        self.assertEqual(D(str(linha[6].value)), D(100))
+        sem_consenso = linhas['0099']
+        self.assertEqual(sem_consenso[6].value, 'nao consolidado')
+        ausente = linhas['0042']
+        self.assertEqual(ausente[1].value, '=1+1')
+        self.assertEqual(ausente[1].data_type, 's')
+        self.assertEqual(ausente[3].value, '—')
+        self.assertEqual(ausente[6].value, 'nao consolidado')
 
     def test_ambas_e_correspondencia_com_tela(self):
         _resposta, pasta = self.exportar(canal='ambas')
@@ -689,6 +723,11 @@ class AcuracidadeTestCase(ComparativoBaseTestCase):
         self.assertEqual(len(historico), 1)
         self.assertEqual(historico[0][1], 'Ambas')
         self.assertEqual(D(str(historico[0][2])), D('66.67'))
+        consolidado = {r[0].value: r for r in pasta['Consolidado'].iter_rows(min_row=2)}
+        self.assertEqual(D(str(consolidado['00123'][6].value)), D(100))
+        self.assertEqual(consolidado['0300'][6].value, 'nao consolidado')
+        self.assertEqual(consolidado['0400'][6].value, 'nao consolidado')
+        self.assertEqual(D(str(consolidado['0500'][6].value)), D(0))
 
 
 class FinalizacaoTestCase(ComparativoBaseTestCase):
