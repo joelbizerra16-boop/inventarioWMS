@@ -603,6 +603,14 @@ class ExcelTestCase(ComparativoBaseTestCase):
         self.assertEqual(ausente[1].data_type, 's')
         self.assertEqual(ausente[3].value, '—')
         self.assertEqual(ausente[6].value, 'nao consolidado')
+        self.assertEqual(linha[2].number_format, '0')
+        decimal = Produto.objects.create(codigo_produto='0083', descricao='Com decimal', setor='A')
+        self.sap(decimal, cosan='83.22')
+        _resposta, pasta = self.exportar(canal='cosan')
+        celula = next(r for r in pasta['Consolidado'].iter_rows(min_row=2) if r[0].value == '0083')[2]
+        self.assertEqual(D(str(celula.value)), D('83.22'))
+        self.assertNotIn(',', celula.number_format)
+        self.assertEqual(celula.number_format, '0"."###')
 
     def test_ambas_e_correspondencia_com_tela(self):
         _resposta, pasta = self.exportar(canal='ambas')

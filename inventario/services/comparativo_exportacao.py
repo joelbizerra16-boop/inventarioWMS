@@ -37,7 +37,10 @@ from inventario.services.comparativo_contagens import (
 
 CONTENT_TYPE_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 FORMATO_TEXTO = '@'
-FORMATO_NUMERO = '#,##0.###'
+# Sem vírgula: o Excel em pt-BR transformaria ',' e '.' do formato em separadores.
+# Inteiro fica "0"; decimal usa ponto literal (83.22, nunca 83,22).
+FORMATO_INTEIRO = '0'
+FORMATO_DECIMAL = '0"."###'
 FORMATO_DATA = 'dd/mm/yyyy hh:mm'
 
 _FONTE_CABECALHO = Font(bold=True, color='1F2933')
@@ -79,8 +82,11 @@ def _escrever(cell, valor, tipo: str, fundo: PatternFill | None = None):
             cell.data_type = 's'
             cell.alignment = Alignment(horizontal='right')
         else:
-            cell.value = valor if isinstance(valor, Decimal) else Decimal(valor)
-            cell.number_format = FORMATO_NUMERO
+            numero = valor if isinstance(valor, Decimal) else Decimal(str(valor).replace(',', '.'))
+            cell.value = numero
+            cell.number_format = (
+                FORMATO_INTEIRO if numero == numero.to_integral_value() else FORMATO_DECIMAL
+            )
     elif tipo == DATA:
         if valor is None:
             cell.value = 'Não registrado'
