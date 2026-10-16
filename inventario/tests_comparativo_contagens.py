@@ -863,12 +863,40 @@ class FinalizacaoTestCase(ComparativoBaseTestCase):
         self.assertTrue(ComparativoContagemEvento.objects.filter(acao='REABERTA').exists())
         lista = resposta.content.decode()
         self.assertIn('grid-acao grid-acao-editar', lista)
+        self.assertIn('grid-acao grid-acao-excluir', lista)
         self.assertNotIn('grid-acao grid-acao-aviso', lista)
 
         self.client.post(reverse('inventario:excluir', args=[self.inv2.pk]))
         self.assertFalse(Inventario.objects.filter(pk=self.inv2.pk).exists())
         self.inv1.refresh_from_db()
         self.assertEqual(self.inv1.status, Inventario.Status.FINALIZADO)
+
+    def test_excluir_conferencia_aberta_mantem_inventarios(self):
+        lista = self.client.get(reverse('comparativo:lista')).content.decode()
+        self.assertIn('grid-acao grid-acao-excluir', lista)
+        resposta = self.client.post(
+            reverse('comparativo:excluir', args=[self.comparativo.pk]),
+            follow=True,
+        )
+        self.assertContains(resposta, 'excluída')
+        self.assertFalse(ComparativoContagem.objects.filter(pk=self.comparativo.pk).exists())
+        self.assertTrue(Inventario.objects.filter(pk=self.inv1.pk).exists())
+        self.assertTrue(Inventario.objects.filter(pk=self.inv2.pk).exists())
+
+    def test_excluir_inventario_desvincula_estoque_fisico(self):
+        from estoque_fisico.models import EstoqueFisico
+
+        estoque = EstoqueFisico.objects.create(
+            produto=self.produto,
+            posicao=self.pos_a,
+            quantidade=D('10'),
+            data_contagem=self.momento,
+            inventario_origem=self.inv2,
+        )
+        self.client.post(reverse('inventario:excluir', args=[self.inv2.pk]))
+        self.assertFalse(Inventario.objects.filter(pk=self.inv2.pk).exists())
+        estoque.refresh_from_db()
+        self.assertIsNone(estoque.inventario_origem_id)
 
     def test_consulta_nao_reabre(self):
         self.client.post(self.url_finalizar)

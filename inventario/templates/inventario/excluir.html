@@ -47,7 +47,11 @@
             O inventário será retirado
             {% if conferencias_abertas|length == 1 %}da conferência aberta{% else %}das conferências abertas{% endif %}
             {% for conferencia in conferencias_abertas %}{{ conferencia.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            e depois excluído.
+            e depois excluído. Saldos físicos publicados a partir dele serão desvinculados (não apagados).
+        </p>
+        {% elif not finalizar %}
+        <p class="text-muted small">
+            Se houver estoque físico publicado a partir deste inventário, a origem será desvinculada e o inventário poderá ser excluído.
         </p>
         {% endif %}
 

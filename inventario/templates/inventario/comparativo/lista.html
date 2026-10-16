@@ -107,6 +107,13 @@
                                         <i class="bi bi-floppy"></i>
                                     </button>
                                 </form>
+                                <form method="post" action="{% url 'comparativo:excluir' comparativo.pk %}" class="d-inline"
+                                      onsubmit="return confirm('Excluir a conferência &quot;{{ comparativo.nome|escapejs }}&quot;?\n\nOs inventários associados NÃO serão apagados.');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="grid-acao grid-acao-excluir" title="Excluir" aria-label="Excluir {{ comparativo.nome }}">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
                                 {% endif %}
                             </div>
                         </td>

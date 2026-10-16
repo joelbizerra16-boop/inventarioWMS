@@ -254,11 +254,11 @@ class InventarioDeleteView(RequerEscritaInventarioMixin, ExclusaoSeguraMixin, De
         from core.services.exclusao import ExclusaoBloqueadaError
         from inventario.services.comparativo_contagens import (
             ComparativoError,
-            desvincular_inventario_de_conferencias_abertas,
+            preparar_exclusao_inventario_aberto,
         )
 
         try:
-            desvincular_inventario_de_conferencias_abertas(objeto)
+            preparar_exclusao_inventario_aberto(objeto)
         except ComparativoError as exc:
             raise ExclusaoBloqueadaError(str(exc)) from exc
         super().executar_exclusao_segura(objeto)

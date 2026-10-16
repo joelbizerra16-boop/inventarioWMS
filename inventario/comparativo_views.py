@@ -28,6 +28,7 @@ from inventario.services.comparativo_contagens import (
     analisar,
     formatar_quantidade,
     obter_ultima_importacao_sap,
+    excluir_comparativo,
     finalizar_comparativo,
     pode_reabrir_comparativo,
     reabrir_comparativo,
@@ -356,6 +357,27 @@ class ComparativoReabrirView(RequerEscritaInventarioMixin, ComparativoAcessoMixi
         if destino == 'lista':
             return redirect('comparativo:lista')
         return redirect('comparativo:acompanhamento', pk=pk)
+
+
+class ComparativoExcluirView(RequerEscritaInventarioMixin, ComparativoAcessoMixin, View):
+    """Exclui conferência aberta de teste. Não remove inventários de origem."""
+
+    def post(self, request, pk):
+        comparativo = get_object_or_404(ComparativoContagem, pk=pk)
+        if not usuario_pode_escrever_inventario(request.user):
+            messages.error(request, 'Seu perfil não pode excluir a conferência.')
+            return redirect('comparativo:lista')
+        nome = comparativo.nome
+        try:
+            excluir_comparativo(comparativo, request.user)
+        except ComparativoError as exc:
+            messages.error(request, str(exc))
+            return redirect('comparativo:acompanhamento', pk=pk)
+        messages.success(
+            request,
+            f'Conferência "{nome}" excluída. Os inventários associados foram mantidos.',
+        )
+        return redirect('comparativo:lista')
 
 
 class ComparativoExportarView(ComparativoAcessoMixin, View):

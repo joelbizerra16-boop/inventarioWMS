@@ -25,6 +25,8 @@ from django.db import transaction
 from django.db.models import Count, Max, Sum
 from django.utils import timezone
 
+from core.logging_auditoria import registrar_evento
+from estoque_fisico.models import EstoqueFisico
 from estoque_sap.models import EstoqueSAP
 from inventario.models import Inventario, InventarioItem
 from inventario.models_operacional import InventarioTarefa
@@ -1596,6 +1598,38 @@ def desvincular_inventario_de_conferencias_abertas(inventario: Inventario) -> No
         ComparativoContagemInventario.objects.filter(
             pk__in=[associacao.pk for associacao in associacoes],
         ).delete()
+
+
+@transaction.atomic
+def preparar_exclusao_inventario_aberto(inventario: Inventario) -> None:
+    """Remove vínculos que impedem excluir inventário aberto/em andamento de teste.
+
+    - tira o inventário de conferências abertas
+    - desvincula saldos físicos publicados a partir dele (mantém o saldo, sem origem)
+    """
+    desvincular_inventario_de_conferencias_abertas(inventario)
+    EstoqueFisico.objects.filter(inventario_origem=inventario).update(inventario_origem=None)
+
+
+@transaction.atomic
+def excluir_comparativo(comparativo: ComparativoContagem, usuario) -> None:
+    """Exclui uma conferência aberta (e suas associações). Não apaga inventários."""
+    comparativo = ComparativoContagem.objects.select_for_update().get(pk=comparativo.pk)
+    if comparativo.snapshot_resultado is not None:
+        raise ComparativoError(
+            'Conferência finalizada não pode ser excluída. Reabra-a primeiro '
+            '(somente nos 7 dias após o fechamento).',
+        )
+    pk = comparativo.pk
+    nome = comparativo.nome
+    comparativo.delete()
+    registrar_evento(
+        'exclusao',
+        usuario=usuario if getattr(usuario, 'is_authenticated', False) else None,
+        modelo='inventario.ComparativoContagem',
+        registro_id=pk,
+        nome=nome,
+    )
 
 
 @dataclass
