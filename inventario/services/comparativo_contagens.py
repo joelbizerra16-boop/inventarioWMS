@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from itertools import combinations
 
@@ -46,6 +46,7 @@ DESCRICAO_NAO_CADASTRADA = 'Descrição não cadastrada'
 CAMPO_CANAL = {'cosan': 'canal_110', 'brida': 'canal_1'}
 NOME_CANAL = {'cosan': 'COSAN', 'brida': 'BRIDA'}
 FUSO_ROTULO = 'Horário de Brasília (America/Sao_Paulo)'
+PRAZO_REABERTURA = timedelta(days=7)
 
 
 class ComparativoError(Exception):
@@ -1531,6 +1532,70 @@ def finalizar_comparativo(comparativo: ComparativoContagem, usuario) -> Comparat
         acuracidades=[a.pk for a in acuracidades],
     )
     return comparativo
+
+
+def pode_reabrir_comparativo(comparativo: ComparativoContagem, agora=None) -> bool:
+    """Conferência finalizada só pode ser reaberta nos 7 dias seguintes ao fechamento."""
+    if comparativo.snapshot_resultado is None or comparativo.data_finalizacao is None:
+        return False
+    agora = agora or timezone.now()
+    fechado_em = comparativo.data_finalizacao
+    if timezone.is_naive(fechado_em):
+        fechado_em = timezone.make_aware(fechado_em, timezone.get_current_timezone())
+    return agora - fechado_em <= PRAZO_REABERTURA
+
+
+@transaction.atomic
+def reabrir_comparativo(comparativo: ComparativoContagem, usuario) -> ComparativoContagem:
+    """Descarta o resultado gravado e devolve a conferência ao estado aberto.
+
+    Não apaga inventários nem contagens. Depois de reaberta, inventários
+    ainda abertos ou em andamento podem ser excluídos.
+    """
+    comparativo = ComparativoContagem.objects.select_for_update().get(pk=comparativo.pk)
+    if comparativo.snapshot_resultado is None:
+        raise ComparativoError('Esta conferência não está finalizada.')
+    if not pode_reabrir_comparativo(comparativo):
+        raise ComparativoError(
+            'Conferência fechada há mais de 7 dias não pode ser reaberta.',
+        )
+    comparativo.snapshot_resultado = None
+    comparativo.data_finalizacao = None
+    comparativo.usuario_finalizacao = None
+    comparativo.estado = ComparativoContagem.Estado.ABERTA
+    comparativo.save(update_fields=[
+        'snapshot_resultado', 'data_finalizacao', 'usuario_finalizacao', 'estado', 'data_atualizacao',
+    ])
+    _registrar_evento(comparativo, usuario, 'REABERTA')
+    return comparativo
+
+
+@transaction.atomic
+def desvincular_inventario_de_conferencias_abertas(inventario: Inventario) -> None:
+    """Tira o inventário de conferências abertas para a exclusão poder seguir.
+
+    Conferência finalizada continua protegendo o inventário até ser reaberta.
+    """
+    associacoes = list(
+        ComparativoContagemInventario.objects.select_for_update()
+        .select_related('comparativo')
+        .filter(inventario=inventario)
+    )
+    bloqueadas = sorted({
+        associacao.comparativo.nome
+        for associacao in associacoes
+        if associacao.comparativo.snapshot_resultado is not None
+    })
+    if bloqueadas:
+        nomes = ', '.join(f'"{nome}"' for nome in bloqueadas)
+        raise ComparativoError(
+            'Este inventário está na conferência finalizada '
+            f'{nomes}. Reabra a conferência para excluir este inventário de teste.'
+        )
+    if associacoes:
+        ComparativoContagemInventario.objects.filter(
+            pk__in=[associacao.pk for associacao in associacoes],
+        ).delete()
 
 
 @dataclass

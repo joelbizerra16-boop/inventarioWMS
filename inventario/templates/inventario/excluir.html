@@ -29,6 +29,28 @@
             {% endif %}
         </div>
 
+        {% if not finalizar and conferencias_finalizadas %}
+        <div class="alert alert-warning">
+            <i class="bi bi-lock-fill me-2"></i>
+            Este inventário está em conferência finalizada.
+            Reabra a conferência de teste antes de excluir.
+            <ul class="mb-0 mt-2">
+                {% for conferencia in conferencias_finalizadas %}
+                <li>
+                    <a href="{% url 'comparativo:acompanhamento' conferencia.pk %}">{{ conferencia.nome }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% elif not finalizar and conferencias_abertas %}
+        <p class="text-muted small">
+            O inventário será retirado
+            {% if conferencias_abertas|length == 1 %}da conferência aberta{% else %}das conferências abertas{% endif %}
+            {% for conferencia in conferencias_abertas %}{{ conferencia.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            e depois excluído.
+        </p>
+        {% endif %}
+
         <dl class="row mb-0">
             <dt class="col-sm-3">ID</dt>
             <dd class="col-sm-9">{{ object.pk }}</dd>
@@ -51,6 +73,11 @@
         <form method="post" class="mt-4" onsubmit="var botao=this.querySelector('[type=submit]'); if (botao) botao.disabled=true;">
             {% csrf_token %}
             <div class="d-flex gap-2">
+                {% if not finalizar and conferencias_finalizadas %}
+                <a href="{% url 'comparativo:lista' %}" class="btn btn-warning">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Ir para as conferências
+                </a>
+                {% else %}
                 <button type="submit" class="btn btn-{% if finalizar %}success{% else %}danger{% endif %}">
                     {% if finalizar %}
                     <i class="bi bi-check-circle me-1"></i>Finalizar Inventário
@@ -58,6 +85,7 @@
                     <i class="bi bi-trash me-1"></i>Confirmar Exclusão
                     {% endif %}
                 </button>
+                {% endif %}
                 <a href="{% url 'inventario:lista' %}" class="btn btn-outline-secondary">Cancelar</a>
             </div>
         </form>

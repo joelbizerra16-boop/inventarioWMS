@@ -239,6 +239,30 @@ class InventarioDeleteView(RequerEscritaInventarioMixin, ExclusaoSeguraMixin, De
             return redirect('inventario:lista')
         return super().dispatch(request, *args, **kwargs)
 
+    def get_context_data(self, **kwargs):
+        from inventario.models_comparativo import ComparativoContagem
+
+        context = super().get_context_data(**kwargs)
+        conferencias = list(
+            ComparativoContagem.objects.filter(associacoes__inventario=self.object).order_by('nome')
+        )
+        context['conferencias_finalizadas'] = [c for c in conferencias if c.finalizado]
+        context['conferencias_abertas'] = [c for c in conferencias if not c.finalizado]
+        return context
+
+    def executar_exclusao_segura(self, objeto):
+        from core.services.exclusao import ExclusaoBloqueadaError
+        from inventario.services.comparativo_contagens import (
+            ComparativoError,
+            desvincular_inventario_de_conferencias_abertas,
+        )
+
+        try:
+            desvincular_inventario_de_conferencias_abertas(objeto)
+        except ComparativoError as exc:
+            raise ExclusaoBloqueadaError(str(exc)) from exc
+        super().executar_exclusao_segura(objeto)
+
 
 class InventarioFinalizarView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, View):
     template_name = 'inventario/excluir.html'

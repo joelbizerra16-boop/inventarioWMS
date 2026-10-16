@@ -84,6 +84,18 @@
                                 <a href="{% url 'comparativo:acompanhamento' comparativo.pk %}" class="grid-acao grid-acao-abrir" title="Abrir" aria-label="Abrir {{ comparativo.nome }}">
                                     <i class="bi bi-eye"></i>
                                 </a>
+                                {% if pode_editar and comparativo.pode_reabrir %}
+                                <form method="post" action="{% url 'comparativo:reabrir' comparativo.pk %}" class="d-inline"
+                                      onsubmit="return confirm('Reabrir a conferência &quot;{{ comparativo.nome|escapejs }}&quot;?\n\nO resultado gravado será descartado e ela voltará a ficar aberta. Os inventários em andamento poderão ser excluídos em seguida.');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="voltar" value="lista">
+                                    <button type="submit" class="grid-acao grid-acao-aviso" title="Reabrir" aria-label="Reabrir {{ comparativo.nome }}">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                    </button>
+                                </form>
+                                {% elif pode_editar and comparativo.finalizado %}
+                                <span class="small text-muted" title="Fechada há mais de 7 dias">Prazo encerrado</span>
+                                {% endif %}
                                 {% if pode_editar and not comparativo.finalizado %}
                                 {% url 'comparativo:editar' comparativo.pk as url_editar %}
                                 {% include 'includes/grid_acao_editar.html' with url=url_editar title='Configurar' %}

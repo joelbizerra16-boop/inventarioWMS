@@ -17,7 +17,17 @@
             · Somente acompanhamento: não ajusta estoque nem altera contagens.
         </p>
     </div>
-    {% if pode_editar and not comparativo.finalizado %}
+    {% if pode_editar and comparativo.pode_reabrir %}
+    <form method="post" action="{% url 'comparativo:reabrir' comparativo.pk %}"
+          onsubmit="return confirm('Reabrir esta conferência?\n\nO resultado gravado será descartado e ela voltará a ficar aberta. Os inventários em andamento poderão ser excluídos em seguida.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-warning">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Reabrir
+        </button>
+    </form>
+    {% elif pode_editar and comparativo.finalizado %}
+    <span class="small text-muted">Fechada há mais de 7 dias. Não pode ser reaberta.</span>
+    {% elif pode_editar %}
     <div class="d-flex gap-2">
         <a href="{% url 'comparativo:editar' comparativo.pk %}" class="btn btn-outline-secondary">
             <i class="bi bi-pencil-square me-1"></i>Configurar
@@ -40,6 +50,11 @@
         <strong>Conferência salva e finalizada</strong> em {{ comparativo.data_finalizacao|data_hora }}
         por {{ comparativo.usuario_finalizacao.perfil_operacional.nome|default:comparativo.usuario_finalizacao.username|default:"Não registrado" }}.
         Os valores abaixo são o resultado gravado e não mudam mais.
+        {% if comparativo.pode_reabrir %}
+        Se esta conferência for um teste, use Reabrir nos próximos 7 dias para descartar o resultado e excluir os inventários em andamento.
+        {% else %}
+        O prazo de 7 dias para reabrir esta conferência já encerrou.
+        {% endif %}
     </div>
 </div>
 {% endif %}

@@ -1,6 +1,6 @@
 import io
 import re
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 
 from django.test import SimpleTestCase, TestCase
@@ -823,6 +823,8 @@ class FinalizacaoTestCase(ComparativoBaseTestCase):
         lista = self.client.get(reverse('comparativo:lista')).content.decode()
         self.assertIn('Finalizada', lista)
         self.assertIn('grid-acao grid-acao-abrir', lista)
+        self.assertIn('grid-acao grid-acao-aviso', lista)
+        self.assertIn('Reabrir', lista)
         self.assertNotIn('grid-acao grid-acao-editar', lista)
         self.assertNotIn('grid-acao grid-acao-salvar', lista)
 
@@ -834,6 +836,71 @@ class FinalizacaoTestCase(ComparativoBaseTestCase):
         self.assertFalse(self.comparativo.finalizado)
         lista = self.client.get(reverse('comparativo:lista')).content.decode()
         self.assertNotIn('grid-acao grid-acao-salvar', lista)
+
+    def test_reabrir_descarta_resultado_e_libera_exclusao_do_inventario(self):
+        self.client.post(self.url_finalizar)
+        self.comparativo.refresh_from_db()
+        self.assertTrue(self.comparativo.finalizado)
+
+        bloqueio = self.client.post(
+            reverse('inventario:excluir', args=[self.inv2.pk]),
+            follow=True,
+        )
+        self.assertContains(bloqueio, 'Reabra a conferência')
+        self.assertTrue(Inventario.objects.filter(pk=self.inv2.pk).exists())
+
+        resposta = self.client.post(
+            reverse('comparativo:reabrir', args=[self.comparativo.pk]),
+            {'voltar': 'lista'},
+            follow=True,
+        )
+        self.assertContains(resposta, 'reaberta')
+        self.comparativo.refresh_from_db()
+        self.assertFalse(self.comparativo.finalizado)
+        self.assertEqual(self.comparativo.estado, ComparativoContagem.Estado.ABERTA)
+        self.assertIsNone(self.comparativo.snapshot_resultado)
+        self.assertIsNone(self.comparativo.data_finalizacao)
+        self.assertTrue(ComparativoContagemEvento.objects.filter(acao='REABERTA').exists())
+        lista = resposta.content.decode()
+        self.assertIn('grid-acao grid-acao-editar', lista)
+        self.assertNotIn('grid-acao grid-acao-aviso', lista)
+
+        self.client.post(reverse('inventario:excluir', args=[self.inv2.pk]))
+        self.assertFalse(Inventario.objects.filter(pk=self.inv2.pk).exists())
+        self.inv1.refresh_from_db()
+        self.assertEqual(self.inv1.status, Inventario.Status.FINALIZADO)
+
+    def test_consulta_nao_reabre(self):
+        self.client.post(self.url_finalizar)
+        consulta, _ = criar_usuario_teste('consulta.reabrir', perfil=Usuario.Perfil.CONSULTA)
+        self.client.force_login(consulta)
+        self.client.post(reverse('comparativo:reabrir', args=[self.comparativo.pk]))
+        self.comparativo.refresh_from_db()
+        self.assertTrue(self.comparativo.finalizado)
+        lista = self.client.get(reverse('comparativo:lista')).content.decode()
+        self.assertNotIn('grid-acao grid-acao-aviso', lista)
+
+    def test_nao_reabre_conferencia_fechada_ha_mais_de_7_dias(self):
+        self.client.post(self.url_finalizar)
+        self.comparativo.refresh_from_db()
+        self.comparativo.data_finalizacao = timezone.now() - timedelta(days=7, seconds=1)
+        self.comparativo.save(update_fields=['data_finalizacao'])
+
+        resposta = self.client.post(
+            reverse('comparativo:reabrir', args=[self.comparativo.pk]),
+            {'voltar': 'lista'},
+            follow=True,
+        )
+        self.assertContains(resposta, 'mais de 7 dias')
+        self.comparativo.refresh_from_db()
+        self.assertTrue(self.comparativo.finalizado)
+        self.assertContains(resposta, 'Prazo encerrado')
+        self.assertNotIn('grid-acao grid-acao-aviso', resposta.content.decode())
+
+        self.comparativo.data_finalizacao = timezone.now() - timedelta(days=6)
+        self.comparativo.save(update_fields=['data_finalizacao'])
+        lista = self.client.get(reverse('comparativo:lista')).content.decode()
+        self.assertIn('grid-acao grid-acao-aviso', lista)
 
 
 from estoque_sap.models import ImportacaoEstoqueSAP  # noqa: E402

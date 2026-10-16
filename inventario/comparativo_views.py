@@ -29,6 +29,8 @@ from inventario.services.comparativo_contagens import (
     formatar_quantidade,
     obter_ultima_importacao_sap,
     finalizar_comparativo,
+    pode_reabrir_comparativo,
+    reabrir_comparativo,
     salvar_acuracidade,
     salvar_comparativo,
     sincronizar_referencia_sap,
@@ -107,6 +109,7 @@ class ComparativoListaView(ComparativoAcessoMixin, View):
                 comparativo.associacoes.all(), key=lambda a: a.ordem,
             )
             comparativo.ultima_acuracidade = next(iter(comparativo.acuracidades.all()), None)
+            comparativo.pode_reabrir = pode_reabrir_comparativo(comparativo)
         return render(request, self.template_name, {
             'page_obj': pagina,
             'comparativos': pagina,
@@ -216,6 +219,7 @@ class ComparativoAcompanhamentoView(ComparativoAcessoMixin, View):
             ),
             pk=pk,
         )
+        comparativo.pode_reabrir = pode_reabrir_comparativo(comparativo)
         canal, visao, filtros = _parametros(request)
         parcial = request.GET.get('parcial') == '1'
         forcar = request.GET.get('forcar') == '1'
@@ -321,6 +325,32 @@ class ComparativoFinalizarView(RequerEscritaInventarioMixin, ComparativoAcessoMi
             messages.success(
                 request,
                 f'Conferência "{comparativo.nome}" salva e finalizada. O resultado ficou gravado.',
+            )
+        destino = request.POST.get('voltar') or ''
+        if destino == 'lista':
+            return redirect('comparativo:lista')
+        return redirect('comparativo:acompanhamento', pk=pk)
+
+
+class ComparativoReabrirView(RequerEscritaInventarioMixin, ComparativoAcessoMixin, View):
+    """Descarta a finalização de teste e devolve a conferência ao estado aberto."""
+
+    def post(self, request, pk):
+        comparativo = get_object_or_404(ComparativoContagem, pk=pk)
+        if not usuario_pode_escrever_inventario(request.user):
+            messages.error(request, 'Seu perfil não pode reabrir a conferência.')
+            return redirect('comparativo:lista')
+        try:
+            reabrir_comparativo(comparativo, request.user)
+        except ComparativoError as exc:
+            messages.error(request, str(exc))
+        else:
+            messages.success(
+                request,
+                (
+                    f'Conferência "{comparativo.nome}" reaberta. '
+                    'O resultado gravado foi descartado e os inventários em andamento podem ser excluídos.'
+                ),
             )
         destino = request.POST.get('voltar') or ''
         if destino == 'lista':
