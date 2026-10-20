@@ -856,6 +856,13 @@ from inventario.models_operacional import (  # noqa: E402, F401
     InventarioLock,
     InventarioTarefa,
 )
+from inventario.models_auditor import (  # noqa: E402, F401
+    AuditorAcesso,
+    EventoAuditoria,
+    LiberacaoContagemAuditor,
+    PublicacaoAuditoria,
+    PublicacaoAuditoriaItem,
+)
 from inventario.models_comparativo import (  # noqa: E402, F401
     ComparativoAcuracidade,
     ComparativoContagem,

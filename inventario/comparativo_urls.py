@@ -1,5 +1,12 @@
 from django.urls import path
 
+from inventario.auditor_config_views import (
+    ComparativoAuditoriaPreviaConteudoView,
+    ComparativoAuditoriaPreviaExportarView,
+    ComparativoAuditoriaPreviaView,
+    ComparativoAuditoriaView,
+)
+
 from inventario.comparativo_views import (
     ComparativoAcompanhamentoView,
     ComparativoAcuracidadeSalvarView,
@@ -14,6 +21,10 @@ from inventario.comparativo_views import (
 app_name = 'comparativo'
 
 urlpatterns = [
+    path('<int:pk>/auditoria/', ComparativoAuditoriaView.as_view(), name='auditoria'),
+    path('<int:pk>/auditoria/visualizar/', ComparativoAuditoriaPreviaView.as_view(), name='auditoria_previa'),
+    path('<int:pk>/auditoria/visualizar/conteudo/', ComparativoAuditoriaPreviaConteudoView.as_view(), name='auditoria_previa_conteudo'),
+    path('<int:pk>/auditoria/visualizar/exportar/', ComparativoAuditoriaPreviaExportarView.as_view(), name='auditoria_previa_exportar'),
     path('', ComparativoListaView.as_view(), name='lista'),
     path('nova/', ComparativoFormularioView.as_view(), name='criar'),
     path('<int:pk>/', ComparativoAcompanhamentoView.as_view(), name='acompanhamento'),

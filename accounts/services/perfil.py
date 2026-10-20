@@ -79,6 +79,27 @@ def usuario_e_operador_pocket(user) -> bool:
     return obter_perfil_usuario(user) == Usuario.Perfil.OPERADOR
 
 
+def usuario_e_auditor(user) -> bool:
+    """Perfil AUDITOR: acessa somente o Painel do Auditor (/auditor/)."""
+    return obter_perfil_usuario(user) == Usuario.Perfil.AUDITOR
+
+
+PREFIXOS_URL_PERMITIDOS_AUDITOR = (
+    '/auditor/',
+    '/accounts/logout/',
+    '/accounts/login/',
+    '/static/',
+)
+
+
+def url_permitida_para_auditor(path: str) -> bool:
+    if not path:
+        return False
+    if path in ('/favicon.ico', '/manifest.webmanifest', '/sw.js'):
+        return True
+    return any(path.startswith(prefixo) for prefixo in PREFIXOS_URL_PERMITIDOS_AUDITOR)
+
+
 PREFIXOS_URL_PERMITIDOS_OPERADOR = (
     '/pocket/',
     '/accounts/logout/',

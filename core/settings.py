@@ -72,6 +72,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'accounts.middleware.OperadorPocketMiddleware',
+    'accounts.middleware.AuditorMiddleware',
     'core.middleware.TratamentoExcecaoUsuarioMiddleware',
     'core.pocket_middleware.PocketPostRedirectGuardMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',

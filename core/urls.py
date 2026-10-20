@@ -66,6 +66,7 @@ urlpatterns = [
     path('estoque-fisico/', include('estoque_fisico.urls')),
     path('inventarios/', include('inventario.urls')),
     path('pocket/', include('inventario.pocket_urls')),
+    path('auditor/', include('inventario.auditor_urls')),
 ]
 
 handler404 = 'core.views.handler404'

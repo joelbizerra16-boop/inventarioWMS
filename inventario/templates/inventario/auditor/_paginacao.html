@@ -1,0 +1,9 @@
+{% if pagina.has_other_pages %}
+<nav class="aud-paginacao" aria-label="Paginação">
+    <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} · {{ pagina.paginator.count }} registro(s)</span>
+    <span>
+        {% if pagina.has_previous %}<a href="?{% if filtros_qs %}{{ filtros_qs }}&{% endif %}aba={{ aba_destino }}&{{ param }}={{ pagina.previous_page_number }}" class="btn btn-sm btn-outline-secondary">‹ Anterior</a>{% endif %}
+        {% if pagina.has_next %}<a href="?{% if filtros_qs %}{{ filtros_qs }}&{% endif %}aba={{ aba_destino }}&{{ param }}={{ pagina.next_page_number }}" class="btn btn-sm btn-outline-secondary">Próxima ›</a>{% endif %}
+    </span>
+</nav>
+{% endif %}

@@ -37,6 +37,14 @@ def item(mapa, chave):
 
 
 @register.filter
+def nome_usuario(usuario, vazio='—'):
+    """Nome operacional do usuário (ou login); `vazio` quando não há usuário."""
+    if usuario is None:
+        return vazio
+    return getattr(getattr(usuario, 'perfil_operacional', None), 'nome', '') or usuario.get_username()
+
+
+@register.filter
 def data_hora(valor):
     if valor is None:
         return 'Não registrado'

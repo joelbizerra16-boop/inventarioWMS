@@ -1,0 +1,61 @@
+{% load comparativo_tags %}
+<div class="aud-regiao" data-aud-regiao="graficos">
+    <div class="aud-colunas-contagem">
+        {% for c in painel.contagens %}
+        {% with g=painel.graficos.por_etapa|item:c.etapa cab=painel.cabecalhos|item:c.etapa %}
+        <section class="aud-card aud-coluna{% if not g %} aud-coluna-indisponivel{% endif %}" aria-labelledby="audCol{{ c.etapa }}">
+            <header class="aud-coluna-cab">
+                <span class="aud-coluna-rotulo">{{ c.rotulo }}</span>
+                <div>
+                    <h2 class="aud-cartao-titulo" id="audCol{{ c.etapa }}">{{ cab.rotulo }}</h2>
+                    <p class="aud-cartao-sub">{{ cab.detalhe }}</p>
+                </div>
+            </header>
+            {% if g %}
+            <div class="aud-coluna-numeros">
+                <div><strong>{{ g.total }}</strong><span>itens contados</span></div>
+                <div><strong>{{ g.posicoes }}</strong><span>posições</span></div>
+            </div>
+            {% if c.estado == 'programada' %}
+            <div class="aud-coluna-progresso" title="Liberação programada">
+                <span>{{ c.liberados }} de {{ c.programados }} registros disponibilizados</span>
+                <span class="aud-mini-barra" aria-hidden="true"><span style="width: {{ c.percentual|pct_css }}%"></span></span>
+            </div>
+            {% endif %}
+            <h3 class="aud-coluna-sub">Participação por contador
+                <span class="aud-info" tabindex="0" role="note"
+                      title="Ordem alfabética, sem ranking. Itens distintos (posição + SKU) registrados pelo operador da coleta; correções com autorização aparecem à parte. Clique num nome para filtrar a tabela."
+                      aria-label="Sobre a participação: ordem alfabética; itens registrados pelo operador da coleta e itens corrigidos com autorização."><i class="bi bi-info-circle" aria-hidden="true"></i></span>
+            </h3>
+            {% if g.contadores %}
+            <ul class="aud-contadores">
+                {% for p in g.contadores %}
+                <li>
+                    <a href="?{{ filtros_sem_operador }}{% if filtros_sem_operador %}&amp;{% endif %}operador={{ p.nome|urlencode }}&amp;etapa={{ c.etapa }}"
+                       class="aud-contador{% if filtros.operador == p.nome and filtros.etapa == c.etapa %} ativo{% endif %}"
+                       title="Filtrar a tabela pelos registros de {{ p.nome }} em {{ c.rotulo }}"
+                       aria-label="{{ p.nome }}: {{ p.itens }} itens registrados em {{ c.rotulo }}{% if p.correcoes %}, {{ p.correcoes }} corrigidos{% endif %}. Filtrar a tabela.">
+                        <span class="aud-contador-nome">{{ p.nome }}</span>
+                        <span class="aud-contador-trilho"><span class="aud-contador-barra" style="width: {{ p.largura }}%"></span></span>
+                        <span class="aud-contador-valor">{{ p.itens }}</span>
+                        {% if p.correcoes %}<span class="aud-contador-correcao">{{ p.correcoes }} {{ p.correcoes|pluralize:"item corrigido,itens corrigidos" }} com autorização</span>{% endif %}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="aud-coluna-vazia">Nenhum registro disponibilizado ainda.</p>
+            {% endif %}
+            {% else %}
+            <div class="aud-coluna-bloqueada" role="status">
+                <i class="bi {% if c.estado == 'nao_associada' %}bi-dash-circle{% else %}bi-lock-fill{% endif %}" aria-hidden="true"></i>
+                <strong>{% if c.estado == 'nao_associada' %}Contagem não associada{% else %}Contagem não liberada{% endif %}</strong>
+                <span>{% if c.estado == 'nao_associada' %}Esta conferência não tem {{ c.rotulo }}.{% else %}Os dados de {{ c.rotulo }} aparecem quando a gestão liberar.{% endif %}</span>
+            </div>
+            {% endif %}
+        </section>
+        {% endwith %}
+        {% endfor %}
+    </div>
+    {% if filtros.operador %}<p class="aud-selecao-colunas"><a href="?{{ filtros_sem_operador }}" class="aud-link" title="Limpar seleção de contador"><i class="bi bi-x-circle" aria-hidden="true"></i> Limpar seleção</a></p>{% endif %}
+</div>

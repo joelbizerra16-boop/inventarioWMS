@@ -58,6 +58,7 @@ PERFIS_FORMULARIO = (
     Usuario.Perfil.SUPERVISOR,
     Usuario.Perfil.OPERADOR,
     Usuario.Perfil.CONSULTA,
+    Usuario.Perfil.AUDITOR,
 )
 
 
@@ -79,6 +80,15 @@ class UsuarioForm(forms.ModelForm):
             'class': 'form-control',
             'autocomplete': 'new-password',
         }),
+    )
+
+    conferencias_auditor = forms.ModelMultipleChoiceField(
+        label='Conferências que o auditor vai acompanhar',
+        required=False,
+        queryset=None,
+        widget=forms.CheckboxSelectMultiple,
+        help_text='Somente para o perfil Auditor. Ele verá apenas as contagens (C1, C2, C3) '
+                  'liberadas em Comparativo de contagens › Painel do Auditor.',
     )
 
     class Meta:
@@ -105,6 +115,18 @@ class UsuarioForm(forms.ModelForm):
         if self.criacao:
             self.fields['senha'].required = True
             self.fields['confirmar_senha'].required = True
+        # Import tardio: evita dependência circular entre os apps no carregamento.
+        from inventario.models import ComparativoContagem
+        from inventario.models_auditor import AuditorAcesso
+
+        campo = self.fields['conferencias_auditor']
+        campo.queryset = ComparativoContagem.objects.prefetch_related('associacoes__inventario').order_by('-pk')
+        campo.label_from_instance = rotulo_conferencia
+        if self.instance.pk and self.instance.user_id:
+            self.initial.setdefault('conferencias_auditor', list(
+                AuditorAcesso.objects.filter(auditor_id=self.instance.user_id, ativo=True)
+                .values_list('comparativo_id', flat=True)
+            ))
 
     def clean_login(self):
         login = (self.cleaned_data.get('login') or '').strip()
@@ -124,3 +146,12 @@ class UsuarioForm(forms.ModelForm):
                 self.add_error('confirmar_senha', 'As senhas não conferem.')
 
         return cleaned
+
+
+def rotulo_conferencia(comparativo) -> str:
+    """Nome da conferência com os inventários associados (C1 · #1 · Finalizado …)."""
+    partes = [
+        f'C{a.ordem} · Inventário #{a.inventario_id} · {a.inventario.get_status_display()}'
+        for a in sorted(comparativo.associacoes.all(), key=lambda a: a.ordem)
+    ]
+    return f"{comparativo.nome} ({comparativo.get_estado_display()}) — {' | '.join(partes) or 'sem inventários'}"

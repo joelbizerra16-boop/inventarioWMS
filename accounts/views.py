@@ -12,6 +12,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from accounts.forms import OperacionalAuthenticationForm, UsuarioForm
 from accounts.login_http import resposta_erro_interno_login
+from accounts.services.perfil import usuario_e_auditor
 from accounts.mixins import PaginacaoContextMixin, PaginacaoMixin, RequerAdministradorMixin
 from accounts.models import Usuario
 from accounts.services.perfil import usuario_pode_acessar
@@ -58,7 +59,7 @@ class OperacionalLoginView(LoginView):
 
     def _dispatch_operacional(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            if usuario_pode_acessar(request.user):
+            if usuario_pode_acessar(request.user) or usuario_e_auditor(request.user):
                 if requisicao_ajax_pocket(request):
                     return json_erro_pocket(
                         request,
@@ -73,7 +74,7 @@ class OperacionalLoginView(LoginView):
     def form_valid(self, form):
         user = form.get_user()
         login(self.request, user)
-        if not usuario_pode_acessar(user):
+        if not (usuario_pode_acessar(user) or usuario_e_auditor(user)):
             logout(self.request)
             messages.error(self.request, 'Usuário sem perfil operacional vinculado.')
             registrar_evento(
@@ -99,6 +100,8 @@ class OperacionalLoginView(LoginView):
 
         if usuario_e_operador_pocket(self.request.user):
             return reverse('pocket:selecionar')
+        if usuario_e_auditor(self.request.user):
+            return reverse('auditor:inicio')
         return super().get_success_url()
 
 
@@ -160,6 +163,16 @@ class UsuarioDetailView(RequerAdministradorMixin, DetailView):
     context_object_name = 'usuario_operacional'
 
 
+def _definir_conferencias_auditor(usuario, form, responsavel) -> None:
+    """Grava as conferências do auditor (ou revoga, se o perfil deixou de ser Auditor)."""
+    from inventario.services.auditor_publicacao import definir_conferencias_do_auditor
+
+    if usuario is None or not getattr(usuario, 'user_id', None):
+        return
+    usuario.user.refresh_from_db()
+    definir_conferencias_do_auditor(usuario.user, form.cleaned_data.get('conferencias_auditor') or [], responsavel)
+
+
 class UsuarioCreateView(RequerAdministradorMixin, CreateView):
     model = Usuario
     form_class = UsuarioForm
@@ -179,7 +192,7 @@ class UsuarioCreateView(RequerAdministradorMixin, CreateView):
 
     def form_valid(self, form):
         try:
-            criar_usuario_operacional(
+            usuario = criar_usuario_operacional(
                 nome=form.cleaned_data['nome'],
                 login=form.cleaned_data['login'],
                 setor=form.cleaned_data['setor'],
@@ -191,6 +204,7 @@ class UsuarioCreateView(RequerAdministradorMixin, CreateView):
             form.add_error('login', str(exc))
             return self.form_invalid(form)
 
+        _definir_conferencias_auditor(usuario, form, self.request.user)
         messages.success(self.request, 'Usuário criado com sucesso.')
         return redirect(self.success_url)
 
@@ -210,7 +224,7 @@ class UsuarioUpdateView(RequerAdministradorMixin, UpdateView):
     def form_valid(self, form):
         senha = form.cleaned_data.get('senha') or None
         try:
-            atualizar_usuario_operacional(
+            usuario = atualizar_usuario_operacional(
                 self.object,
                 nome=form.cleaned_data['nome'],
                 login=form.cleaned_data['login'],
@@ -223,6 +237,7 @@ class UsuarioUpdateView(RequerAdministradorMixin, UpdateView):
             form.add_error('login', str(exc))
             return self.form_invalid(form)
 
+        _definir_conferencias_auditor(usuario, form, self.request.user)
         messages.success(self.request, 'Usuário atualizado com sucesso.')
         return redirect(self.success_url)
 

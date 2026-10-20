@@ -1,0 +1,23 @@
+{% extends 'base_auditor.html' %}
+{% load comparativo_tags %}
+
+{% block content %}
+<p class="aud-eyebrow">Painel do Auditor</p>
+<h1 class="aud-h1">Conferências liberadas</h1>
+<p class="aud-sub">Selecione a conferência que deseja acompanhar.</p>
+{% if conferencias %}
+<div class="aud-lista">
+    {% for c in conferencias %}
+    <a href="{% url 'auditor:painel' c.pk %}" class="aud-card aud-lista-item">
+        <strong>{{ c.nome }}</strong>
+        <span>Conferência #{{ c.pk }} · abrir painel</span>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="aud-card aud-vazio">
+    <i class="bi bi-inbox" aria-hidden="true"></i>
+    <p>Nenhuma conferência foi liberada para você ainda.</p>
+</div>
+{% endif %}
+{% endblock %}

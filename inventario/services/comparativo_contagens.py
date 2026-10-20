@@ -1620,6 +1620,17 @@ def excluir_comparativo(comparativo: ComparativoContagem, usuario) -> None:
             'Conferência finalizada não pode ser excluída. Reabra-a primeiro '
             '(somente nos 7 dias após o fechamento).',
         )
+    from inventario.models_auditor import AuditorAcesso, EventoAuditoria, PublicacaoAuditoria
+
+    if (
+        PublicacaoAuditoria.objects.filter(comparativo=comparativo).exists()
+        or AuditorAcesso.objects.filter(comparativo=comparativo).exists()
+        or EventoAuditoria.objects.filter(comparativo=comparativo).exists()
+    ):
+        raise ComparativoError(
+            'Conferência com trilha do Painel do Auditor não pode ser excluída: '
+            'o histórico de auditoria é preservado.',
+        )
     pk = comparativo.pk
     nome = comparativo.nome
     comparativo.delete()
