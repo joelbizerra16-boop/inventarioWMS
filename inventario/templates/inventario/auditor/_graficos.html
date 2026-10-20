@@ -24,8 +24,8 @@
             {% endif %}
             <h3 class="aud-coluna-sub">Participação por contador
                 <span class="aud-info" tabindex="0" role="note"
-                      title="Ordem alfabética, sem ranking. Itens distintos (posição + SKU) registrados pelo operador da coleta; correções com autorização aparecem à parte. Clique num nome para filtrar a tabela."
-                      aria-label="Sobre a participação: ordem alfabética; itens registrados pelo operador da coleta e itens corrigidos com autorização."><i class="bi bi-info-circle" aria-hidden="true"></i></span>
+                      title="Ordem alfabética, sem ranking. Itens distintos (posição + SKU) registrados pelo operador da coleta. Clique num nome para filtrar a tabela."
+                      aria-label="Sobre a participação: ordem alfabética; itens registrados pelo operador da coleta."><i class="bi bi-info-circle" aria-hidden="true"></i></span>
             </h3>
             {% if g.contadores %}
             <ul class="aud-contadores">
@@ -34,11 +34,10 @@
                     <a href="?{{ filtros_sem_operador }}{% if filtros_sem_operador %}&amp;{% endif %}operador={{ p.nome|urlencode }}&amp;etapa={{ c.etapa }}"
                        class="aud-contador{% if filtros.operador == p.nome and filtros.etapa == c.etapa %} ativo{% endif %}"
                        title="Filtrar a tabela pelos registros de {{ p.nome }} em {{ c.rotulo }}"
-                       aria-label="{{ p.nome }}: {{ p.itens }} itens registrados em {{ c.rotulo }}{% if p.correcoes %}, {{ p.correcoes }} corrigidos{% endif %}. Filtrar a tabela.">
+                       aria-label="{{ p.nome }}: {{ p.itens }} itens registrados em {{ c.rotulo }}. Filtrar a tabela.">
                         <span class="aud-contador-nome">{{ p.nome }}</span>
                         <span class="aud-contador-trilho"><span class="aud-contador-barra" style="width: {{ p.largura }}%"></span></span>
                         <span class="aud-contador-valor">{{ p.itens }}</span>
-                        {% if p.correcoes %}<span class="aud-contador-correcao">{{ p.correcoes }} {{ p.correcoes|pluralize:"item corrigido,itens corrigidos" }} com autorização</span>{% endif %}
                     </a>
                 </li>
                 {% endfor %}

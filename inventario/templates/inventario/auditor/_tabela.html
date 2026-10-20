@@ -24,7 +24,7 @@
                                 {% if c.corrigido %}data-corrigido="{{ c.corrigido_por|default:'Não registrado' }}{% if c.corrigido_em %} em {{ c.corrigido_em|data_hora }}{% endif %}"{% endif %}
                                 title="{{ c.tom_rotulo }} · ver detalhes"
                                 aria-label="Contagem {{ forloop.counter }}, {{ l.sku }} em {{ l.posicao }}: {{ c.texto }}. {{ c.tom_rotulo }}. Ver detalhes">
-                            <span class="aud-cel-num">{{ c.texto }}</span><i class="bi {{ c.icone }} aud-cel-icone" aria-hidden="true"></i>{% if c.corrigido %}<span class="aud-corrigida"> · corrigida</span>{% endif %}
+                            <span class="aud-cel-num">{{ c.texto }}</span><i class="bi {{ c.icone }} aud-cel-icone" aria-hidden="true"></i>
                         </button>
                         {% else %}
                         <span class="aud-cel-estado" title="{{ c.tom_rotulo }}">{% if c.icone %}<i class="bi {{ c.icone }}" aria-hidden="true"></i>{% endif %}{{ c.texto }}</span>

@@ -491,6 +491,7 @@ class PainelAuditor:
     linhas_filtradas: list[LinhaAuditor]
     skus: list[dict]
     indicador: dict
+    indicador_posicoes: dict
     cards: dict
     contagens: list[dict]
     escopo: dict
@@ -553,7 +554,7 @@ def _contadores(regs: list[Lancamento]) -> list[dict]:
         if l.corrigido and l.corrigido_por:
             correcoes[l.corrigido_por] += 1
     maximo = max(list(itens.values()) + list(correcoes.values()) + [1])
-    nomes = sorted(set(itens) | set(correcoes), key=str.lower)  # ordem alfabética: sem ranking
+    nomes = sorted(itens, key=str.lower)  # ordem alfabética: sem ranking
     return [{
         'nome': nome,
         'itens': itens.get(nome, 0),
@@ -621,6 +622,20 @@ def montar_painel(comparativo: ComparativoContagem, filtros: FiltrosAuditor | No
             else 'Sem dados suficientes: nenhum registro disponibilizado.' if not linhas else ''
         ),
     }
+    # Posições com consenso: todas as combinações posição + SKU da posição concordam.
+    por_posicao: dict[int, list[LinhaAuditor]] = {}
+    for l in linhas:
+        por_posicao.setdefault(l.posicao_id, []).append(l)
+    posicoes_ok = sum(1 for itens in por_posicao.values() if all(l.concluida for l in itens))
+    indicador_posicoes = {
+        'titulo': 'Posições contadas',
+        'subtitulo': 'Posições em que todos os itens (posição + SKU) têm duas contagens liberadas coincidentes',
+        'numerador': posicoes_ok,
+        'denominador': len(por_posicao),
+        'percentual': _pct(posicoes_ok, len(por_posicao)) if compara else None,
+        'suficiente': compara and bool(por_posicao),
+        'motivo': indicador['motivo'],
+    }
     cards = {
         'posicoes': len({l.posicao_id for l in linhas}),
         'skus': len({l.sku for l in linhas}),
@@ -659,6 +674,7 @@ def montar_painel(comparativo: ComparativoContagem, filtros: FiltrosAuditor | No
         linhas_filtradas=filtradas,
         skus=montar_skus(filtradas),
         indicador=indicador,
+        indicador_posicoes=indicador_posicoes,
         cards=cards,
         contagens=_contagens_status(associadas, liberacoes, visiveis),
         escopo=escopo,
@@ -798,6 +814,8 @@ def serializar_painel(painel: PainelAuditor, pagina: list[LinhaAuditor]) -> dict
         'escopo': {'contagens_liberadas': [f'C{e}' for e in painel.escopo['etapas']]},
         'contagens': contagens,
         'indicador': indicador,
+        'indicador_posicoes': {**painel.indicador_posicoes, 'percentual': (
+            str(painel.indicador_posicoes['percentual']) if painel.indicador_posicoes['percentual'] is not None else None)},
         'cards': painel.cards,
         'linhas': [serializar_linha(l) for l in pagina],
         'skus': [
@@ -935,7 +953,7 @@ def exportar_xlsx(painel: PainelAuditor, usuario, visao: str = 'posicao') -> byt
     for montar in ((aba_sku, aba_posicao) if visao == 'sku' else (aba_posicao, aba_sku)):
         montar()
     cabecalho = ['Posição', 'SKU', 'Descrição', 'Contagem', 'Quantidade', 'Status', 'Responsável',
-                 'Liberação da contagem', 'Disponibilizado em', 'Correção']
+                 'Liberação da contagem', 'Disponibilizado em']
     registros, tons = [], []
     for l in painel.linhas_filtradas:
         for e in etapas:
@@ -943,14 +961,9 @@ def exportar_xlsx(painel: PainelAuditor, usuario, visao: str = 'posicao') -> byt
             if c['estado'] != 'valor':
                 continue
             status = {'confere': 'coincidente', 'divergente': 'divergente', 'difere': 'divergente'}.get(c['tom'], 'sem_comparacao')
-            correcao = ''
-            if c['corrigido']:
-                correcao = f"Corrigida por {c['corrigido_por'] or 'Não registrado'}"
-                if c.get('corrigido_em'):
-                    correcao += f" em {_fmt(c['corrigido_em'])}"
             registros.append([
                 l.posicao, l.sku, l.descricao, f'C{e}', c['quantidade'], STATUS_EXCEL[status], c['operador'],
-                painel.cabecalhos[e]['detalhe'], c['disponibilizado_em'], correcao,
+                painel.cabecalhos[e]['detalhe'], c['disponibilizado_em'],
             ])
             tons.append({5: status, 6: status})
     _aba(pasta, 'Lançamentos', cabecalho, registros, tons)

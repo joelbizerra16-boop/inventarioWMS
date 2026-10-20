@@ -10,27 +10,7 @@
     {% endif %}
 
     <div class="aud-cartoes">
-        {% with ind=painel.indicador %}
-        <section class="aud-card aud-cartao aud-velocimetro" aria-labelledby="audIndTitulo">
-            <h2 class="aud-cartao-titulo" id="audIndTitulo">Concordância das contagens
-                <span class="aud-info" tabindex="0" role="note" title="{{ ind.subtitulo }}. Considera somente contagens liberadas; C3 dispensada quando C1 = C2." aria-label="Como é calculado: {{ ind.subtitulo }}. Considera somente contagens liberadas."><i class="bi bi-info-circle" aria-hidden="true"></i></span>
-            </h2>
-            {% if ind.suficiente %}
-            <div class="aud-gauge-caixa">
-                {% localize off %}
-                <svg viewBox="0 0 200 106" class="aud-gauge" role="img" aria-label="Concordância das contagens: {{ ind.percentual|pct }} ({{ ind.numerador }} de {{ ind.denominador }})">
-                    <path d="M 16 96 A 84 84 0 0 1 184 96" class="aud-gauge-trilho"/>
-                    {% if ind.numerador %}<path d="M 16 96 A 84 84 0 0 1 184 96" class="aud-gauge-valor" pathLength="100" stroke-dasharray="{{ ind.percentual|pct_css }} 1000"/>{% endif %}
-                </svg>
-                {% endlocalize %}
-                <div class="aud-gauge-numero">{{ ind.percentual|pct }}</div>
-            </div>
-            <p class="aud-gauge-base"><strong>{{ ind.numerador }}</strong> de <strong>{{ ind.denominador }}</strong> itens (posição + SKU)</p>
-            {% else %}
-            <div class="aud-gauge-vazio" role="status"><i class="bi bi-hourglass-split" aria-hidden="true"></i><strong>Sem dados suficientes</strong><span>{{ ind.motivo }}</span></div>
-            {% endif %}
-        </section>
-        {% endwith %}
+        {% include 'inventario/auditor/_velocimetro.html' with ind=painel.indicador titulo='Concordância das contagens' unidade='itens (posição + SKU)' id='audIndTitulo' %}
 
         <section class="aud-card aud-cartao" aria-labelledby="audItensTit">
             <div class="aud-cartao-topo">
@@ -38,17 +18,10 @@
                 <span class="aud-cartao-icone" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
             </div>
             <p class="aud-cartao-valor">{{ painel.cards.itens }}</p>
-            <p class="aud-cartao-sub">Posição + SKU · {{ painel.cards.skus }} SKU{{ painel.cards.skus|pluralize }}</p>
+            <p class="aud-cartao-sub">Posição + SKU · {{ painel.cards.skus }} SKU{{ painel.cards.skus|pluralize }} · {{ painel.cards.posicoes }} posiç{{ painel.cards.posicoes|pluralize:"ão,ões" }}</p>
         </section>
 
-        <section class="aud-card aud-cartao" aria-labelledby="audPosTit">
-            <div class="aud-cartao-topo">
-                <h2 class="aud-cartao-titulo" id="audPosTit">Posições contadas</h2>
-                <span class="aud-cartao-icone" aria-hidden="true"><i class="bi bi-geo-alt"></i></span>
-            </div>
-            <p class="aud-cartao-valor">{{ painel.cards.posicoes }}</p>
-            <p class="aud-cartao-sub">Contagens liberadas: {{ painel.escopo.rotulo }}</p>
-        </section>
+        {% include 'inventario/auditor/_velocimetro.html' with ind=painel.indicador_posicoes titulo='Posições contadas' unidade='posições com consenso' id='audPosTit' %}
 
         <section class="aud-card aud-cartao aud-cartao-alerta" aria-labelledby="audDivTit">
             <div class="aud-cartao-topo">

@@ -822,8 +822,7 @@ class StatusGraficosEDetalhesTestCase(AuditorBase):
         self.assertEqual(graficos['C1']['contadores'], [{'nome': 'Carlos', 'itens': 3, 'correcoes': 0}])
         c2 = {c['nome']: c for c in graficos['C2']['contadores']}
         self.assertEqual((c2['Bianca']['itens'], c2['Bianca']['correcoes']), (2, 0))
-        self.assertEqual(c2['Usuário admin.aud']['correcoes'] if 'Usuário admin.aud' in c2 else next(
-            v['correcoes'] for k, v in c2.items() if k != 'Bianca'), 1)
+        self.assertEqual(set(c2), {'Bianca'})  # quem só corrigiu não entra na participação
         self.assertNotIn('admin.aud@', json.dumps(graficos))
         filtrado = self.api('?operador=Bianca&etapa=2')
         self.assertEqual(sorted(l['sku'] for l in filtrado['linhas']), ['A', 'B'])
@@ -959,3 +958,34 @@ class CadastroUsuarioAuditorTestCase(AuditorBase):
         acesso.refresh_from_db()
         self.assertFalse(acesso.ativo)
         self.assertTrue(EventoAuditoria.objects.filter(tipo='ACESSO_REVOGADO').exists())
+
+
+class VelocimetroPosicoesTestCase(AuditorBase):
+    def test_posicoes_com_consenso(self):
+        self.autorizar()
+        self.client.force_login(self.auditor)
+        self.liberar(1)
+        dados = self.api()
+        self.assertFalse(dados['indicador_posicoes']['suficiente'])  # uma só contagem: sem comparação
+        self.liberar(2)
+        ind = self.api()['indicador_posicoes']
+        # P1 (A: 10/10) com consenso; P2 (B: 5/7) diverge; P3 (C: só C1) sem par → 1 de 3.
+        self.assertEqual((ind['numerador'], ind['denominador'], ind['suficiente']), (1, 3, True))
+        html = self.client.get(self.url('painel')).content.decode()
+        self.assertIn('Posições contadas', html)
+        self.assertIn('<strong>1</strong> de <strong>3</strong> posições com consenso', html)
+
+
+class SemMarcaDeCorrecaoTestCase(AuditorBase):
+    def test_tela_e_excel_sem_texto_ou_coluna_de_correcao(self):
+        self.autorizar()
+        self.liberar(1, 2)
+        item = InventarioItem.objects.get(inventario=self.inv[2], produto=self.prod['B'])
+        salvar_contagem(self.inv[2], self.pos['P2'], self.prod['B'], D(5), item_existente=item, usuario_contagem=self.admin)
+        self.client.force_login(self.auditor)
+        html = self.client.get(self.url('painel')).content.decode()
+        self.assertNotIn('· corrigida', html)
+        self.assertNotIn('corrigidos com autorização', html)
+        pasta, texto = _planilha(self.client.get(self.url('exportar')).content)
+        self.assertNotIn('Correção', [c.value for c in pasta['Lançamentos'][1]])
+        self.assertNotIn('Corrigida', texto)
