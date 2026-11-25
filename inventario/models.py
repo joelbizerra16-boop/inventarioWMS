@@ -2,6 +2,7 @@ from django.conf import settings
 from django.db import models
 
 from accounts.models import Usuario
+from core.categorias import CATEGORIA_CHOICES, CATEGORIA_PADRAO, MAX_LENGTH_CATEGORIA, rotulo_categoria
 from posicoes.models import Posicao
 from produtos.models import Produto
 
@@ -23,6 +24,15 @@ class Inventario(models.Model):
         verbose_name='usuário',
     )
     observacao = models.TextField('observação', blank=True)
+    # Categoria gravada definitivamente na criação (Lubrificantes/Filtros/Agregado).
+    # Independe de ``tipo_inventario`` (GERAL/CICLICO) dos modelos operacionais.
+    categoria = models.CharField(
+        'categoria',
+        max_length=MAX_LENGTH_CATEGORIA,
+        choices=CATEGORIA_CHOICES,
+        default=CATEGORIA_PADRAO,
+        db_index=True,
+    )
     status = models.CharField(
         'status',
         max_length=20,
@@ -93,6 +103,56 @@ class Inventario(models.Model):
 
     def __str__(self):
         return f'{self.usuario} - {self.data_criacao:%d/%m/%Y %H:%M}'
+
+    @property
+    def categoria_rotulo(self) -> str:
+        return rotulo_categoria(self.categoria)
+
+
+class InventarioProdutoInclusao(models.Model):
+    """Inclusão explícita de produto sem classificação em um inventário.
+
+    Produtos sem categoria reconhecível em ``Produto.setor`` só podem ser
+    contados num inventário depois de incluídos aqui. O setor do produto
+    nunca é alterado por esta inclusão.
+    """
+
+    inventario = models.ForeignKey(
+        Inventario,
+        on_delete=models.CASCADE,
+        related_name='produtos_incluidos',
+        verbose_name='inventário',
+    )
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.PROTECT,
+        related_name='inclusoes_inventario',
+        verbose_name='produto',
+    )
+    usuario = models.ForeignKey(
+        Usuario,
+        on_delete=models.PROTECT,
+        related_name='inclusoes_produto_inventario',
+        verbose_name='usuário',
+    )
+    setor_no_momento = models.CharField('setor no momento da inclusão', max_length=100, blank=True)
+    # WEB_INCLUSAO (tela de contagem) ou POCKET_PRECADASTRO (pré-cadastro no inventário).
+    origem = models.CharField('origem da inclusão', max_length=30, blank=True, default='')
+    data_inclusao = models.DateTimeField('data da inclusão', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'inclusão explícita de produto'
+        verbose_name_plural = 'inclusões explícitas de produtos'
+        ordering = ['inventario', 'produto']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['inventario', 'produto'],
+                name='uniq_inclusao_inventario_produto',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.inventario_id} · {self.produto}'
 
 
 class InventarioItem(models.Model):

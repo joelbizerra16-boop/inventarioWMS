@@ -8,6 +8,19 @@ from inventario.models_operacional import InventarioAuditoriaEvento
 from core.logging_auditoria import registrar_evento
 
 
+def _categoria_do_inventario(inventario) -> str:
+    """Categoria gravada no inventário (instância ou id); vazio se não houver."""
+    if inventario is None:
+        return ''
+    categoria = getattr(inventario, 'categoria', None)
+    if categoria:
+        return categoria
+    from inventario.models import Inventario
+
+    pk = getattr(inventario, 'pk', inventario)
+    return Inventario.objects.filter(pk=pk).values_list('categoria', flat=True).first() or ''
+
+
 def registrar_evento_operacional(
     *,
     evento: str,
@@ -27,7 +40,9 @@ def registrar_evento_operacional(
     status_novo: str = '',
     dados_extras: dict | None = None,
 ) -> InventarioAuditoriaEvento:
+    categoria = _categoria_do_inventario(inventario)
     registro = InventarioAuditoriaEvento.objects.create(
+        categoria=categoria,
         tipo_inventario=tipo_inventario,
         inventario=inventario,
         ciclo=ciclo,
@@ -49,6 +64,7 @@ def registrar_evento_operacional(
 
     contexto = {
         'tipo_inventario': tipo_inventario,
+        'categoria': categoria,
         'evento_operacional': evento,
         'inventario_id': getattr(inventario, 'pk', inventario),
         'ciclo_id': getattr(ciclo, 'pk', ciclo),

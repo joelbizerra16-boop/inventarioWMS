@@ -167,9 +167,9 @@ def _reconstruir_auditoria_do_banco(inventario_id: int) -> ResultadoConsolidacao
 
 
 
-def _queryset_inventarios_finalizados():
+def _queryset_inventarios_finalizados(categoria: str | None = None):
 
-    return (
+    queryset = (
 
         Inventario.objects.filter(
 
@@ -187,15 +187,21 @@ def _queryset_inventarios_finalizados():
 
     )
 
+    if categoria:
+
+        queryset = queryset.filter(categoria=categoria)
+
+    return queryset
 
 
 
 
-def obter_id_inventario_finalizado_mais_recente() -> int | None:
+
+def obter_id_inventario_finalizado_mais_recente(categoria: str | None = None) -> int | None:
 
     return (
 
-        _queryset_inventarios_finalizados()
+        _queryset_inventarios_finalizados(categoria)
 
         .order_by('-pk')
 
@@ -221,13 +227,16 @@ def _validar_pode_publicar(inventario: Inventario) -> None:
 
 
 
-    ultimo_id = obter_id_inventario_finalizado_mais_recente()
+    # A regra "último finalizado" vale dentro da categoria do inventário:
+    # um inventário de Filtros não bloqueia a publicação de Lubrificantes.
+    ultimo_id = obter_id_inventario_finalizado_mais_recente(inventario.categoria)
 
     if ultimo_id is None or inventario.pk != ultimo_id:
 
         raise ConsolidacaoError(
 
-            'Somente o último inventário finalizado pode publicar o estoque físico.',
+            'Somente o último inventário finalizado desta categoria '
+            f'({inventario.categoria_rotulo}) pode publicar o estoque físico.',
 
         )
 
@@ -307,11 +316,38 @@ def obter_preview_consolidacao(inventario: Inventario) -> PreviewConsolidacao:
 
 
 
+def _validar_sem_conflito_outra_categoria(agregados: list[dict], categoria: str) -> None:
+    """Impede sobrescrever, sem aviso, saldo físico publicado por outra categoria."""
+    if not agregados:
+        return
+    pares = {(item['produto_id'], item['posicao_id']) for item in agregados}
+    produto_ids = {produto_id for produto_id, _ in pares}
+    conflitos = [
+        registro
+        for registro in EstoqueFisico.objects.filter(produto_id__in=produto_ids)
+        .exclude(categoria=categoria)
+        .select_related('produto', 'posicao')
+        if (registro.produto_id, registro.posicao_id) in pares
+    ]
+    if conflitos:
+        exemplo = conflitos[0]
+        raise ConsolidacaoError(
+            f'Publicação bloqueada: {len(conflitos)} saldo(s) físico(s) já pertencem a outra '
+            f'categoria (ex.: produto {exemplo.produto.codigo_produto} na posição '
+            f'{exemplo.posicao.codigo}, {exemplo.get_categoria_display()}). '
+            'Nenhum estoque foi alterado.'
+        )
+
+
 @transaction.atomic
 
 def publicar_estoque_fisico(inventario: Inventario) -> ResultadoConsolidacao:
 
-    """Substitui integralmente o EstoqueFisico pelos itens do inventário finalizado."""
+    """Substitui o EstoqueFisico *da categoria do inventário* pelos itens dele.
+
+    Somente os registros da mesma categoria são apagados e recriados; o
+    estoque físico das demais categorias permanece intacto.
+    """
 
     _validar_pode_publicar(inventario)
 
@@ -321,9 +357,21 @@ def publicar_estoque_fisico(inventario: Inventario) -> ResultadoConsolidacao:
 
     data_hora = timezone.now()
 
+    categoria = inventario.categoria
+
+    # Toda a validação acontece antes de apagar qualquer saldo (atômico).
+    from inventario.services.categoria import CategoriaError, validar_publicacao_categoria
+
+    try:
+        validar_publicacao_categoria(inventario, agregados)
+    except CategoriaError as exc:
+        raise ConsolidacaoError(str(exc)) from exc
+
+    _validar_sem_conflito_outra_categoria(agregados, categoria)
 
 
-    EstoqueFisico.objects.all().delete()
+
+    EstoqueFisico.objects.filter(categoria=categoria).delete()
 
 
 
@@ -336,6 +384,8 @@ def publicar_estoque_fisico(inventario: Inventario) -> ResultadoConsolidacao:
             posicao_id=item['posicao_id'],
 
             quantidade=item['quantidade'] or Decimal('0'),
+
+            categoria=categoria,
 
             inventario_origem=inventario,
 

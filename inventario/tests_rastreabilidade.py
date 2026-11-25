@@ -39,7 +39,7 @@ class RastreabilidadeContagemTestCase(TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='110830',
             descricao='Produto Rastreio',
-            setor='A',
+            setor='LUBRIFICANTE',
         )
         self.posicao = Posicao.objects.create(codigo='RAST01', posicao='R-01')
         self.inventario = Inventario.objects.create(
@@ -124,12 +124,12 @@ class RastreabilidadeContagemViewTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto_a = Produto.objects.create(
             codigo_produto='110830',
             descricao='Produto A',
-            setor='A',
+            setor='LUBRIFICANTE',
         )
         self.produto_b = Produto.objects.create(
             codigo_produto='124380',
             descricao='Produto B',
-            setor='A',
+            setor='LUBRIFICANTE',
         )
         self.posicao = Posicao.objects.create(codigo='RASTV01', posicao='RV-01')
         self.inventario = Inventario.objects.create(
@@ -194,7 +194,7 @@ class RastreabilidadeContagemViewTestCase(ClienteAutenticadoMixin, TestCase):
         produto = Produto.objects.create(
             codigo_produto='WEB001',
             descricao='Produto Web',
-            setor='A',
+            setor='LUBRIFICANTE',
         )
         response = self.client.post(
             reverse('inventario:contagem_criar', args=[self.inventario.pk]),

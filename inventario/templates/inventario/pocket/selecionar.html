@@ -20,6 +20,7 @@
         <a href="{% url 'pocket:contagem' inventario.pk %}" class="btn btn-outline-primary btn-lg pocket-btn pocket-card text-start">
             <div class="fw-semibold">Inventário #{{ inventario.pk }}</div>
             <div class="small">{{ inventario.usuario.nome }}</div>
+            <div class="small" data-categoria-inventario="{{ inventario.categoria }}">{{ inventario.categoria_rotulo }}</div>
             <div class="small text-muted">{{ inventario.get_status_display }} — {{ inventario.data_criacao|date:"d/m/Y H:i" }}</div>
         </a>
         {% endfor %}

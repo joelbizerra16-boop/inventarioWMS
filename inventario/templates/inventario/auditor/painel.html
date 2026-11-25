@@ -21,11 +21,12 @@
 <div class="aud-titulo-pagina">
     <div>
         <h1 class="aud-h1">Acompanhamento do inventário</h1>
+        <p class="aud-subtitulo mb-0" data-categoria-conferencia="{{ comparativo.categoria }}">Categoria: {{ comparativo.categoria_rotulo }}</p>
         {% if not previa and conferencias|length > 1 %}
         <p class="aud-subtitulo">
             <label class="visually-hidden" for="audConferencia">Conferência</label>
             <select id="audConferencia" class="aud-select-inline" data-aud-navegar title="Trocar de conferência">
-                {% for c in conferencias %}<option value="{% url 'auditor:painel' c.pk %}" {% if c.pk == comparativo.pk %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}
+                {% for c in conferencias %}<option value="{% url 'auditor:painel' c.pk %}" {% if c.pk == comparativo.pk %}selected{% endif %}>{{ c.nome }} · {{ c.categoria_rotulo }}</option>{% endfor %}
             </select>
         </p>
         {% endif %}

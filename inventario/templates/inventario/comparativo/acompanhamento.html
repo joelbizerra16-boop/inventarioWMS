@@ -14,6 +14,8 @@
         <h1 class="h3 fw-semibold text-dark mt-1 mb-1">{{ comparativo.nome }}</h1>
         <p class="text-muted small mb-0">
             Conferência #{{ comparativo.pk }} · {% if comparativo.finalizado %}Finalizada{% elif comparativo.estado == 'ABERTA' %}Aberta{% else %}Encerrada · sem gravação{% endif %}
+            · <strong data-categoria-conferencia="{{ comparativo.categoria }}">{{ comparativo.categoria_rotulo }}</strong>
+            · <span data-quantidade-contagens="{{ comparativo.quantidade_contagens }}">{{ comparativo.quantidade_contagens }} contagem{{ comparativo.quantidade_contagens|pluralize:"ns" }}</span>
             · Somente acompanhamento: não ajusta estoque nem altera contagens.
             {% if pode_editar %}· <a href="{% url 'comparativo:auditoria' comparativo.pk %}"><i class="bi bi-clipboard-check"></i> Painel do Auditor</a>{% endif %}
         </p>

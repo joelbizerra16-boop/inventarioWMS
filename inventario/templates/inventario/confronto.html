@@ -54,7 +54,7 @@
                     <option value="">Selecione um inventário</option>
                     {% for inv in inventarios %}
                     <option value="{{ inv.pk }}" {% if inventario_id == inv.pk|stringformat:"s" %}selected{% endif %}>
-                        #{{ inv.pk }} — {{ inv.usuario.nome }} — {{ inv.get_status_display }} — {{ inv.data_criacao|date:"d/m/Y" }}
+                        #{{ inv.pk }} — {{ inv.categoria_rotulo }} — {{ inv.usuario.nome }} — {{ inv.get_status_display }} — {{ inv.data_criacao|date:"d/m/Y" }}
                     </option>
                     {% endfor %}
                 </select>

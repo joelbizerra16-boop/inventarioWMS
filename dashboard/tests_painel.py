@@ -57,7 +57,7 @@ class PainelBaseTestCase(TestCase):
         self.pos = {c: Posicao.objects.create(codigo=c, posicao=f'01.0{i}.101') for i, c in enumerate(('P1', 'P2', 'P3', 'P4'), 1)}
         self.p = {}
         for codigo, cosan in (('A', 10), ('B', 20), ('C', 30), ('D', 40), ('E', 50)):
-            self.p[codigo] = Produto.objects.create(codigo_produto=codigo, descricao=f'Produto {codigo}', setor='A')
+            self.p[codigo] = Produto.objects.create(codigo_produto=codigo, descricao=f'Produto {codigo}', setor='LUBRIFICANTE')
             EstoqueSAP.objects.create(
                 produto=self.p[codigo], canal_110=D(cosan), canal_1=D(0), total=D(cosan), arquivo_origem='sap.xlsx',
             )

@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 
 from inventario.models import CicloInventarioSku, Inventario, InventarioItem
 from inventario.services.ciclico import CiclicoError
@@ -8,10 +9,39 @@ from posicoes.models import Posicao
 from produtos.models import Produto
 
 
+def inventario_permite_trocar_categoria(inventario) -> bool:
+    """A frente só pode mudar antes do início da contagem.
+
+    Bloqueia se houver contagem, tarefa, lock, inclusão explícita ou
+    associação a conferência do Comparativo.
+    """
+    if not inventario.pk:
+        return True
+    if inventario.status != Inventario.Status.ABERTO:
+        return False
+    return not (
+        inventario.itens.exists()
+        or inventario.tarefas.exists()
+        or inventario.locks.exists()
+        or inventario.produtos_incluidos.exists()
+        or inventario.associacoes_comparativo.exists()
+    )
+
+
 class InventarioForm(forms.ModelForm):
+    ROTULOS_FRENTE = {
+        valor: f'Inventário de {rotulo}' for valor, rotulo in Inventario._meta.get_field('categoria').choices
+    }
+
+    categoria = forms.ChoiceField(
+        label='Frente do inventário',
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        error_messages={'required': 'Escolha a frente: Lubrificantes, Filtros ou Agregados.'},
+    )
+
     class Meta:
         model = Inventario
-        fields = ['usuario', 'observacao']
+        fields = ['usuario', 'categoria', 'observacao']
         widgets = {
             'usuario': forms.Select(attrs={'class': 'form-select'}),
             'observacao': forms.Textarea(attrs={
@@ -19,6 +49,27 @@ class InventarioForm(forms.ModelForm):
                 'rows': 4,
             }),
         }
+
+    def __init__(self, *args, categoria_inicial=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        campo = self.fields['categoria']
+        campo.choices = list(self.ROTULOS_FRENTE.items())
+        if self.instance.pk:
+            campo.initial = self.instance.categoria
+            self.categoria_bloqueada = not inventario_permite_trocar_categoria(self.instance)
+            if self.categoria_bloqueada:
+                # Contagem iniciada: a frente gravada é definitiva (POST manual ignorado).
+                campo.disabled = True
+                campo.required = False
+                campo.help_text = 'Contagem iniciada: a frente gravada não pode mais ser alterada.'
+        else:
+            self.categoria_bloqueada = False
+            campo.initial = categoria_inicial
+
+    def clean_categoria(self):
+        if self.categoria_bloqueada:
+            return self.instance.categoria
+        return self.cleaned_data['categoria']
 
 
 class ContagemForm(forms.ModelForm):
@@ -35,9 +86,18 @@ class ContagemForm(forms.ModelForm):
             }),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, inventario=None, **kwargs):
         super().__init__(*args, **kwargs)
-        queryset = Posicao.objects.filter(ativo=True).order_by('codigo')
+        self.inventario = inventario
+        queryset = Posicao.objects.filter(ativo=True)
+        if inventario is not None:
+            # Somente posições da categoria gravada no inventário; a posição de
+            # um lançamento histórico em edição continua disponível.
+            escopo = Q(categoria=inventario.categoria)
+            if self.instance.pk and self.instance.posicao_id:
+                escopo |= Q(pk=self.instance.posicao_id)
+            queryset = queryset.filter(escopo)
+        queryset = queryset.order_by('codigo')
         self.fields['posicao'].queryset = queryset
         self.fields['posicao'].label = 'Selecionar posição'
         self.fields['posicao'].label_from_instance = (
@@ -50,9 +110,17 @@ class ContagemForm(forms.ModelForm):
             }
             for posicao in queryset
         }
-        self.fields['produto'].queryset = Produto.objects.elegiveis_para_inventario().order_by(
-            'codigo_produto',
-        )
+        produtos = Produto.objects.elegiveis_para_inventario()
+        if inventario is not None:
+            # Produtos da categoria do inventário + sem classificação incluídos
+            # explicitamente. O backend (salvar_contagem) valida de novo.
+            from inventario.services.categoria import q_produtos_contaveis_no_inventario
+
+            escopo = q_produtos_contaveis_no_inventario(inventario)
+            if self.instance.pk and self.instance.produto_id:
+                escopo |= Q(pk=self.instance.produto_id)
+            produtos = produtos.filter(escopo)
+        self.fields['produto'].queryset = produtos.order_by('codigo_produto')
 
     def clean_quantidade_fisica(self):
         quantidade = self.cleaned_data.get('quantidade_fisica')
@@ -115,9 +183,10 @@ class PocketContagemForm(forms.Form):
         }),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, inventario=None, **kwargs):
         super().__init__(*args, **kwargs)
-        mapas = obter_mapas_mestres_pocket()
+        # Com inventário: mapas restritos à categoria gravada nele.
+        mapas = obter_mapas_mestres_pocket(inventario)
         self.mapa_posicoes = mapas['mapa_posicoes']
         self.mapa_produtos = mapas['mapa_produtos']
         self.mapa_ean = mapas['mapa_ean']

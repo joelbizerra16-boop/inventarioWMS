@@ -1,0 +1,391 @@
+/* =============================================================================
+   Identidade visual BRIDA — Sistema de Inventário
+   Azul BRIDA #21275A · Laranja BRIDA #EE662F
+   Somente cores, bordas, sombras discretas, contraste e estados
+   (hover, active, focus-visible, disabled, selecionado). Não altera layout,
+   tamanhos, espaçamentos, posições, textos, ícones nem comportamento.
+   Carregado depois do Bootstrap e das folhas existentes.
+   ============================================================================= */
+
+:root {
+    --brida-azul: #21275A;
+    --brida-azul-rgb: 33, 39, 90;
+    --brida-azul-escuro: #181C45;
+    --brida-azul-hover: #2D346F;
+    --brida-azul-claro: #E9EAF2;
+    --brida-laranja: #EE662F;
+    --brida-laranja-rgb: 238, 102, 47;
+    --brida-laranja-escuro: #D2511C;
+    --brida-laranja-claro: #FDEDE6;
+    --brida-texto: #1F2340;
+
+    /* Barra institucional (menu lateral + topo) no azul BRIDA. */
+    --app-shell-bg: var(--brida-azul);
+    --app-shell-hover: var(--brida-azul-hover);
+
+    /* Bootstrap 5.3: cor primária, links e anel de foco. */
+    --bs-primary: var(--brida-azul);
+    --bs-primary-rgb: var(--brida-azul-rgb);
+    --bs-link-color: var(--brida-azul);
+    --bs-link-color-rgb: var(--brida-azul-rgb);
+    --bs-link-hover-color: var(--brida-laranja-escuro);
+    --bs-link-hover-color-rgb: 210, 81, 28;
+    --bs-focus-ring-color: rgba(var(--brida-laranja-rgb), 0.4);
+
+    /* Pocket (pocket.css). */
+    --pocket-navy: var(--brida-azul);
+    --pocket-navy-dark: var(--brida-azul-escuro);
+}
+
+/* --- Foco acessível e consistente ------------------------------------------ */
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible,
+.form-check-input:focus-visible,
+.page-link:focus-visible,
+.nav-link:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--brida-laranja);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 0.2rem rgba(var(--brida-laranja-rgb), 0.25);
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: rgba(var(--brida-azul-rgb), 0.55);
+    box-shadow: 0 0 0 0.2rem rgba(var(--brida-azul-rgb), 0.15);
+}
+
+.form-check-input:checked {
+    background-color: var(--brida-azul);
+    border-color: var(--brida-azul);
+}
+
+/* --- Botões (mesmo tamanho; só cor, borda, sombra e estados) ---------------- */
+.btn {
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+        color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-primary {
+    --bs-btn-bg: var(--brida-azul);
+    --bs-btn-border-color: var(--brida-azul);
+    --bs-btn-hover-bg: var(--brida-azul-hover);
+    --bs-btn-hover-border-color: var(--brida-azul-hover);
+    --bs-btn-active-bg: var(--brida-azul-escuro);
+    --bs-btn-active-border-color: var(--brida-laranja);
+    --bs-btn-disabled-bg: var(--brida-azul);
+    --bs-btn-disabled-border-color: var(--brida-azul);
+    --bs-btn-focus-shadow-rgb: var(--brida-laranja-rgb);
+    box-shadow: 0 1px 2px rgba(var(--brida-azul-rgb), 0.18);
+}
+
+.btn-primary:hover {
+    box-shadow: 0 3px 8px rgba(var(--brida-azul-rgb), 0.25);
+}
+
+.btn-primary:active,
+.btn-primary.active {
+    box-shadow: inset 0 0 0 1px var(--brida-laranja);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--brida-azul);
+    --bs-btn-border-color: rgba(var(--brida-azul-rgb), 0.55);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: var(--brida-azul);
+    --bs-btn-hover-border-color: var(--brida-azul);
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: var(--brida-azul-escuro);
+    --bs-btn-active-border-color: var(--brida-azul-escuro);
+    --bs-btn-disabled-color: var(--brida-azul);
+    --bs-btn-disabled-border-color: rgba(var(--brida-azul-rgb), 0.35);
+    --bs-btn-focus-shadow-rgb: var(--brida-laranja-rgb);
+}
+
+.btn-outline-secondary:hover {
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
+.btn-outline-success:hover,
+.btn-success:hover,
+.btn-outline-danger:hover,
+.btn-danger:hover {
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+}
+
+.btn:disabled,
+.btn.disabled,
+fieldset:disabled .btn {
+    opacity: 0.55;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+/* --- Links, paginação, abas ------------------------------------------------- */
+.page-content a:not(.btn):not(.nav-link):not(.page-link):not(.dropdown-item):not(.grid-acao) {
+    text-decoration-color: rgba(var(--brida-laranja-rgb), 0.55);
+}
+
+.page-link {
+    color: var(--brida-azul);
+}
+
+.page-link:hover {
+    color: var(--brida-laranja-escuro);
+    background-color: var(--brida-azul-claro);
+}
+
+.active > .page-link,
+.page-link.active {
+    background-color: var(--brida-azul);
+    border-color: var(--brida-azul);
+    color: #fff;
+}
+
+.nav-pills .nav-link.active,
+.nav-pills .show > .nav-link {
+    background-color: var(--brida-azul);
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--brida-azul);
+    border-bottom-color: transparent;
+    box-shadow: inset 0 -2px 0 var(--brida-laranja);
+}
+
+/* --- Tabelas e cartões ------------------------------------------------------ */
+.table > thead.table-light th,
+.table-light th {
+    color: var(--brida-texto);
+}
+
+.table-hover > tbody > tr:hover > * {
+    --bs-table-bg-state: rgba(var(--brida-azul-rgb), 0.035);
+}
+
+.card.shadow-sm {
+    box-shadow: 0 1px 3px rgba(var(--brida-azul-rgb), 0.08), 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* --- Barra institucional (topo e menu lateral) ------------------------------ */
+.app-topbar {
+    border-bottom-color: rgba(var(--brida-laranja-rgb), 0.85) !important;
+}
+
+.app-topbar .btn-outline-light {
+    border-color: rgba(255, 255, 255, 0.55);
+}
+
+.app-topbar .btn-outline-light:hover,
+.app-topbar .btn-outline-light:focus-visible {
+    background-color: var(--brida-azul-hover) !important;
+    border-color: #fff !important;
+}
+
+.app-topbar .btn-outline-light:active {
+    background-color: var(--brida-azul-escuro) !important;
+    border-color: var(--brida-laranja) !important;
+}
+
+#appSidebar .nav-link {
+    border-radius: 0.375rem;
+}
+
+#appSidebar .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #fff !important;
+}
+
+/* Item selecionado: realce + filete laranja (sem mudar dimensões). */
+#appSidebar .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 3px 0 0 var(--brida-laranja);
+    color: #fff !important;
+}
+
+#appSidebar .nav-link:active {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+#appSidebar .sidebar-header {
+    border-bottom-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+#appSidebar .sidebar-section,
+#appSidebar .sidebar-subtitle {
+    color: rgba(255, 255, 255, 0.55) !important;
+}
+
+/* --- Marca: logo oficial e símbolo "b" ------------------------------------- */
+/* As cores oficiais (azul/laranja) não são alteradas: a marca fica sobre uma
+   base branca para manter contraste na barra azul. */
+.brida-marca {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    background-color: #fff;
+    border-radius: 0.375rem;
+    line-height: 0;
+}
+
+.brida-marca img {
+    display: block;
+    width: auto;
+}
+
+.brida-marca-logo {
+    height: 30px;
+    padding: 3px 7px;
+}
+
+.brida-marca-logo img {
+    height: 24px;
+}
+
+.brida-marca-b {
+    height: 30px;
+    width: 30px;
+    justify-content: center;
+}
+
+.brida-marca-b img {
+    height: 22px;
+}
+
+/* Em telas compactas o topo usa o símbolo "b" no lugar da logo completa. */
+.app-topbar .brida-marca-b {
+    display: none;
+}
+
+@media (max-width: 575.98px) {
+    .app-topbar .brida-marca-logo {
+        display: none;
+    }
+
+    .app-topbar .brida-marca-b {
+        display: inline-flex;
+    }
+}
+
+/* Menu lateral recolhido: símbolo "b" no espaço do cabeçalho (sem alterar
+   a altura existente do cabeçalho; posicionado sobre a área vazia). */
+#appSidebar .sidebar-header {
+    position: relative;
+}
+
+#appSidebar .sidebar-brand-b {
+    display: none;
+}
+
+html.sidebar-collapsed #appSidebar .sidebar-brand-b {
+    display: inline-flex;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* --- Seletor de categoria (topo) ------------------------------------------- */
+.seletor-categoria {
+    flex-shrink: 0;
+}
+
+.seletor-categoria .form-select {
+    min-width: 10.5rem;
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    font-weight: 600;
+    --bs-form-select-bg-img: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+    box-shadow: inset 3px 0 0 var(--brida-laranja);
+    cursor: pointer;
+}
+
+.seletor-categoria .form-select:hover {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: #fff;
+}
+
+.seletor-categoria .form-select:focus,
+.seletor-categoria .form-select:focus-visible {
+    border-color: var(--brida-laranja);
+    box-shadow: inset 3px 0 0 var(--brida-laranja), 0 0 0 0.2rem rgba(var(--brida-laranja-rgb), 0.35);
+    outline: none;
+}
+
+.seletor-categoria .form-select option {
+    color: var(--brida-texto);
+    background-color: #fff;
+}
+
+/* --- Badges de categoria efetiva ------------------------------------------- */
+.categoria-badge {
+    font-weight: 600;
+    font-size: 0.72em;
+    vertical-align: middle;
+    border: 1px solid transparent;
+}
+
+.categoria-badge-posicao {
+    color: var(--brida-azul);
+    background-color: var(--brida-azul-claro);
+    border-color: rgba(var(--brida-azul-rgb), 0.2);
+}
+
+.categoria-badge-conflito {
+    color: #9A3412;
+    background-color: var(--brida-laranja-claro);
+    border-color: rgba(var(--brida-laranja-rgb), 0.55);
+}
+
+.categoria-badge-sem {
+    color: #475569;
+    background-color: #EEF0F4;
+    border-color: #D5D9E2;
+}
+
+/* --- Correção de responsividade (corte lateral no topo e cabeçalhos) -------- */
+/* Itens do topo não encolhem nem quebram; o nome longo é abreviado com
+   reticências (o nome completo fica no atributo title). */
+@media (min-width: 992px) {
+    .app-topbar > .container-fluid {
+        flex-wrap: nowrap;
+    }
+}
+
+.app-topbar .navbar-brand {
+    min-width: 0;
+}
+
+.app-topbar .ms-auto {
+    min-width: 0;
+}
+
+.app-topbar .ms-auto > * {
+    flex-shrink: 0;
+}
+
+.app-topbar .ms-auto > .app-topbar-usuario {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-topbar .btn,
+.app-topbar .small {
+    white-space: nowrap;
+}
+
+/* Botões de ação do cabeçalho das telas não quebram em duas linhas. */
+.page-content > div:first-child .btn {
+    white-space: nowrap;
+}
+
+.page-content > div:first-child > .d-flex,
+.page-content > div:first-child > .btn {
+    flex-shrink: 0;
+}

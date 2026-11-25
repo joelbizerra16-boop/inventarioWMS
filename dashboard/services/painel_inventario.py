@@ -53,13 +53,16 @@ def _pct(parte: int, total: int) -> Decimal | None:
     return Decimal(parte) * 100 / Decimal(total)
 
 
-def comparativo_padrao() -> ComparativoContagem | None:
-    """Conferência aberta mais recente; sem aberta, a mais recente."""
+def comparativo_padrao(categoria: str | None = None) -> ComparativoContagem | None:
+    """Conferência aberta mais recente; sem aberta, a mais recente (da categoria)."""
+    conferencias = ComparativoContagem.objects.all()
+    if categoria:
+        conferencias = conferencias.filter(categoria=categoria)
     aberta = (
-        ComparativoContagem.objects.filter(snapshot_resultado__isnull=True)
+        conferencias.filter(snapshot_resultado__isnull=True)
         .order_by('-pk').first()
     )
-    return aberta or ComparativoContagem.objects.order_by('-pk').first()
+    return aberta or conferencias.order_by('-pk').first()
 
 
 # ---------------------------------------------------------------------------
@@ -455,9 +458,16 @@ def _barras_cobertura(cobertura: Cobertura) -> list[dict]:
     ]
 
 
-def montar_painel(comparativo: ComparativoContagem | None, canal: str) -> PainelInventario:
+def montar_painel(
+    comparativo: ComparativoContagem | None,
+    canal: str,
+    categoria: str | None = None,
+) -> PainelInventario:
     canal = Canal.normalizar(canal)
-    inventario, resultado_confronto = _obter_confronto_ultimo_inventario_finalizado()
+    # "Maiores divergências (Geral)": último inventário finalizado da mesma
+    # categoria da conferência exibida (ou da sessão, sem conferência).
+    categoria = comparativo.categoria if comparativo is not None else categoria
+    inventario, resultado_confronto = _obter_confronto_ultimo_inventario_finalizado(categoria)
     painel = PainelInventario(
         comparativo=comparativo,
         canal=canal,

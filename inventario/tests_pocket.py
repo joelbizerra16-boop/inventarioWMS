@@ -31,7 +31,7 @@ class PocketServiceTestCase(TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='PKT001',
             descricao='Produto Pocket',
-            setor='A',
+            setor='LUBRIFICANTE',
             codigo_ean='7891234567890',
         )
         self.posicao = Posicao.objects.create(codigo='PKT-Z01', posicao='Z-01')
@@ -90,7 +90,7 @@ class PocketServiceTestCase(TestCase):
         produto_b = Produto.objects.create(
             codigo_produto='PKT002',
             descricao='Produto B',
-            setor='A',
+            setor='LUBRIFICANTE',
         )
         salvar_contagem(
             self.inventario,
@@ -172,7 +172,7 @@ class PocketViewTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='PKV001',
             descricao='Produto View',
-            setor='A',
+            setor='LUBRIFICANTE',
             codigo_ean='7890001112223',
         )
         self.posicao = Posicao.objects.create(codigo='PKV-Z01', posicao='Z-01')
@@ -451,7 +451,7 @@ class PocketMestresSyncTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='SYNC001',
             descricao='Produto Sync',
-            setor='A',
+            setor='LUBRIFICANTE',
         )
 
     def test_dados_mestres_retorna_posicoes_produtos(self):

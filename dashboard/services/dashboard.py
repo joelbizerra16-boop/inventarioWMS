@@ -100,15 +100,25 @@ COR_CINZA_CLARO = '#E2E8F0'
 PALETA_EMBALAGENS = [COR_AZUL_ESCURO, COR_AZUL, COR_AZUL_CLARO, COR_CINZA, COR_AZUL]
 
 
-def _obter_inventario_finalizado_mais_recente() -> Inventario | None:
+def _inventarios(categoria: str | None = None):
+    """Inventários da categoria (None = todas, comportamento original)."""
+    queryset = Inventario.objects.all()
+    if categoria:
+        queryset = queryset.filter(categoria=categoria)
+    return queryset
+
+
+def _obter_inventario_finalizado_mais_recente(categoria: str | None = None) -> Inventario | None:
     return (
-        Inventario.objects.filter(status=Inventario.Status.FINALIZADO)
+        _inventarios(categoria).filter(status=Inventario.Status.FINALIZADO)
         .order_by('-data_criacao')
         .first()
     )
 
 
-def _obter_confronto_ultimo_inventario_finalizado() -> tuple[Inventario | None, ResultadoConfronto | None]:
+def _obter_confronto_ultimo_inventario_finalizado(
+    categoria: str | None = None,
+) -> tuple[Inventario | None, ResultadoConfronto | None]:
     """Confronto do último inventário geral finalizado.
 
     Reaproveitado pelos cards de Acuracidade Geral/Corretos/Divergentes e
@@ -116,15 +126,15 @@ def _obter_confronto_ultimo_inventario_finalizado() -> tuple[Inventario | None, 
     cálculo nem repetir a consulta. Usa `canal=None` (comportamento legado,
     soma total do SAP) — o mesmo conceito que este Dashboard já usa hoje.
     """
-    inventario = _obter_inventario_finalizado_mais_recente()
+    inventario = _obter_inventario_finalizado_mais_recente(categoria)
     if inventario is None:
         return None, None
     return inventario, executar_confronto(inventario.pk)
 
 
-def _montar_evolucao_acuracidade(limite: int = 10) -> GraficoDashboard:
+def _montar_evolucao_acuracidade(limite: int = 10, categoria: str | None = None) -> GraficoDashboard:
     inventarios = list(
-        Inventario.objects.filter(
+        _inventarios(categoria).filter(
             status=Inventario.Status.FINALIZADO,
             taxa_acuracidade__isnull=False,
             quantidade_produtos__gt=0,
@@ -152,9 +162,9 @@ def _montar_evolucao_acuracidade(limite: int = 10) -> GraficoDashboard:
     )
 
 
-def _montar_planejado_contado() -> GraficoDashboard:
+def _montar_planejado_contado(categoria: str | None = None) -> GraficoDashboard:
     inventario = (
-        Inventario.objects.filter(status=Inventario.Status.EM_ANDAMENTO)
+        _inventarios(categoria).filter(status=Inventario.Status.EM_ANDAMENTO)
         .order_by('-data_criacao')
         .first()
     )
@@ -196,9 +206,12 @@ def _montar_planejado_contado() -> GraficoDashboard:
     )
 
 
-def _montar_ranking_contagem(limite: int = 10) -> GraficoDashboard:
+def _montar_ranking_contagem(limite: int = 10, categoria: str | None = None) -> GraficoDashboard:
+    itens = InventarioItem.objects.all()
+    if categoria:
+        itens = itens.filter(inventario__categoria=categoria)
     agregados = list(
-        InventarioItem.objects.exclude(usuario_contagem__isnull=True)
+        itens.exclude(usuario_contagem__isnull=True)
         .values('usuario_contagem_id')
         .annotate(total_itens=Count('id'))
         .order_by('-total_itens')[:limite]
@@ -231,6 +244,7 @@ def _montar_graficos_geral(
     abertos: int,
     andamento: int,
     finalizados: int,
+    categoria: str | None = None,
 ) -> list[GraficoDashboard]:
     return [
         GraficoDashboard(
@@ -244,9 +258,9 @@ def _montar_graficos_geral(
             centro_label='Total',
             subtitulo='Quantidade de inventários por situação (Geral)',
         ),
-        _montar_evolucao_acuracidade(),
-        _montar_planejado_contado(),
-        _montar_ranking_contagem(),
+        _montar_evolucao_acuracidade(categoria=categoria),
+        _montar_planejado_contado(categoria),
+        _montar_ranking_contagem(categoria=categoria),
     ]
 
 
@@ -430,31 +444,41 @@ def _montar_graficos_ciclico() -> tuple[list[GraficoDashboard], int, Decimal | N
     return graficos, divergentes, acuracidade
 
 
-def obter_indicadores_dashboard() -> IndicadoresDashboard:
+def obter_indicadores_dashboard(categoria: str | None = None) -> IndicadoresDashboard:
+    """Indicadores do dashboard clássico, restritos à categoria quando informada."""
+    produtos = Produto.objects.all()
+    posicoes = Posicao.objects.all()
+    estoques_fisicos = EstoqueFisico.objects.all()
+    if categoria:
+        from inventario.services.categoria import q_produto_categoria_efetiva
+
+        produtos = produtos.filter(q_produto_categoria_efetiva(categoria))
+        posicoes = posicoes.filter(categoria=categoria)
+        estoques_fisicos = estoques_fisicos.filter(categoria=categoria)
     with medir_etapa('dashboard.obter_indicadores_dashboard.contadores_basicos'):
-        total_produtos = Produto.objects.count()
-        total_posicoes = Posicao.objects.count()
+        total_produtos = produtos.count()
+        total_posicoes = posicoes.count()
         produtos_estoque_sap = (
             EstoqueSAP.objects.filter(
-                produto__in=Produto.objects.elegiveis_para_inventario(),
+                produto__in=produtos.elegiveis_para_inventario(),
             ).values('produto_id').distinct().count()
         )
         produtos_estoque_fisico = (
-            EstoqueFisico.objects.values('produto_id').distinct().count()
+            estoques_fisicos.values('produto_id').distinct().count()
         )
-        inventarios_abertos = Inventario.objects.filter(
+        inventarios_abertos = _inventarios(categoria).filter(
             status=Inventario.Status.ABERTO,
         ).count()
-        inventarios_em_andamento = Inventario.objects.filter(
+        inventarios_em_andamento = _inventarios(categoria).filter(
             status=Inventario.Status.EM_ANDAMENTO,
         ).count()
-        inventarios_finalizados = Inventario.objects.filter(
+        inventarios_finalizados = _inventarios(categoria).filter(
             status=Inventario.Status.FINALIZADO,
         ).count()
 
     with medir_etapa('dashboard.obter_indicadores_dashboard.confronto_ultimo_inventario'):
         maiores_divergencias_inventario, resultado_ultimo_inventario = (
-            _obter_confronto_ultimo_inventario_finalizado()
+            _obter_confronto_ultimo_inventario_finalizado(categoria)
         )
         if resultado_ultimo_inventario is None:
             produtos_corretos, produtos_divergentes, acuracidade = 0, 0, Decimal('0')
@@ -473,6 +497,7 @@ def obter_indicadores_dashboard() -> IndicadoresDashboard:
             inventarios_abertos,
             inventarios_em_andamento,
             inventarios_finalizados,
+            categoria,
         )
 
     return IndicadoresDashboard(

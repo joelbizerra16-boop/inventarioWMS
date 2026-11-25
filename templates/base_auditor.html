@@ -35,6 +35,7 @@
             </form>
         </div>
     </header>
+    {% if not previa %}{% include 'includes/barra_categoria.html' %}{% endif %}
     <main class="aud-main">
         {% if messages %}{% for message in messages %}<div class="alert alert-info py-2">{{ message }}</div>{% endfor %}{% endif %}
         {% block content %}{% endblock %}

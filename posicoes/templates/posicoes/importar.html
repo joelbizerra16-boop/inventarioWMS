@@ -13,7 +13,9 @@
     <div class="card-body p-4">
         <div class="alert alert-info">
             <strong>Layout obrigatório:</strong>
-            codigo, posicao
+            codigo, posicao, categoria
+            <br><strong>Coluna categoria:</strong> Lubrificantes, Filtros ou Agregados — obrigatória em todas as linhas;
+            código já existente em outra categoria é recusado.
         </div>
 
         <form method="post" enctype="multipart/form-data">
@@ -78,6 +80,7 @@
                         <th class="ps-4">Linha</th>
                         <th>Código</th>
                         <th>Posição</th>
+                        <th>Categoria</th>
                         <th>Status</th>
                         <th class="pe-4">Erros</th>
                     </tr>
@@ -88,6 +91,7 @@
                         <td class="ps-4">{{ linha.linha }}</td>
                         <td>{{ linha.codigo|default:"—" }}</td>
                         <td>{{ linha.posicao|default:"—" }}</td>
+                        <td>{{ linha.categoria|default:linha.categoria_informada|default:"—" }}</td>
                         <td>
                             {% if linha.valida %}
                             <span class="badge text-bg-success">Válida</span>

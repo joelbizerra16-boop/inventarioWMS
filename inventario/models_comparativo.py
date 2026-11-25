@@ -8,6 +8,8 @@ referência (a importação SAP substitui a tabela inteira a cada carga).
 from django.conf import settings
 from django.db import models
 
+from core.categorias import CATEGORIA_CHOICES, CATEGORIA_PADRAO, MAX_LENGTH_CATEGORIA, rotulo_categoria
+
 
 class ReferenciaSAP(models.Model):
     """Fotografia persistente dos saldos SAP (canais 1 e 110) em um instante."""
@@ -80,6 +82,25 @@ class ComparativoContagem(models.Model):
         ENCERRADA = 'ENCERRADA', 'Finalizada'
 
     nome = models.CharField('nome', max_length=150)
+    # Categoria da conferência: C1, C2 e C3 devem ser inventários desta categoria.
+    categoria = models.CharField(
+        'categoria',
+        max_length=MAX_LENGTH_CATEGORIA,
+        choices=CATEGORIA_CHOICES,
+        default=CATEGORIA_PADRAO,
+        db_index=True,
+    )
+    # Quantidade de contagens da conferência. 1: C1 é o resultado e é comparada
+    # direto ao SAP. 2 ou 3: regra de produção (dupla coincidente; C3 desempata).
+    quantidade_contagens = models.PositiveSmallIntegerField(
+        'quantidade de contagens',
+        choices=[
+            (1, '1 contagem (C1 é o resultado)'),
+            (2, '2 contagens (C1 e C2; C3 para desempate)'),
+            (3, '3 contagens (C1, C2 e C3)'),
+        ],
+        default=2,
+    )
     referencia_sap = models.ForeignKey(
         ReferenciaSAP,
         on_delete=models.PROTECT,
@@ -128,6 +149,10 @@ class ComparativoContagem(models.Model):
     @property
     def finalizado(self) -> bool:
         return self.snapshot_resultado is not None
+
+    @property
+    def categoria_rotulo(self) -> str:
+        return rotulo_categoria(self.categoria)
 
 
 class ComparativoContagemInventario(models.Model):

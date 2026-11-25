@@ -30,9 +30,26 @@ class PendenciasOperacionaisView(RequerAdministradorMixin, TemplateView):
     template_name = 'accounts/pendencias_operacionais.html'
 
     def get_context_data(self, **kwargs):
+        from core.categorias import obter_categoria_sessao
+        from inventario.services.categoria import (
+            anotar_categoria_efetiva,
+            listar_conflitos_categoria,
+            q_produto_categoria_efetiva,
+            q_produto_sem_classificacao_efetiva,
+        )
+
         context = super().get_context_data(**kwargs)
-        context['produtos_pendentes'] = listar_produtos_pendentes()
-        context['posicoes_pendentes'] = listar_posicoes_pendentes()
+        categoria = obter_categoria_sessao(self.request)
+        # Produtos da categoria efetiva da sessão + os ainda sem posição
+        # (pré-cadastros sem evidência física não podem desaparecer).
+        context['produtos_pendentes'] = anotar_categoria_efetiva(
+            listar_produtos_pendentes().filter(
+                q_produto_categoria_efetiva(categoria) | q_produto_sem_classificacao_efetiva(),
+            )
+        )
+        context['posicoes_pendentes'] = listar_posicoes_pendentes().filter(categoria=categoria)
+        # Conflitos que envolvem a categoria da sessão: mensagem administrativa.
+        context['conflitos_categoria'] = listar_conflitos_categoria(categoria)
         return context
 
 

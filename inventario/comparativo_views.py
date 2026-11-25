@@ -13,6 +13,7 @@ from django.views import View
 
 from accounts.mixins import RequerEscritaInventarioMixin, RequerNaoOperadorMixin
 from accounts.services.perfil import usuario_pode_escrever_inventario
+from core.categorias import alinhar_categoria_sessao, obter_categoria_sessao, rotulo_categoria
 from inventario.models import Inventario
 from inventario.models_comparativo import ComparativoContagem, ReferenciaSAP
 from inventario.services.comparativo_contagens import (
@@ -45,13 +46,22 @@ LINHAS_POR_PAGINA = 50
 
 def _rotulo_inventario(inventario: Inventario) -> str:
     return (
-        f'#{inventario.pk} · {inventario.get_status_display()} · '
+        f'#{inventario.pk} · {inventario.categoria_rotulo} · {inventario.get_status_display()} · '
         f'{inventario.usuario.nome} · {timezone.localtime(inventario.data_criacao):%d/%m/%Y}'
     )
 
 
 class ComparativoForm(forms.Form):
     nome = forms.CharField(label='Nome', max_length=150)
+    quantidade_contagens = forms.TypedChoiceField(
+        label='Quantidade de contagens',
+        choices=ComparativoContagem._meta.get_field('quantidade_contagens').choices,
+        coerce=int,
+        initial=2,
+        required=False,
+        empty_value=None,
+        help_text='1: C1 é o resultado e é comparada direto ao SAP. 2 ou 3: dupla coincidente (C3 desempata).',
+    )
     c1 = forms.ModelChoiceField(label='C1 · primeira contagem', queryset=Inventario.objects.none())
     c2 = forms.ModelChoiceField(
         label='C2 · segunda contagem', queryset=Inventario.objects.none(), required=False,
@@ -61,9 +71,14 @@ class ComparativoForm(forms.Form):
     )
     referencia_sap = forms.ChoiceField(label='Referência SAP', required=False)
 
-    def __init__(self, *args, comparativo=None, **kwargs):
+    def __init__(self, *args, comparativo=None, categoria=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # C1, C2 e C3: somente inventários da categoria da conferência (gravada
+        # nela; na criação, a categoria selecionada na sessão).
+        self.categoria = comparativo.categoria if comparativo is not None else categoria
         inventarios = Inventario.objects.select_related('usuario').order_by('-data_criacao')
+        if self.categoria:
+            inventarios = inventarios.filter(categoria=self.categoria)
         for campo in ('c1', 'c2', 'c3'):
             self.fields[campo].queryset = inventarios
             self.fields[campo].label_from_instance = _rotulo_inventario
@@ -102,6 +117,7 @@ class ComparativoListaView(ComparativoAcessoMixin, View):
                 'usuario_finalizacao', 'usuario_finalizacao__perfil_operacional',
             )
             .prefetch_related('associacoes__inventario', 'acuracidades')
+            .filter(categoria=obter_categoria_sessao(request))
             .order_by('-data_criacao')
         )
         pagina = Paginator(comparativos, 20).get_page(request.GET.get('page'))
@@ -140,18 +156,28 @@ class ComparativoFormularioView(RequerEscritaInventarioMixin, ComparativoAcessoM
 
     def _inicial(self, comparativo):
         if comparativo is None:
-            return {'referencia_sap': OPCAO_NOVA_REFERENCIA}
-        inicial = {'nome': comparativo.nome, 'referencia_sap': ''}
+            return {'referencia_sap': OPCAO_NOVA_REFERENCIA, 'quantidade_contagens': 2}
+        inicial = {
+            'nome': comparativo.nome,
+            'referencia_sap': '',
+            'quantidade_contagens': comparativo.quantidade_contagens,
+        }
         for associacao in comparativo.associacoes.all():
             inicial[f'c{associacao.ordem}'] = associacao.inventario_id
         return inicial
 
     def get(self, request, pk=None):
         comparativo = self._comparativo()
+        if comparativo is not None:
+            alinhar_categoria_sessao(request, comparativo.categoria)
         bloqueio = self._bloquear_finalizado(request, comparativo)
         if bloqueio:
             return bloqueio
-        form = ComparativoForm(initial=self._inicial(comparativo), comparativo=comparativo)
+        form = ComparativoForm(
+            initial=self._inicial(comparativo),
+            comparativo=comparativo,
+            categoria=obter_categoria_sessao(request),
+        )
         return self._render(request, form, comparativo)
 
     def post(self, request, pk=None):
@@ -159,7 +185,11 @@ class ComparativoFormularioView(RequerEscritaInventarioMixin, ComparativoAcessoM
         bloqueio = self._bloquear_finalizado(request, comparativo)
         if bloqueio:
             return bloqueio
-        form = ComparativoForm(request.POST, comparativo=comparativo)
+        form = ComparativoForm(
+            request.POST,
+            comparativo=comparativo,
+            categoria=obter_categoria_sessao(request),
+        )
         if form.is_valid():
             dados = form.cleaned_data
             try:
@@ -170,6 +200,8 @@ class ComparativoFormularioView(RequerEscritaInventarioMixin, ComparativoAcessoM
                     referencia_opcao=dados.get('referencia_sap') or '',
                     estado=None,
                     usuario=request.user,
+                    categoria=obter_categoria_sessao(request),
+                    quantidade_contagens=dados.get('quantidade_contagens'),
                 )
             except ComparativoError as exc:
                 form.add_error(None, str(exc))
@@ -182,6 +214,7 @@ class ComparativoFormularioView(RequerEscritaInventarioMixin, ComparativoAcessoM
         return render(request, self.template_name, {
             'form': form,
             'comparativo': comparativo,
+            'categoria_conferencia_rotulo': rotulo_categoria(form.categoria),
             'eventos': comparativo.eventos.select_related('usuario')[:20] if comparativo else [],
         })
 
@@ -220,6 +253,7 @@ class ComparativoAcompanhamentoView(ComparativoAcessoMixin, View):
             ),
             pk=pk,
         )
+        alinhar_categoria_sessao(request, comparativo.categoria)
         comparativo.pode_reabrir = pode_reabrir_comparativo(comparativo)
         canal, visao, filtros = _parametros(request)
         parcial = request.GET.get('parcial') == '1'

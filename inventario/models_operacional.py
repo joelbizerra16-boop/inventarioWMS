@@ -3,6 +3,7 @@
 from django.conf import settings
 from django.db import models
 
+from core.categorias import CATEGORIA_CHOICES, MAX_LENGTH_CATEGORIA
 from posicoes.models import Posicao
 from produtos.models import Produto
 
@@ -346,6 +347,14 @@ class InventarioAuditoriaEvento(models.Model):
     status_anterior = models.CharField('status anterior', max_length=30, blank=True)
     status_novo = models.CharField('status novo', max_length=30, blank=True)
     dados_extras = models.JSONField('dados extras', default=dict, blank=True)
+    # Categoria do inventário no momento do evento (vazio para o módulo cíclico).
+    categoria = models.CharField(
+        'categoria',
+        max_length=MAX_LENGTH_CATEGORIA,
+        choices=CATEGORIA_CHOICES,
+        blank=True,
+        default='',
+    )
     data_hora = models.DateTimeField('data e hora')
 
     class Meta:

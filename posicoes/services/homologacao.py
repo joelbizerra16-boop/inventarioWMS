@@ -70,7 +70,16 @@ def criar_precadastro_posicao(
     nivel: str = '',
     apto: str = '',
     observacao: str = '',
+    categoria: str | None = None,
 ) -> Posicao:
+    """Pré-cadastra posição. Posição nova exige ``categoria`` (área de inventário).
+
+    Código já existente em outra categoria gera erro claro (não duplica nem
+    altera a categoria da posição existente).
+    """
+    from core.categorias import normalizar_categoria, rotulo_categoria
+
+    categoria = normalizar_categoria(categoria)
     codigo = codigo_completo.strip().upper()
     descricao = posicao_descricao.strip()
 
@@ -89,7 +98,18 @@ def criar_precadastro_posicao(
     if existente:
         if existente.status_homologacao == StatusHomologacao.REJEITADO:
             raise HomologacaoPosicaoError('Posição rejeitada. Solicite revisão ao administrador.')
+        if categoria and existente.categoria != categoria:
+            raise HomologacaoPosicaoError(
+                f'O código {codigo} já pertence a uma posição de '
+                f'{rotulo_categoria(existente.categoria)}; não pode ser usado em '
+                f'{rotulo_categoria(categoria)}.'
+            )
         return existente
+
+    if categoria is None:
+        raise HomologacaoPosicaoError(
+            'Informe a área de inventário (categoria) da nova posição.'
+        )
 
     agora = timezone.now()
     homologado = _homologar_imediato_pocket(origem)
@@ -101,6 +121,7 @@ def criar_precadastro_posicao(
     posicao = Posicao.objects.create(
         codigo=codigo,
         posicao=descricao,
+        categoria=categoria,
         rua=rua.strip(),
         predio=predio.strip(),
         nivel=nivel.strip(),
@@ -205,7 +226,7 @@ def editar_posicao_homologacao(
     status_anterior = posicao.status_homologacao
     alterados = {}
     aprovar = bool(dados.pop('aprovar', False))
-    for campo in ('codigo', 'posicao', 'rua', 'predio', 'nivel', 'apto', 'observacao_precadastro'):
+    for campo in ('codigo', 'posicao', 'rua', 'predio', 'nivel', 'apto', 'categoria', 'observacao_precadastro'):
         if campo not in dados:
             continue
         valor = dados[campo]

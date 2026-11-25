@@ -1,7 +1,9 @@
+import unicodedata
+
 from django import forms
 from django.core.validators import FileExtensionValidator
 from django.db.models import Value
-from django.db.models.functions import Lower, Replace, Trim
+from django.db.models.functions import Replace, Trim
 
 from produtos.models import Produto
 
@@ -13,16 +15,38 @@ def _embalagem_sem_branco(expressao='embalagem'):
     return Trim(expr)
 
 
+def chave_ordenacao_embalagem(valor):
+    """Chave de ordenação determinística, independente da collation do banco.
+
+    Normaliza apenas a chave (strip, Unicode e casefold); o valor original
+    exibido ao usuário não é alterado. Desempates garantem ordem total:
+    1) texto sem espaços nas pontas, sem acentos, em casefold;
+    2) mesmo texto com acentos (NFC), em casefold;
+    3) o valor original exato.
+    """
+    texto = unicodedata.normalize('NFC', valor.strip())
+    sem_acento = ''.join(
+        caractere
+        for caractere in unicodedata.normalize('NFKD', texto)
+        if not unicodedata.combining(caractere)
+    )
+    return (sem_acento.casefold(), texto.casefold(), valor)
+
+
 def listar_embalagens_distintas():
-    """Valores distintos já gravados em Produto.embalagem, sem vazio nem só espaços."""
-    return list(
+    """Valores distintos já gravados em Produto.embalagem, sem vazio nem só espaços.
+
+    A ordenação é feita em Python para não depender da collation do banco.
+    """
+    valores = (
         Produto.objects.exclude(embalagem__isnull=True)
         .annotate(_embalagem_util=_embalagem_sem_branco())
         .exclude(_embalagem_util='')
         .values_list('embalagem', flat=True)
+        .order_by()
         .distinct()
-        .order_by(Lower('embalagem'), 'embalagem')
     )
+    return sorted(valores, key=chave_ordenacao_embalagem)
 
 
 class EmbalagemCatalogoFormMixin:

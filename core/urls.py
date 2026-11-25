@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import include, path
 
 from core.pwa import manifest_pwa, service_worker_pwa
+from core.views_categoria import SelecionarCategoriaView
 from dashboard.views import DashboardClassicoView, HomeView
 from dashboard.views_operacional import DashboardOperacionalApiView
 from inventario.views import (
@@ -37,6 +38,7 @@ urlpatterns = [
     path('sw.js', service_worker_pwa, name='pwa_service_worker'),
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
+    path('categoria/selecionar/', SelecionarCategoriaView.as_view(), name='categoria_selecionar'),
     path('', HomeView.as_view(), name='home'),
     path('dashboard/classico/', DashboardClassicoView.as_view(), name='dashboard_classico'),
     path(

@@ -89,6 +89,8 @@ PREFIXOS_URL_PERMITIDOS_AUDITOR = (
     '/accounts/logout/',
     '/accounts/login/',
     '/static/',
+    # Troca da categoria da sessão (somente POST; não expõe dados).
+    '/categoria/selecionar/',
 )
 
 
@@ -106,6 +108,8 @@ PREFIXOS_URL_PERMITIDOS_OPERADOR = (
     '/accounts/login/',
     '/static/',
     '/admin/logout/',
+    # Troca da frente de inventário (somente POST; não expõe dados).
+    '/categoria/selecionar/',
 )
 
 

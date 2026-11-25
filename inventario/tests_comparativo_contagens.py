@@ -157,7 +157,7 @@ class ComparativoBaseTestCase(TestCase):
         self.pos_a = Posicao.objects.create(codigo='A-01-01', posicao='Rua A')
         self.pos_b = Posicao.objects.create(codigo='B-02-01', posicao='Rua B')
 
-        self.produto = Produto.objects.create(codigo_produto='00123', descricao='M-SUPER 1000', setor='A')
+        self.produto = Produto.objects.create(codigo_produto='00123', descricao='M-SUPER 1000', setor='LUBRIFICANTE')
         self.sap(self.produto, cosan='80', brida='20')
 
     def sap(self, produto, cosan='0', brida='0'):
@@ -277,10 +277,10 @@ class CanaisEColunasTestCase(ComparativoBaseTestCase):
 
 class ConsolidacaoTestCase(ComparativoBaseTestCase):
     def test_sku_exclusivo_de_cada_fonte(self):
-        so_sap = Produto.objects.create(codigo_produto='0001', descricao='Só SAP', setor='A')
+        so_sap = Produto.objects.create(codigo_produto='0001', descricao='Só SAP', setor='LUBRIFICANTE')
         self.sap(so_sap, cosan='5')
-        so_c1 = Produto.objects.create(codigo_produto='0002', descricao='Só C1', setor='A')
-        so_c2 = Produto.objects.create(codigo_produto='0003', descricao='Só C2', setor='A')
+        so_c1 = Produto.objects.create(codigo_produto='0002', descricao='Só C1', setor='LUBRIFICANTE')
+        so_c2 = Produto.objects.create(codigo_produto='0003', descricao='Só C2', setor='LUBRIFICANTE')
         self.item(self.inv1, self.pos_a, so_c1, '3', self.ana)
         self.item(self.inv2, self.pos_a, so_c2, '4', self.bruno)
         comparativo = self.criar_comparativo()
@@ -398,7 +398,7 @@ class ConsolidacaoTestCase(ComparativoBaseTestCase):
         self.assertEqual(legado.usuario_contagem_id, self.bruno.pk)
 
     def test_filtros_status_e_necessita_c3(self):
-        outro = Produto.objects.create(codigo_produto='0777', descricao='Outro óleo', setor='A')
+        outro = Produto.objects.create(codigo_produto='0777', descricao='Outro óleo', setor='LUBRIFICANTE')
         self.item(self.inv1, self.pos_a, self.produto, '8', self.ana)
         self.item(self.inv2, self.pos_a, self.produto, '10', self.bruno)
         self.item(self.inv1, self.pos_b, outro, '5', self.ana)
@@ -522,7 +522,7 @@ class AtualizacaoTestCase(ComparativoBaseTestCase):
 class ExcelTestCase(ComparativoBaseTestCase):
     def setUp(self):
         super().setUp()
-        perigoso = Produto.objects.create(codigo_produto='0042', descricao='=1+1', setor='A')
+        perigoso = Produto.objects.create(codigo_produto='0042', descricao='=1+1', setor='LUBRIFICANTE')
         self.sap(perigoso, cosan='3')
         self.item(self.inv1, self.pos_a, self.produto, '100', self.ana)
         self.item(self.inv2, self.pos_a, self.produto, '100', self.bruno)
@@ -574,7 +574,7 @@ class ExcelTestCase(ComparativoBaseTestCase):
         self.assertEqual(pasta['Lançamentos válidos'].max_row, 4)
 
     def test_aba_consolidado(self):
-        divergente = Produto.objects.create(codigo_produto='0099', descricao='Sem consenso', setor='A')
+        divergente = Produto.objects.create(codigo_produto='0099', descricao='Sem consenso', setor='LUBRIFICANTE')
         self.sap(divergente, cosan='1')
         self.item(self.inv1, self.pos_b, divergente, '1', self.ana)
         self.item(self.inv2, self.pos_b, divergente, '2', self.bruno)
@@ -604,7 +604,7 @@ class ExcelTestCase(ComparativoBaseTestCase):
         self.assertEqual(ausente[3].value, '—')
         self.assertEqual(ausente[6].value, 'nao consolidado')
         self.assertEqual(linha[2].number_format, '0')
-        decimal = Produto.objects.create(codigo_produto='0083', descricao='Com decimal', setor='A')
+        decimal = Produto.objects.create(codigo_produto='0083', descricao='Com decimal', setor='LUBRIFICANTE')
         self.sap(decimal, cosan='83.22')
         _resposta, pasta = self.exportar(canal='cosan')
         celula = next(r for r in pasta['Consolidado'].iter_rows(min_row=2) if r[0].value == '0083')[2]
@@ -645,20 +645,20 @@ class AcuracidadeTestCase(ComparativoBaseTestCase):
         self.item(self.inv1, self.pos_a, self.produto, '100', self.ana)
         self.item(self.inv2, self.pos_a, self.produto, '100', self.bruno)
         # 0200: SAP total 10 (COSAN 10); consenso 7 -> diferente do SAP.
-        p2 = Produto.objects.create(codigo_produto='0200', descricao='Dois', setor='A')
+        p2 = Produto.objects.create(codigo_produto='0200', descricao='Dois', setor='LUBRIFICANTE')
         self.sap(p2, cosan='10')
         self.item(self.inv1, self.pos_b, p2, '7', self.ana)
         self.item(self.inv2, self.pos_b, p2, '7', self.bruno)
         # 0300: sem consenso (8 x 9) -> fora do cálculo.
-        p3 = Produto.objects.create(codigo_produto='0300', descricao='Três', setor='A')
+        p3 = Produto.objects.create(codigo_produto='0300', descricao='Três', setor='LUBRIFICANTE')
         self.sap(p3, cosan='8')
         self.item(self.inv1, self.pos_b, p3, '8', self.ana)
         self.item(self.inv2, self.pos_b, p3, '9', self.bruno)
         # 0400: só no SAP, sem contagem -> fora do cálculo.
-        p4 = Produto.objects.create(codigo_produto='0400', descricao='Quatro', setor='A')
+        p4 = Produto.objects.create(codigo_produto='0400', descricao='Quatro', setor='LUBRIFICANTE')
         self.sap(p4, cosan='5')
         # 0500: contado zero e ausente no SAP -> acerto.
-        p5 = Produto.objects.create(codigo_produto='0500', descricao='Cinco', setor='A')
+        p5 = Produto.objects.create(codigo_produto='0500', descricao='Cinco', setor='LUBRIFICANTE')
         self.item(self.inv1, self.pos_a, p5, '0', self.ana)
         self.item(self.inv2, self.pos_a, p5, '0', self.bruno)
         self.comparativo = self.criar_comparativo()
@@ -769,7 +769,7 @@ class FinalizacaoTestCase(ComparativoBaseTestCase):
         self.client.post(self.url_finalizar)
         self.comparativo.refresh_from_db()
         # Depois de salvar: nova contagem, correção e mudança de nome do operador.
-        novo = Produto.objects.create(codigo_produto='0999', descricao='Novo', setor='A')
+        novo = Produto.objects.create(codigo_produto='0999', descricao='Novo', setor='LUBRIFICANTE')
         self.item(self.inv1, self.pos_b, novo, '4', self.ana)
         InventarioItem.objects.filter(inventario=self.inv2, produto=self.produto).update(quantidade_fisica=D('55'))
         depois = analisar(self.comparativo, canal='ambas', visao='sku', filtros=FiltrosComparativo())
@@ -965,7 +965,7 @@ class SapPorCanalTestCase(TestCase):
         self.pos = Posicao.objects.create(codigo='11', posicao='01.03.101')
         self.pos2 = Posicao.objects.create(codigo='12', posicao='01.03.102')
         self.p = {
-            codigo: Produto.objects.create(codigo_produto=codigo, descricao=f'Produto {codigo}', setor='A')
+            codigo: Produto.objects.create(codigo_produto=codigo, descricao=f'Produto {codigo}', setor='LUBRIFICANTE')
             for codigo in ('A', 'B', 'C', 'D', 'E')
         }
         importar_dados(
@@ -1077,7 +1077,7 @@ class SapPorCanalTestCase(TestCase):
 
     def test_nova_importacao_entra_auditada_e_preserva_anterior(self):
         anterior = self.comparativo.referencia_sap_id
-        novo = Produto.objects.create(codigo_produto='F', descricao='Novo', setor='A')
+        novo = Produto.objects.create(codigo_produto='F', descricao='Novo', setor='LUBRIFICANTE')
         importar_dados(
             [_linha_sap('A', cosan=10), _linha_sap('B', cosan=30, brida=5), _linha_sap('C', brida=7),
              _linha_sap('F', brida=3)],
@@ -1153,7 +1153,7 @@ class SapPorCanalTestCase(TestCase):
         self.assertEqual(sem_mudanca.status_code, 204)
         forcado = self.client.get(url + f'&versao={versao}&forcar=1')
         self.assertEqual(forcado.status_code, 200)
-        novo = Produto.objects.create(codigo_produto='G', descricao='Contado agora', setor='A')
+        novo = Produto.objects.create(codigo_produto='G', descricao='Contado agora', setor='LUBRIFICANTE')
         self.p['G'] = novo
         self.item(self.inv2, 'G', '2')
         depois = self.client.get(url + f'&versao={versao}')
@@ -1162,9 +1162,9 @@ class SapPorCanalTestCase(TestCase):
         self.assertIn('>G<', depois.content.decode())
 
     def test_inativo_e_outros_canais_excluidos_com_contagem(self):
-        inativo = Produto.objects.create(codigo_produto='H', descricao='Inativo', setor='A', ativo=False)
-        outro = Produto.objects.create(codigo_produto='J', descricao='Outro canal', setor='A')
-        sem_desc = Produto.objects.create(codigo_produto='0042', descricao='', setor='A')
+        inativo = Produto.objects.create(codigo_produto='H', descricao='Inativo', setor='LUBRIFICANTE', ativo=False)
+        outro = Produto.objects.create(codigo_produto='J', descricao='Outro canal', setor='LUBRIFICANTE')
+        sem_desc = Produto.objects.create(codigo_produto='0042', descricao='', setor='LUBRIFICANTE')
         importar_dados(
             [_linha_sap('A', cosan=10), _linha_sap('B', cosan=20, brida=5), _linha_sap('C', brida=7),
              _linha_sap('H', cosan=3), _linha_sap('J', outros={'canal_66': 9}), _linha_sap('0042', brida=1)],

@@ -227,8 +227,8 @@ def contar_visiveis_por_etapa(comparativo, liberacoes: dict) -> dict[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def _status_sku(quantidades: dict, associadas: frozenset) -> tuple[str, object]:
-    classificacao = classificar_contagens(quantidades, associadas)
+def _status_sku(quantidades: dict, associadas: frozenset, contagem_unica: bool = False) -> tuple[str, object]:
+    classificacao = classificar_contagens(quantidades, associadas, contagem_unica=contagem_unica)
     registradas = [e for e in ETAPAS if quantidades.get(e) is not None]
     if classificacao.status == StatusContagem.OK:
         if classificacao.pares_iguais == [(1, 2)] and 3 not in registradas:
@@ -315,7 +315,12 @@ class LinhaAuditor:
         return {e: (c if c['estado'] == 'valor' else None) for e, c in self.celulas.items()}
 
 
-def montar_linhas(lancamentos: list[Lancamento], associadas: frozenset, liberadas: set) -> list[LinhaAuditor]:
+def montar_linhas(
+    lancamentos: list[Lancamento],
+    associadas: frozenset,
+    liberadas: set,
+    contagem_unica: bool = False,
+) -> list[LinhaAuditor]:
     grupos: dict[tuple[int, str], list[Lancamento]] = {}
     for l in lancamentos:
         grupos.setdefault((l.posicao_id, l.sku), []).append(l)
@@ -323,7 +328,7 @@ def montar_linhas(lancamentos: list[Lancamento], associadas: frozenset, liberada
     for (posicao_id, sku), itens in grupos.items():
         por_etapa = {l.etapa: l for l in itens}
         quantidades = {e: (por_etapa[e].quantidade if e in por_etapa else None) for e in ETAPAS}
-        status, classificacao = _status_sku(quantidades, associadas)
+        status, classificacao = _status_sku(quantidades, associadas, contagem_unica)
         celulas = {}
         for e in ETAPAS:
             if e not in associadas:
@@ -605,7 +610,10 @@ def montar_painel(comparativo: ComparativoContagem, filtros: FiltrosAuditor | No
     publicacao = getattr(comparativo, 'publicacao_auditoria', None)
     horario_real = bool(publicacao and publicacao.mostrar_horario_real)
     lancamentos = carregar_lancamentos(comparativo, liberacoes, horario_real)
-    linhas = montar_linhas(lancamentos, associadas, liberadas)
+    linhas = montar_linhas(
+        lancamentos, associadas, liberadas,
+        contagem_unica=comparativo.quantidade_contagens == 1,
+    )
     filtradas = filtros.aplicar(linhas)
 
     compara = len(liberadas) >= 2

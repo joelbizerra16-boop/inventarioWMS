@@ -15,6 +15,7 @@ from django.utils.cache import add_never_cache_headers, patch_cache_control
 from django.views import View
 
 from accounts.services.perfil import usuario_e_auditor
+from core.categorias import alinhar_categoria_sessao, obter_categoria_sessao
 from inventario.services.auditor_painel import (
     STATUS_SKU,
     FiltrosAuditor,
@@ -59,12 +60,19 @@ class AuditorMixin(LoginRequiredMixin):
             return _negado(str(exc) or 'Acesso negado.')
 
     def conferencia(self, pk):
-        return obter_conferencia_auditor(self.request.user, pk, self.request.path)
+        comparativo = obter_conferencia_auditor(self.request.user, pk, self.request.path)
+        if self.request.method == 'GET':
+            alinhar_categoria_sessao(self.request, comparativo.categoria)
+        return comparativo
 
 
 class AuditorInicioView(AuditorMixin, View):
     def get(self, request):
-        conferencias = list(conferencias_do_auditor(request.user).order_by('-pk'))
+        conferencias = list(
+            conferencias_do_auditor(request.user)
+            .filter(categoria=obter_categoria_sessao(request))
+            .order_by('-pk')
+        )
         if len(conferencias) == 1:
             return redirect('auditor:painel', pk=conferencias[0].pk)
         return _privado(render(request, 'inventario/auditor/inicio.html', {'conferencias': conferencias}))
@@ -106,7 +114,9 @@ def _contexto(request, comparativo, previa=False):
         'status_opcoes': list(STATUS_SKU.items()),
         'aba': request.GET.get('aba') if request.GET.get('aba') in ('posicao', 'sku', 'historico') else 'posicao',
         'intervalo': INTERVALO_ATUALIZACAO_SEGUNDOS,
-        'conferencias': [] if previa else conferencias_do_auditor(request.user).order_by('-pk'),
+        'conferencias': [] if previa else conferencias_do_auditor(request.user).filter(
+            categoria=comparativo.categoria,
+        ).order_by('-pk'),
         'agora': timezone.localtime(),
         'logo_brida': logo_brida(),
         'previa': previa,

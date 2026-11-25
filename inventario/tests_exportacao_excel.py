@@ -46,7 +46,7 @@ class ExportacaoExcelTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto_zeros = Produto.objects.create(
             codigo_produto='00123',
             descricao='Parafuso',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='',
         )
         self.produto_outro = Produto.objects.create(
@@ -58,7 +58,7 @@ class ExportacaoExcelTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto_so_sap = Produto.objects.create(
             codigo_produto='00055',
             descricao='Arruela',
-            setor='B',
+            setor='Lubrificantes',
             embalagem='UN',
         )
         self.posicao_a = Posicao.objects.create(codigo='0007', posicao='RUA-01')

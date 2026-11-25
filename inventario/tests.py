@@ -46,19 +46,19 @@ class AprovacaoServiceTestCase(TestCase):
         self.produto_correto = Produto.objects.create(
             codigo_produto='P001',
             descricao='Produto Correto',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.produto_excesso = Produto.objects.create(
             codigo_produto='P002',
             descricao='Produto Excesso',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.produto_deficit = Produto.objects.create(
             codigo_produto='P003',
             descricao='Produto Déficit',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(
@@ -220,7 +220,7 @@ class ConfrontoResumoTestCase(TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='PX',
             descricao='Produto X',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(
@@ -251,7 +251,7 @@ class ConfrontoResumoTestCase(TestCase):
         self.assertEqual(resultado.resumo.produtos_deficit_fisico, 0)
         linha = resultado.linhas[0]
         self.assertEqual(linha.embalagem, 'Unidade')
-        self.assertEqual(linha.setor, 'A')
+        self.assertEqual(linha.setor, 'LUBRIFICANTE')
         self.assertEqual(linha.total_contabil, Decimal('10'))
 
 
@@ -281,7 +281,7 @@ class ConfrontoCanalTestCase(TestCase):
 
     def test_fisico10_cosan10_brida5(self):
         produto = Produto.objects.create(
-            codigo_produto='CN100', descricao='Canal Teste 1', setor='A', embalagem='Unidade',
+            codigo_produto='CN100', descricao='Canal Teste 1', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         self._contar(produto, Decimal('10'))
         EstoqueSAP.objects.create(
@@ -322,7 +322,7 @@ class ConfrontoCanalTestCase(TestCase):
 
     def test_fisico0_cosan53_brida0(self):
         produto = Produto.objects.create(
-            codigo_produto='CN101', descricao='Canal Teste 2', setor='A', embalagem='Unidade',
+            codigo_produto='CN101', descricao='Canal Teste 2', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         self._contar(produto, Decimal('0'))
         EstoqueSAP.objects.create(
@@ -348,7 +348,7 @@ class ConfrontoCanalTestCase(TestCase):
 
     def test_canal_none_preserva_comportamento_legado_do_sap_total(self):
         produto = Produto.objects.create(
-            codigo_produto='CN102', descricao='Legado', setor='A', embalagem='Unidade',
+            codigo_produto='CN102', descricao='Legado', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         self._contar(produto, Decimal('10'))
         EstoqueSAP.objects.create(
@@ -365,7 +365,7 @@ class ConfrontoCanalTestCase(TestCase):
 
     def test_produto_inativo_nao_participa_independente_do_canal(self):
         produto = Produto.objects.create(
-            codigo_produto='CN103', descricao='Inativo', setor='A', embalagem='Unidade',
+            codigo_produto='CN103', descricao='Inativo', setor='LUBRIFICANTE', embalagem='Unidade',
             ativo=False,
         )
         EstoqueSAP.objects.create(
@@ -398,7 +398,7 @@ class ConfrontoCanalViewTestCase(ClienteAutenticadoMixin, TestCase):
             status=Inventario.Status.FINALIZADO,
         )
         self.produto = Produto.objects.create(
-            codigo_produto='CNV100', descricao='Canal View', setor='A', embalagem='Unidade',
+            codigo_produto='CNV100', descricao='Canal View', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         InventarioItem.objects.create(
             inventario=self.inventario,
@@ -466,7 +466,7 @@ class AprovacaoViewTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='PV01',
             descricao='Produto View',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(
@@ -573,13 +573,13 @@ class ConsolidacaoServiceTestCase(TestCase):
         self.produto_a = Produto.objects.create(
             codigo_produto='CA001',
             descricao='Produto A',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.produto_b = Produto.objects.create(
             codigo_produto='CA002',
             descricao='Produto B',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao_1 = Posicao.objects.create(codigo='CP01', posicao='D-01')
@@ -887,7 +887,7 @@ class PublicacaoAoFinalizarTestCase(TestCase):
         return Produto.objects.create(
             codigo_produto=codigo,
             descricao=f'Produto {codigo}',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
 
@@ -1003,7 +1003,7 @@ class InventarioFinalizarViewTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='FIN01',
             descricao='Produto Finalizar',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(codigo='FIN01', posicao='F-01')
@@ -1046,7 +1046,7 @@ class ConsolidacaoViewTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='CV01',
             descricao='Produto View Consolidação',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(codigo='CV01', posicao='E-01')
@@ -1128,13 +1128,13 @@ class CiclicoServiceTestCase(TestCase):
         self.produto_a = Produto.objects.create(
             codigo_produto='CY001',
             descricao='Produto Cíclico A',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.produto_b = Produto.objects.create(
             codigo_produto='CY002',
             descricao='Produto Cíclico B',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(codigo='CY01', posicao='H-01')
@@ -1229,7 +1229,7 @@ class CiclicoViewTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='CYV01',
             descricao='Produto View Cíclico',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(codigo='CYV01', posicao='I-01')

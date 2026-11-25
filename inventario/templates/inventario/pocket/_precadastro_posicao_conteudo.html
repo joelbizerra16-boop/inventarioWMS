@@ -32,6 +32,15 @@
                     {{ form.posicao }}
                     {% if form.posicao.errors %}<div class="text-danger small">{{ form.posicao.errors }}</div>{% endif %}
                 </div>
+                {% if form.categoria %}
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" for="{{ form.categoria.id_for_label }}">{{ form.categoria.label }}</label>
+                    {{ form.categoria }}
+                    {% if form.categoria.errors %}<div class="text-danger small">{{ form.categoria.errors }}</div>{% endif %}
+                </div>
+                {% elif inventario %}
+                <p class="small text-muted mb-3" data-categoria-inventario="{{ inventario.categoria }}">Área de inventário: {{ inventario.categoria_rotulo }}</p>
+                {% endif %}
                 <button type="submit" class="btn btn-primary w-100 pocket-btn">Salvar posição</button>
             </form>
             {% if voltar_url %}

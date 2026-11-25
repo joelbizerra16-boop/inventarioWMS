@@ -6,7 +6,13 @@
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
     <div>
         <h1 class="h3 fw-semibold text-dark mb-1">Estoque SAP</h1>
-        <p class="text-muted mb-0">Estoque contábil importado do SAP Business One.</p>
+        <p class="text-muted mb-0">Estoque contábil importado do SAP Business One ·
+            {% if somente_sem_classificacao %}
+            <strong data-categoria-lista>Sem classificação</strong> · <a href="{% url 'estoque_sap:lista' %}">ver {{ categoria_atual_rotulo }}</a>
+            {% else %}
+            Categoria: <strong data-categoria-lista>{{ categoria_atual_rotulo }}</strong> · <a href="{% url 'estoque_sap:lista' %}?classificacao=sem">ver sem classificação</a>
+            {% endif %}
+        </p>
     </div>
     <a href="{% url 'estoque_sap:importar' %}" class="btn btn-primary">
         <i class="bi bi-file-earmark-excel me-1"></i>Importar Excel
@@ -26,6 +32,7 @@
                     placeholder="Código ou descrição do produto"
                     value="{{ termo_busca }}"
                 >
+                {% if filtro_classificacao %}<input type="hidden" name="classificacao" value="{{ filtro_classificacao }}">{% endif %}
             </div>
             <div class="col-md-2 d-grid">
                 <button type="submit" class="btn btn-outline-primary">
@@ -55,7 +62,7 @@
                     {% for estoque in estoques %}
                     <tr>
                         <td class="ps-4 fw-semibold">{{ estoque.produto.codigo_produto }}</td>
-                        <td>{{ estoque.produto.descricao }}</td>
+                        <td>{{ estoque.produto.descricao }}{% include 'includes/categoria_efetiva_badge.html' with efetiva=estoque.categoria_efetiva %}</td>
                         <td class="text-muted">
                             {% if estoque.produto.embalagem %}
                             {{ estoque.produto.embalagem }}

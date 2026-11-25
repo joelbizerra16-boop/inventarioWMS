@@ -17,6 +17,31 @@ from inventario.models import Inventario
 from posicoes.models import Posicao
 from posicoes.services.homologacao import HomologacaoPosicaoError, criar_precadastro_posicao
 from produtos.services.homologacao import HomologacaoError, criar_precadastro_produto
+from core.categorias import CATEGORIA_PADRAO, categoria_do_produto, obter_categoria_sessao
+from inventario.services.categoria import (
+    CategoriaError,
+    OrigemInclusao,
+    incluir_produto_sem_classificacao,
+    validar_produto_no_inventario,
+)
+
+
+def _vincular_precadastro_ao_inventario(inventario, produto, usuario) -> bool:
+    """Pré-cadastro feito dentro de um inventário é a inclusão explícita SÓ nele.
+
+    O produto pré-cadastrado nasce sem classificação (setor ``PRÉ-CADASTRO``) e
+    o setor não é alterado; a inclusão registra inventário, usuário, data e
+    origem. Não vale para nenhum outro inventário. Produto já existente de
+    outra categoria (ou em conflito) é recusado com mensagem clara.
+    Retorna True quando houve inclusão explícita.
+    """
+    if categoria_do_produto(produto) is None:
+        incluir_produto_sem_classificacao(
+            inventario, produto, usuario, origem=OrigemInclusao.POCKET_PRECADASTRO,
+        )
+        return True
+    validar_produto_no_inventario(inventario, produto)
+    return False
 
 
 def _equipamento_request(request) -> str:
@@ -116,7 +141,7 @@ class OperadorPrecadastroPosicaoView(RequerOperadorPocketMixin, View):
         return _render_precadastro_posicao(
             request,
             self.template_name,
-            PrecadastroPosicaoOperadorForm(initial={'codigo': codigo}),
+            PrecadastroPosicaoOperadorForm(initial={'codigo': codigo, 'categoria': obter_categoria_sessao(request)}),
             voltar_url=reverse(self.voltar_url_name),
             voltar_rotulo=self.voltar_rotulo,
         )
@@ -136,6 +161,7 @@ class OperadorPrecadastroPosicaoView(RequerOperadorPocketMixin, View):
                 usuario=_usuario_operacional(request),
                 origem='POCKET_OPERADOR',
                 equipamento=_equipamento_request(request),
+                categoria=form.cleaned_data['categoria'],
             )
         except HomologacaoPosicaoError as exc:
             form.add_error(None, str(exc))
@@ -143,7 +169,7 @@ class OperadorPrecadastroPosicaoView(RequerOperadorPocketMixin, View):
         return _render_precadastro_posicao(
             request,
             self.template_name,
-            PrecadastroPosicaoOperadorForm(),
+            PrecadastroPosicaoOperadorForm(initial={'categoria': obter_categoria_sessao(request)}),
             sucesso=True,
             **contexto_voltar,
         )
@@ -173,7 +199,7 @@ class PocketPrecadastroProdutoView(RequerNaoOperadorMixin, RequerEscritaInventar
                 'voltar_rotulo': 'Voltar à contagem',
             })
         try:
-            criar_precadastro_produto(
+            produto = criar_precadastro_produto(
                 codigo_produto=form.cleaned_data['codigo_produto'],
                 descricao=form.cleaned_data['descricao'],
                 codigo_ean=form.cleaned_data.get('codigo_ean', ''),
@@ -183,7 +209,8 @@ class PocketPrecadastroProdutoView(RequerNaoOperadorMixin, RequerEscritaInventar
                 origem='POCKET_GERAL',
                 equipamento=_equipamento_request(request),
             )
-        except HomologacaoError as exc:
+            incluido = _vincular_precadastro_ao_inventario(inventario, produto, _usuario_operacional(request))
+        except (HomologacaoError, CategoriaError) as exc:
             form.add_error(None, str(exc))
             return render(request, self.template_name, {
                 'inventario': inventario,
@@ -191,7 +218,15 @@ class PocketPrecadastroProdutoView(RequerNaoOperadorMixin, RequerEscritaInventar
                 'voltar_url': reverse('pocket:contagem', kwargs={'inventario_id': inventario.pk}),
                 'voltar_rotulo': 'Voltar à contagem',
             })
-        messages.success(request, 'Pré-cadastro de produto realizado. Continue a contagem.')
+        if incluido:
+            messages.success(
+                request,
+                f'Pré-cadastro de produto realizado. Produto {produto.codigo_produto} incluído '
+                f'somente neste inventário #{inventario.pk} ({inventario.categoria_rotulo}). '
+                'Continue a contagem.',
+            )
+        else:
+            messages.success(request, 'Pré-cadastro de produto realizado. Continue a contagem.')
         return redirect('pocket:contagem', inventario_id=inventario.pk)
 
 
@@ -225,6 +260,7 @@ class PocketPrecadastroPosicaoView(RequerNaoOperadorMixin, RequerEscritaInventar
                 usuario=_usuario_operacional(request),
                 origem='POCKET_GERAL',
                 equipamento=_equipamento_request(request),
+                categoria=inventario.categoria,
             )
         except HomologacaoPosicaoError as exc:
             form.add_error(None, str(exc))
@@ -273,6 +309,7 @@ class PocketCiclicoPrecadastroPosicaoView(RequerNaoOperadorMixin, RequerEscritaI
                 usuario=_usuario_operacional(request),
                 origem='POCKET_CICLICO',
                 equipamento=_equipamento_request(request),
+                categoria=CATEGORIA_PADRAO,
             )
         except HomologacaoPosicaoError as exc:
             form.add_error(None, str(exc))

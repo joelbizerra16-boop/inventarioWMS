@@ -5,6 +5,7 @@ from core.logging_auditoria import registrar_evento
 from inventario.models import Inventario, InventarioItem
 from inventario.models_operacional import InventarioAuditoriaEvento, InventarioLock, InventarioTarefa
 from inventario.services.auditoria_operacional import registrar_evento_operacional
+from inventario.services.categoria import CategoriaError, validar_contagem_na_categoria
 from inventario.services.locks import LockError, adquirir_lock, liberar_lock
 from inventario.services.tarefas import (
     atualizar_status_tarefa,
@@ -19,6 +20,10 @@ MENSAGEM_DUPLICADA = 'Produto já inventariado nesta posição.'
 
 class ContagemError(Exception):
     pass
+
+
+class ContagemCategoriaError(ContagemError):
+    """Produto ou posição fora da categoria gravada no inventário."""
 
 
 class ContagemDuplicadaError(ContagemError):
@@ -136,6 +141,27 @@ def salvar_contagem(
         inventario = Inventario.objects.select_for_update().get(pk=inventario_pk)
     except Inventario.DoesNotExist as exc:
         raise ContagemError(f'Inventário #{inventario_pk} não encontrado.') from exc
+
+    # Escopo de categoria validado no backend (web, Pocket e POST manual),
+    # antes de qualquer lock, tarefa ou gravação. Lançamento histórico que só
+    # tem a quantidade corrigida (mesmo produto e posição) é preservado.
+    # Compara com o que está gravado no banco: a instância recebida pode já ter
+    # sido alterada pelo ModelForm antes desta chamada.
+    gravado = None
+    if item_existente is not None and item_existente.pk:
+        gravado = InventarioItem.objects.filter(
+            pk=item_existente.pk,
+            inventario_id=inventario.pk,
+        ).values_list('produto_id', 'posicao_id').first()
+    mantem_produto_e_posicao = gravado is not None and gravado == (
+        getattr(produto, 'pk', None),
+        getattr(posicao, 'pk', None),
+    )
+    if not mantem_produto_e_posicao:
+        try:
+            validar_contagem_na_categoria(inventario, posicao, produto)
+        except CategoriaError as exc:
+            raise ContagemCategoriaError(str(exc)) from exc
 
     lock = None
     tarefa = None

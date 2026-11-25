@@ -94,6 +94,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'accounts.context_processors.perfil_operacional',
+                'core.context_processors.categoria_inventario',
             ],
         },
     },

@@ -22,13 +22,19 @@ from itertools import combinations
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Count, Max, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 
+from core.categorias import (
+    CATEGORIA_PADRAO,
+    normalizar_categoria,
+    rotulo_categoria,
+)
 from core.logging_auditoria import registrar_evento
 from estoque_fisico.models import EstoqueFisico
 from estoque_sap.models import EstoqueSAP
-from inventario.models import Inventario, InventarioItem
+from inventario.models import Inventario, InventarioItem, InventarioProdutoInclusao
+from inventario.services.categoria import q_produto_categoria_efetiva
 from inventario.models_operacional import InventarioTarefa
 from inventario.models_comparativo import (
     ComparativoAcuracidade,
@@ -182,15 +188,50 @@ class ClassificacaoContagens:
     valor_consenso: Decimal | None
 
 
+def _classificar_contagem_unica(
+    quantidades: dict[int, Decimal | None],
+    celulas: dict[int, str],
+) -> ClassificacaoContagens:
+    """Conferência de 1 contagem: C1 registrada é o resultado (sem dupla)."""
+    valor = quantidades.get(1)
+    if valor is None:
+        return ClassificacaoContagens(
+            status=StatusContagem.AGUARDANDO,
+            rotulo=StatusContagem.ROTULOS[StatusContagem.AGUARDANDO],
+            dupla='',
+            orientacao='Aguardando C1',
+            necessita_c3=False,
+            diferencas=[],
+            celulas=celulas,
+            pares_iguais=[],
+            valor_consenso=None,
+        )
+    celulas[1] = CELULA_OK
+    return ClassificacaoContagens(
+        status=StatusContagem.OK,
+        rotulo=StatusContagem.ROTULOS[StatusContagem.OK],
+        dupla='C1 (contagem única)',
+        orientacao='',
+        necessita_c3=False,
+        diferencas=[],
+        celulas=celulas,
+        pares_iguais=[],
+        valor_consenso=valor,
+    )
+
+
 def classificar_contagens(
     quantidades: dict[int, Decimal | None],
     ordens_associadas: set[int] | frozenset[int],
+    contagem_unica: bool = False,
 ) -> ClassificacaoContagens:
     registradas = {o: quantidades.get(o) for o in ORDENS if quantidades.get(o) is not None}
     celulas = {
         o: (CELULA_NEUTRA if o in registradas else CELULA_AUSENTE)
         for o in ORDENS
     }
+    if contagem_unica:
+        return _classificar_contagem_unica(quantidades, celulas)
     pares = [
         (a, b) for a, b in combinations(sorted(registradas), 2)
         if registradas[a] == registradas[b]
@@ -295,6 +336,7 @@ def classificar_sap(
     saldo: Decimal | None,
     contagens: ClassificacaoContagens,
     motivo_neutro: str = '',
+    contagem_unica: bool = False,
 ) -> ClassificacaoSAP:
     registradas = {o: quantidades.get(o) for o in ORDENS if quantidades.get(o) is not None}
     if motivo_neutro or saldo is None:
@@ -312,6 +354,25 @@ def classificar_sap(
             detalhe='',
             provisoria=False,
             coincidentes=[],
+        )
+
+    if contagem_unica:
+        # Conferência de 1 contagem: C1 comparada direto ao SAP.
+        valor = registradas.get(1)
+        if valor is None:
+            return ClassificacaoSAP(
+                status=StatusSAP.NEUTRO, rotulo='Sem contagens', detalhe='',
+                provisoria=False, coincidentes=[],
+            )
+        if valor == saldo:
+            return ClassificacaoSAP(
+                status=StatusSAP.OK, rotulo=StatusSAP.ROTULOS[StatusSAP.OK],
+                detalhe='C1 = SAP (contagem única)', provisoria=False, coincidentes=[1],
+            )
+        return ClassificacaoSAP(
+            status=StatusSAP.DIVERGENTE, rotulo=StatusSAP.ROTULOS[StatusSAP.DIVERGENTE],
+            detalhe=f'C1 − SAP: {formatar_diferenca(valor - saldo)}',
+            provisoria=False, coincidentes=[],
         )
 
     coincidentes = [o for o, valor in registradas.items() if valor == saldo]
@@ -507,9 +568,26 @@ def _registrar_evento(comparativo, usuario, acao: str, **dados) -> None:
     )
 
 
-def validar_inventarios(inventarios: dict[int, Inventario | None]) -> None:
+def validar_inventarios(
+    inventarios: dict[int, Inventario | None],
+    categoria: str | None = None,
+    quantidade_contagens: int | None = None,
+) -> None:
     if inventarios.get(1) is None:
         raise ComparativoError('Selecione o inventário da contagem C1.')
+    if quantidade_contagens == 1 and (inventarios.get(2) is not None or inventarios.get(3) is not None):
+        raise ComparativoError(
+            'Conferência de 1 contagem usa somente C1. Remova C2/C3 ou escolha 2 ou 3 contagens.'
+        )
+    if categoria:
+        # C1, C2 e C3 pertencem obrigatoriamente à categoria da conferência.
+        for ordem, inventario in sorted(inventarios.items()):
+            if inventario is not None and inventario.categoria != categoria:
+                raise ComparativoError(
+                    f'O inventário #{inventario.pk} ({inventario.categoria_rotulo}) não pode ser '
+                    f'associado como {rotulo_ordem(ordem)}: a conferência é de '
+                    f'{rotulo_categoria(categoria)}. C1, C2 e C3 devem ser da mesma categoria.'
+                )
     if inventarios.get(3) is not None and inventarios.get(2) is None:
         raise ComparativoError('Associe a C2 antes de associar a C3.')
     usados: dict[int, int] = {}
@@ -534,22 +612,34 @@ def salvar_comparativo(
     referencia_opcao: str,
     estado: str | None,
     usuario,
+    categoria: str | None = None,
+    quantidade_contagens: int | None = None,
 ) -> ComparativoContagem:
+    """Cria/edita a conferência. A categoria é gravada na criação e não muda.
+
+    ``categoria`` só é usada na criação (padrão: Lubrificantes); na edição vale
+    a categoria já gravada na conferência.
+    """
     nome = (nome or '').strip()
     if not nome:
         raise ComparativoError('Informe o nome da conferência.')
-    validar_inventarios(inventarios)
 
     novo = comparativo is None
     if novo:
         comparativo = ComparativoContagem(
             nome=nome,
+            categoria=normalizar_categoria(categoria) or CATEGORIA_PADRAO,
+            quantidade_contagens=quantidade_contagens or 2,
             usuario_criacao=usuario if getattr(usuario, 'is_authenticated', False) else None,
         )
     else:
         comparativo = ComparativoContagem.objects.select_for_update().get(pk=comparativo.pk)
         if comparativo.snapshot_resultado is not None:
             raise ComparativoError('Conferência salva e finalizada não pode ser alterada.')
+    quantidade_anterior = comparativo.quantidade_contagens
+    if quantidade_contagens in (1, 2, 3):
+        comparativo.quantidade_contagens = quantidade_contagens
+    validar_inventarios(inventarios, comparativo.categoria, comparativo.quantidade_contagens)
 
     referencia_anterior = comparativo.referencia_sap_id
     if referencia_opcao == OPCAO_NOVA_REFERENCIA:
@@ -581,6 +671,11 @@ def salvar_comparativo(
                 comparativo, usuario, 'ESTADO_ALTERADO',
                 antes=estado_anterior, depois=comparativo.estado,
             )
+    if not novo and quantidade_anterior != comparativo.quantidade_contagens:
+        _registrar_evento(
+            comparativo, usuario, 'QUANTIDADE_CONTAGENS_ALTERADA',
+            antes=quantidade_anterior, depois=comparativo.quantidade_contagens,
+        )
     if referencia_anterior != comparativo.referencia_sap_id:
         _registrar_evento(
             comparativo, usuario, 'REFERENCIA_SAP_ALTERADA',
@@ -908,7 +1003,18 @@ def carregar_dados(comparativo: ComparativoContagem) -> DadosComparativo:
                 chave for chave, campo in CAMPO_CANAL.items()
                 if campo in referencia.canais_carregados
             )
+        # A fotografia SAP é global; a análise usa somente os produtos da
+        # categoria da conferência (mais os sem classificação incluídos
+        # explicitamente em C1/C2/C3).
+        incluidos = InventarioProdutoInclusao.objects.filter(
+            inventario_id__in=list(ordem_por_inventario),
+        ).values('produto_id')
+        escopo_sap = (
+            q_produto_categoria_efetiva(comparativo.categoria, 'produto__')
+            | Q(produto_id__in=incluidos)
+        )
         for item in ReferenciaSAPItem.objects.filter(
+            escopo_sap,
             referencia_id=referencia.pk,
         ).values('produto_id', 'canal_1', 'canal_110'):
             cosan = Decimal(item['canal_110'])
@@ -1197,6 +1303,7 @@ def montar_linhas_sku(dados: DadosComparativo, canal: str) -> list[LinhaComparat
     canal = Canal.normalizar(canal)
     chave_saldo = Canal.chave_saldo(canal)
     associadas = dados.ordens_associadas
+    unica = getattr(dados.comparativo, 'quantidade_contagens', 2) == 1
 
     por_produto: dict[int, dict[int, list[Lancamento]]] = {}
     for lancamento in dados.lancamentos:
@@ -1218,7 +1325,7 @@ def montar_linhas_sku(dados: DadosComparativo, canal: str) -> list[LinhaComparat
             for o in ORDENS
         }
         quantidades = {o: medicoes[o].quantidade for o in ORDENS}
-        classificacao = classificar_contagens(quantidades, associadas)
+        classificacao = classificar_contagens(quantidades, associadas, contagem_unica=unica)
         _aplicar_celulas(medicoes, classificacao)
 
         posicoes_map: dict[int, PosicaoDetalhe] = {}
@@ -1237,7 +1344,7 @@ def montar_linhas_sku(dados: DadosComparativo, canal: str) -> list[LinhaComparat
 
         sap, presenca = dados.saldos(produto_id)
         saldo = sap[chave_saldo]
-        status_sap = classificar_sap(quantidades, saldo, classificacao, motivo)
+        status_sap = classificar_sap(quantidades, saldo, classificacao, motivo, contagem_unica=unica)
         presente_sap = produto_id in sap_selecionado
         if not motivo and not presente_sap and status_sap.status != StatusSAP.NEUTRO:
             status_sap.detalhe = ' · '.join(
@@ -1276,6 +1383,7 @@ def montar_linhas_posicao(dados: DadosComparativo) -> list[LinhaComparativo]:
     posição e por isso não participa desta visão.
     """
     associadas = dados.ordens_associadas
+    unica = getattr(dados.comparativo, 'quantidade_contagens', 2) == 1
     grupos: dict[tuple[int, int], dict[int, list[Lancamento]]] = {}
     for lancamento in dados.lancamentos:
         grupos.setdefault(
@@ -1291,7 +1399,7 @@ def montar_linhas_posicao(dados: DadosComparativo) -> list[LinhaComparativo]:
             for o in ORDENS
         }
         quantidades = {o: medicoes[o].quantidade for o in ORDENS}
-        classificacao = classificar_contagens(quantidades, associadas)
+        classificacao = classificar_contagens(quantidades, associadas, contagem_unica=unica)
         _aplicar_celulas(medicoes, classificacao)
         linhas.append(LinhaComparativo(
             chave=f'pos-{posicao_id}-{produto_id}',

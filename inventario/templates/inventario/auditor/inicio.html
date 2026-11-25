@@ -10,7 +10,7 @@
     {% for c in conferencias %}
     <a href="{% url 'auditor:painel' c.pk %}" class="aud-card aud-lista-item">
         <strong>{{ c.nome }}</strong>
-        <span>Conferência #{{ c.pk }} · abrir painel</span>
+        <span>Conferência #{{ c.pk }} · <span data-categoria-conferencia="{{ c.categoria }}">{{ c.categoria_rotulo }}</span> · abrir painel</span>
     </a>
     {% endfor %}
 </div>
