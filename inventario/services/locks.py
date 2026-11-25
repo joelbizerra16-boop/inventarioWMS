@@ -217,6 +217,19 @@ def adquirir_lock(
     session_key: str = '',
     ip: str | None = None,
 ) -> LockInfo:
+    if inventario is not None and tipo_inventario == InventarioLock.TipoInventario.GERAL:
+        # Lock só em posição (e produto, se informado) da categoria do inventário.
+        from inventario.services.categoria import (
+            CategoriaError,
+            validar_posicao_no_inventario,
+            validar_produto_no_inventario,
+        )
+
+        try:
+            validar_posicao_no_inventario(inventario, posicao)
+            validar_produto_no_inventario(inventario, produto)
+        except CategoriaError as exc:
+            raise LockError(str(exc)) from exc
     expirar_locks_abandonados(ip=ip)
     agora = timezone.now()
     expira = _calcular_expiracao(agora)

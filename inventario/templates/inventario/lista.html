@@ -6,7 +6,7 @@
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
     <div>
         <h1 class="h3 fw-semibold text-dark mb-1">Inventários</h1>
-        <p class="text-muted mb-0">Gerenciamento dos inventários físicos do sistema.</p>
+        <p class="text-muted mb-0">Gerenciamento dos inventários físicos do sistema · Categoria: <strong data-categoria-lista>{{ categoria_atual_rotulo }}</strong></p>
     </div>
     <a href="{% url 'inventario:criar' %}" class="btn btn-primary">
         <i class="bi bi-plus-lg me-1"></i>Novo Inventário
@@ -43,6 +43,7 @@
                 <thead class="table-light">
                     <tr>
                         <th class="ps-4">ID</th>
+                        <th>Frente</th>
                         <th>Data Criação</th>
                         <th>Usuário</th>
                         <th>Status</th>
@@ -54,6 +55,7 @@
                     {% for inventario in inventarios %}
                     <tr>
                         <td class="ps-4 fw-semibold">{{ inventario.pk }}</td>
+                        <td><span class="badge text-bg-light border fw-semibold" data-frente-inventario="{{ inventario.categoria }}">{{ inventario.categoria_rotulo }}</span></td>
                         <td>{{ inventario.data_criacao|date:"d/m/Y H:i" }}</td>
                         <td>{{ inventario.usuario.nome }}</td>
                         <td>
@@ -112,7 +114,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-5">
+                        <td colspan="7" class="text-center text-muted py-5">
                             Nenhum inventário encontrado.
                         </td>
                     </tr>

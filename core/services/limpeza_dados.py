@@ -25,6 +25,7 @@ from inventario.models import (
     InventarioLock,
     InventarioTarefa,
 )
+from inventario.models_comparativo import ComparativoContagem, ReferenciaSAP
 from movimentacoes.models import Movimentacao
 from posicoes.models import Posicao
 from posicoes.services.exclusao import CODIGO_POSICAO_SEM_POSICAO
@@ -93,6 +94,8 @@ def _querysets_ciclico() -> tuple[QuerySet, ...]:
 
 def _querysets_geral() -> tuple[QuerySet, ...]:
     return (
+        ComparativoContagem.objects.all(),
+        ReferenciaSAP.objects.all(),
         InventarioLock.objects.filter(tipo_inventario=InventarioLock.TipoInventario.GERAL),
         InventarioTarefa.objects.filter(tipo_inventario=InventarioTarefa.TipoInventario.GERAL),
         InventarioAuditoriaEvento.objects.filter(
@@ -126,13 +129,14 @@ def definir_grupos_limpeza() -> tuple[GrupoLimpeza, ...]:
             id='inventario_geral',
             titulo='Inventário geral',
             descricao=(
-                'Inventários, itens de contagem, locks, tarefas e auditoria operacional. '
-                'O cadastro de produtos não é alterado.'
+                'Inventários, itens de contagem, conferências do comparativo, '
+                'locks, tarefas e auditoria operacional. O cadastro de produtos não é alterado.'
             ),
             quantidade=_contar(*_querysets_geral()),
             detalhes=(
                 ('Inventários', Inventario.objects.count()),
                 ('Itens de contagem', InventarioItem.objects.count()),
+                ('Conferências / referências SAP', ComparativoContagem.objects.count() + ReferenciaSAP.objects.count()),
                 (
                     'Locks / tarefas / eventos',
                     InventarioLock.objects.filter(

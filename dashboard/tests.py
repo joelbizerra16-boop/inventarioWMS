@@ -43,13 +43,13 @@ class DashboardServiceTestCase(TestCase):
         produto_correto = Produto.objects.create(
             codigo_produto='D001',
             descricao='Produto Correto',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         produto_divergente = Produto.objects.create(
             codigo_produto='D002',
             descricao='Produto Divergente',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         posicao = Posicao.objects.create(codigo='DP01', posicao='F-01')
@@ -124,7 +124,7 @@ class DashboardServiceTestCase(TestCase):
         produto = Produto.objects.create(
             codigo_produto='D100',
             descricao='Produto 100',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         posicao = Posicao.objects.create(codigo='DP100', posicao='G-01')
@@ -225,13 +225,13 @@ class DashboardPlanejadoContadoTestCase(TestCase):
             status=Inventario.Status.EM_ANDAMENTO,
         )
         contado = Produto.objects.create(
-            codigo_produto='PLJP01', descricao='Contado', setor='A', embalagem='Unidade',
+            codigo_produto='PLJP01', descricao='Contado', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         pendente = Produto.objects.create(
-            codigo_produto='PLJP02', descricao='Pendente', setor='A', embalagem='Unidade',
+            codigo_produto='PLJP02', descricao='Pendente', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         inativo = Produto.objects.create(
-            codigo_produto='PLJP03', descricao='Inativo', setor='A', embalagem='Unidade',
+            codigo_produto='PLJP03', descricao='Inativo', setor='LUBRIFICANTE', embalagem='Unidade',
             ativo=False,
         )
         InventarioItem.objects.create(
@@ -267,7 +267,7 @@ class DashboardRankingContagemTestCase(TestCase):
 
         produtos = [
             Produto.objects.create(
-                codigo_produto=f'RKP{i}', descricao=f'Produto {i}', setor='A', embalagem='Unidade',
+                codigo_produto=f'RKP{i}', descricao=f'Produto {i}', setor='LUBRIFICANTE', embalagem='Unidade',
             )
             for i in range(4)
         ]
@@ -304,16 +304,16 @@ class DashboardMaioresDivergenciasTestCase(TestCase):
         inventario = Inventario.objects.create(usuario=usuario, status=Inventario.Status.FINALIZADO)
 
         correto = Produto.objects.create(
-            codigo_produto='DIVP01', descricao='Correto', setor='A', embalagem='Unidade',
+            codigo_produto='DIVP01', descricao='Correto', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         divergente_pequeno = Produto.objects.create(
-            codigo_produto='DIVP02', descricao='Divergente Pequeno', setor='A', embalagem='Unidade',
+            codigo_produto='DIVP02', descricao='Divergente Pequeno', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         divergente_grande = Produto.objects.create(
-            codigo_produto='DIVP03', descricao='Divergente Grande', setor='A', embalagem='Unidade',
+            codigo_produto='DIVP03', descricao='Divergente Grande', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         inativo = Produto.objects.create(
-            codigo_produto='DIVP04', descricao='Inativo', setor='A', embalagem='Unidade',
+            codigo_produto='DIVP04', descricao='Inativo', setor='LUBRIFICANTE', embalagem='Unidade',
             ativo=False,
         )
 
@@ -350,7 +350,7 @@ class DashboardCiclicoNaoInterfereTestCase(TestCase):
 
         limpar_estado_ciclico()
         produto = Produto.objects.create(
-            codigo_produto='CICDASH1', descricao='Produto Ciclo', setor='A', embalagem='Unidade',
+            codigo_produto='CICDASH1', descricao='Produto Ciclo', setor='LUBRIFICANTE', embalagem='Unidade',
         )
         posicao = Posicao.objects.create(codigo='CICDASH01', posicao='CD-01')
         EstoqueSAP.objects.create(produto=produto, total=D('10'), arquivo_origem='t.xlsx')
@@ -374,8 +374,10 @@ class DashboardViewTestCase(ClienteAutenticadoMixin, TestCase):
     def setUp(self):
         self.autenticar_cliente()
 
-    def test_home_exibe_dashboard(self):
-        response = self.client.get(reverse('home'))
+    def test_dashboard_classico_preservado(self):
+        # A tela inicial agora é o Painel geral do inventário; o dashboard
+        # anterior continua disponível em rota própria.
+        response = self.client.get(reverse('dashboard_classico'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Dashboard Operacional')
@@ -402,7 +404,7 @@ class DashboardCiclicoTestCase(TestCase):
         produto = Produto.objects.create(
             codigo_produto='DC01',
             descricao='Dashboard Cíclico',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         posicao = Posicao.objects.create(codigo='DC01', posicao='J-01')
@@ -468,7 +470,7 @@ class CicloOperacionalHomologacaoTestCase(TestCase):
         produto = Produto.objects.create(
             codigo_produto='PIL001',
             descricao='Produto Piloto',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         posicao = Posicao.objects.create(codigo='PIL01', posicao='P-01')

@@ -16,11 +16,20 @@ class OperacionalLoginPocketAjaxTestCase(TestCase):
             perfil=Usuario.Perfil.OPERADOR,
         )
 
-    def test_login_autenticado_com_referer_pocket_retorna_json_401(self):
+    def test_login_autenticado_com_referer_pocket_redireciona_html(self):
         self.client.force_login(self.user)
         response = self.client.get(
             reverse('accounts:login'),
             HTTP_REFERER='https://inventariowms.onrender.com/pocket/ciclico/',
+        )
+        self.assertRedirects(response, reverse('pocket:selecionar'))
+
+    def test_login_ajax_com_referer_pocket_retorna_json_401(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('accounts:login'),
+            HTTP_REFERER='https://inventariowms.onrender.com/pocket/ciclico/',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 401)
         self.assertIn('application/json', response['Content-Type'])

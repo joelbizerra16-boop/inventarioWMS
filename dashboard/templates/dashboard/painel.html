@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+{% load static comparativo_tags %}
+
+{% block title %}Painel geral do inventário | Sistema de Inventário{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/painel.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="pn">
+<header class="pn-cab">
+    <div class="pn-cab-titulo">
+        <h1 class="pn-h1">Painel geral do inventário</h1>
+        <form method="get" class="pn-analise" id="pnFormAnalise">
+            <label for="pnConferencia" class="pn-analise-rotulo">Análise</label>
+            <select name="conferencia" id="pnConferencia" class="form-select form-select-sm" data-pn-enviar>
+                {% for conf in conferencias %}
+                <option value="{{ conf.pk }}" {% if comparativo and conf.pk == comparativo.pk %}selected{% endif %}>
+                    {{ conf.nome }} · #{{ conf.pk }}{% if conf.data_finalizacao %} · finalizada{% endif %}
+                </option>
+                {% empty %}
+                <option value="">Nenhuma conferência cadastrada</option>
+                {% endfor %}
+            </select>
+            <input type="hidden" name="canal" value="{{ canal }}">
+            <noscript><button type="submit" class="btn btn-sm btn-primary">Abrir</button></noscript>
+        </form>
+    </div>
+    {% if comparativo %}
+    <div class="pn-cab-acoes">
+        <a href="{% url 'comparativo:acompanhamento' comparativo.pk %}?canal={{ canal }}&visao=sku" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-layout-three-columns me-1" aria-hidden="true"></i>Abrir comparativo
+        </a>
+        <a href="?conferencia={{ comparativo.pk }}&canal={{ canal }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Atualizar
+        </a>
+    </div>
+    {% endif %}
+</header>
+
+{% if not comparativo %}
+<section class="pn-card pn-vazio">
+    <i class="bi bi-clipboard-data" aria-hidden="true"></i>
+    <h2>Nenhuma conferência para analisar</h2>
+    <p>Crie uma conferência no Comparativo de contagens associando os inventários C1, C2 e C3 para alimentar este painel.</p>
+    <a href="{% url 'comparativo:criar' %}" class="btn btn-primary btn-sm">Nova conferência</a>
+</section>
+{% else %}
+<div class="pn-contexto">
+    <span class="pn-ctx-item">{{ painel.contagens_texto }}</span>
+    <span class="pn-ctx-divisor" aria-hidden="true"></span>
+    <nav class="pn-canais" aria-label="Canal SAP">
+        <span class="pn-ctx-rotulo">SAP:</span>
+        {% for valor, rotulo in canais %}
+        <a href="?conferencia={{ comparativo.pk }}&canal={{ valor }}" class="pn-canal{% if canal == valor %} ativo{% endif %}" {% if canal == valor %}aria-current="page"{% endif %}>{{ rotulo }}</a>
+        {% endfor %}
+        <span class="pn-ctx-nota">{% if canal == 'ambas' %}COSAN + BRIDA{% elif canal == 'cosan' %}canal 110{% else %}canal 1{% endif %}</span>
+    </nav>
+    <span class="pn-ctx-divisor" aria-hidden="true"></span>
+    <span class="pn-ctx-nota">Calculado em {{ painel.gerado_em|data_hora }} · {{ fuso_rotulo }}</span>
+    {% if painel.provisorio %}
+    <span class="pn-selo pn-selo-provisorio" title="A conferência ainda está em andamento: os números mudam conforme novas contagens.">Resultado provisório</span>
+    {% else %}
+    <span class="pn-selo pn-selo-final"><i class="bi bi-lock-fill" aria-hidden="true"></i> Resultado gravado</span>
+    {% endif %}
+</div>
+
+{% if painel.motivo_sap %}
+<div class="pn-aviso" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Comparação com SAP indisponível: {{ painel.motivo_sap }}.</div>
+{% endif %}
+
+<section class="pn-kpis" aria-label="Totais da conferência">
+    <div class="pn-card pn-kpi">
+        <span class="pn-kpi-icone pn-ic-azul"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
+        <div><strong>{{ painel.totais.skus }}</strong><span>SKUs no escopo</span></div>
+    </div>
+    <div class="pn-card pn-kpi">
+        <span class="pn-kpi-icone pn-ic-roxo"><i class="bi bi-geo-alt-fill" aria-hidden="true"></i></span>
+        <div><strong>{{ painel.totais.posicoes }}</strong><span>{{ painel.totais.posicoes_rotulo }}</span></div>
+    </div>
+    <div class="pn-card pn-kpi">
+        <span class="pn-kpi-icone pn-ic-verde"><i class="bi bi-people-fill" aria-hidden="true"></i></span>
+        <div><strong>{{ painel.totais.operadores }}</strong><span>Operadores com lançamentos</span></div>
+    </div>
+    <div class="pn-card pn-kpi">
+        <span class="pn-kpi-icone pn-ic-laranja"><i class="bi bi-file-earmark-text-fill" aria-hidden="true"></i></span>
+        <div><strong>{{ painel.totais.lancamentos }}</strong><span>Lançamentos válidos</span></div>
+    </div>
+</section>
+
+<section class="pn-grade pn-grade-indicadores">
+    <div class="pn-card pn-card-gauge">{% velocimetro painel.indicador_sku 'grande' %}</div>
+    <div class="pn-card pn-card-gauge">{% velocimetro painel.indicador_posicao 'grande' %}</div>
+    <div class="pn-card pn-situacao">
+        <h2 class="pn-titulo">Situação dos SKUs <i class="bi bi-info-circle" title="Cada SKU em uma única situação: confirmado (duas contagens iguais ao SAP), em divergência (contagens sem dupla igual, ou dupla diferente do SAP), aguardando (contado, ainda sem confirmação) ou sem contagem." aria-hidden="true"></i></h2>
+        <div class="pn-situacao-corpo">
+            <svg class="pn-rosca" viewBox="0 0 160 160" role="img" aria-label="Situação dos {{ painel.totais.skus }} SKUs no escopo">
+                <circle cx="80" cy="80" r="60" class="pn-rosca-fundo" />
+                {% for fatia in painel.situacao %}{% if fatia.quantidade %}
+                <circle cx="80" cy="80" r="60" class="pn-rosca-fatia pn-sit-{{ fatia.chave }}" stroke-dasharray="{{ fatia.dasharray }}" stroke-dashoffset="{{ fatia.dashoffset }}" transform="rotate(-90 80 80)" />
+                {% endif %}{% endfor %}
+                <text x="80" y="78" text-anchor="middle" class="pn-rosca-total">{{ painel.totais.skus }}</text>
+                <text x="80" y="96" text-anchor="middle" class="pn-rosca-rotulo">SKUs no escopo</text>
+            </svg>
+            <ul class="pn-legenda">
+                {% for fatia in painel.situacao %}
+                <li>
+                    <span class="pn-ponto pn-sit-{{ fatia.chave }}" aria-hidden="true"></span>
+                    <strong>{{ fatia.quantidade }}</strong> {{ fatia.rotulo }}
+                    <span class="pn-legenda-pct">({{ fatia.percentual|pct }})</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</section>
+
+<section class="pn-grade pn-grade-2">
+    <div class="pn-card">
+        <h2 class="pn-titulo">Evolução da conferência <i class="bi bi-info-circle" title="Acumulado a partir da data original de cada lançamento. Confirmação: momento da segunda contagem igual ao SAP." aria-hidden="true"></i></h2>
+        {% with ev=painel.evolucao %}
+        {% if ev.disponivel %}
+        <p class="pn-sub">SKUs acumulados {{ ev.granularidade }}{% if ev.sem_data %} · {{ ev.sem_data }} SKU(s) sem data registrada fora do gráfico{% endif %}</p>
+        <svg class="pn-linha" viewBox="0 0 560 190" role="img" aria-label="Evolução: {% for s in ev.series %}{{ s.rotulo }} {{ s.final }}{% if not forloop.last %}; {% endif %}{% endfor %}">
+            {% for t in ev.eixo_y %}
+            <line x1="{{ t.x1 }}" x2="{{ t.x2 }}" y1="{{ t.y }}" y2="{{ t.y }}" class="pn-grade-linha" />
+            <text x="34" y="{{ t.y }}" dy="3" text-anchor="end" class="pn-eixo">{{ t.texto }}</text>
+            {% endfor %}
+            {% for t in ev.eixo_x %}
+            <text x="{{ t.x }}" y="{{ t.y }}" text-anchor="middle" class="pn-eixo">{{ t.texto }}</text>
+            {% endfor %}
+            {% for s in ev.series %}
+            <path d="{{ s.area }}" class="pn-area pn-serie-{{ s.chave }}" />
+            <polyline points="{{ s.pontos }}" class="pn-traco pn-serie-{{ s.chave }}" />
+            <text x="{{ s.final_x }}" y="{{ s.final_y }}" class="pn-final pn-serie-{{ s.chave }}">{{ s.final }}</text>
+            {% endfor %}
+        </svg>
+        <ul class="pn-legenda pn-legenda-linha">
+            {% for s in ev.series %}<li><span class="pn-ponto pn-serie-{{ s.chave }}" aria-hidden="true"></span>{{ s.rotulo }}</li>{% endfor %}
+        </ul>
+        {% else %}
+        <p class="pn-semdados">Sem dados · {{ ev.motivo }}</p>
+        {% endif %}
+        {% endwith %}
+    </div>
+    <div class="pn-card">
+        <h2 class="pn-titulo">Avanço das contagens <i class="bi bi-info-circle" title="SKUs com a contagem registrada sobre os SKUs no escopo. C3 considera somente os itens em que C1 e C2 divergem." aria-hidden="true"></i></h2>
+        <ul class="pn-avanco">
+            {% for a in painel.avanco %}
+            <li class="pn-avanco-item">
+                <span class="pn-avanco-etapa">{{ a.rotulo }}</span>
+                <span class="pn-avanco-inv">{% if a.inventario_id %}#{{ a.inventario_id }}{% else %}não associada{% endif %}</span>
+                <div class="pn-barra" role="progressbar" aria-label="Avanço {{ a.rotulo }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ a.percentual|pct_css }}">
+                    <span class="pn-barra-valor pn-av-{{ a.rotulo|lower }}" style="width: {{ a.percentual|pct_css }}%"></span>
+                </div>
+                <span class="pn-avanco-num"><strong>{{ a.numerador }} / {{ a.denominador }}</strong><small>{{ a.percentual|pct }}</small></span>
+                {% if a.nota %}<p class="pn-avanco-nota">{{ a.nota }}{% if not a.denominador %} · nenhum item exige desempate{% endif %}</p>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</section>
+
+<section class="pn-grade pn-grade-2">
+    <div class="pn-card">
+        <div class="pn-titulo-linha">
+            <h2 class="pn-titulo">Ranking de atividade por etapa <i class="bi bi-info-circle" title="Lançamentos válidos por operador original em cada contagem." aria-hidden="true"></i></h2>
+            <span class="pn-sub">Total de lançamentos: <strong>{{ painel.total_lancamentos }}</strong></span>
+        </div>
+        {% if painel.ranking %}
+        <table class="pn-ranking">
+            <thead><tr><th>Operador</th><th>Etapa</th><th class="pn-col-barra">Lançamentos</th><th class="text-end"><span class="visually-hidden">Quantidade</span></th></tr></thead>
+            <tbody>
+                {% for r in painel.ranking %}
+                <tr>
+                    <td class="fw-semibold">{{ r.operador }}</td>
+                    <td><span class="pn-etapa pn-av-{{ r.etapa|lower }}">{{ r.etapa }}</span></td>
+                    <td class="pn-col-barra"><div class="pn-barra pn-barra-fina"><span class="pn-barra-valor pn-av-{{ r.etapa|lower }}" style="width: {{ r.largura|pct_css }}%"></span></div></td>
+                    <td class="text-end pn-num">{{ r.quantidade }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="pn-semdados">Sem dados · nenhum lançamento nas contagens associadas</p>
+        {% endif %}
+    </div>
+    <div class="pn-card">
+        <h2 class="pn-titulo">Cobertura das bases <i class="bi bi-info-circle" title="SKUs distintos do SAP selecionado e das contagens físicas. União = total de SKUs no escopo." aria-hidden="true"></i></h2>
+        <div class="pn-cobertura">
+            {% for b in painel.cobertura_barras %}
+            <div class="pn-cob pn-cob-{{ b.chave }}">
+                <div class="pn-cob-topo"><strong>{{ b.quantidade }}</strong><span>{{ b.rotulo }}</span><small>{{ b.percentual|pct }}</small></div>
+                <div class="pn-barra pn-barra-fina"><span class="pn-barra-valor" style="width: {{ b.percentual|pct_css }}%"></span></div>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="pn-sub">União: {{ painel.cobertura.total }} SKUs{% if painel.cobertura.sap_inativos_excluidos %} · {{ painel.cobertura.sap_inativos_excluidos }} inativo(s) fora do SAP{% endif %}{% if painel.cobertura.sap_fora_canais %} · {{ painel.cobertura.sap_fora_canais }} só em outros canais{% endif %}</p>
+    </div>
+</section>
+{% endif %}
+
+<section class="pn-card pn-divergencias" aria-labelledby="pnDivTitulo">
+    <div class="pn-titulo-linha">
+        <h2 class="pn-titulo" id="pnDivTitulo">Maiores Divergências do Inventário</h2>
+    </div>
+    <ul class="nav pn-abas" role="tablist">
+        {% if comparativo %}
+        <li class="nav-item" role="presentation"><button class="nav-link active" id="pn-aba-sap" data-bs-toggle="tab" data-bs-target="#pn-div-sap" type="button" role="tab" aria-controls="pn-div-sap" aria-selected="true">Contra SAP</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="pn-aba-contagens" data-bs-toggle="tab" data-bs-target="#pn-div-contagens" type="button" role="tab" aria-controls="pn-div-contagens" aria-selected="false">Entre contagens</button></li>
+        {% endif %}
+        <li class="nav-item" role="presentation"><button class="nav-link{% if not comparativo %} active{% endif %}" id="pn-aba-inventario" data-bs-toggle="tab" data-bs-target="#pn-div-inventario" type="button" role="tab" aria-controls="pn-div-inventario" aria-selected="{% if comparativo %}false{% else %}true{% endif %}">Último inventário finalizado</button></li>
+    </ul>
+    <div class="tab-content">
+        {% if comparativo %}
+        <div class="tab-pane fade show active" id="pn-div-sap" role="tabpanel" aria-labelledby="pn-aba-sap">
+            <p class="pn-sub">Top 10 SKUs com maior divergência absoluta · Físico = consenso das contagens (dupla coincidente) · Contábil = SAP {% if canal == 'ambas' %}COSAN + BRIDA{% elif canal == 'cosan' %}COSAN{% else %}BRIDA{% endif %}</p>
+            {% if painel.divergencias_sap %}
+            <div class="table-responsive">
+                <table class="table align-middle mb-0 pn-tabela">
+                    <thead><tr><th class="ps-3">#</th><th>Código</th><th>Produto</th><th class="text-end">Físico</th><th class="text-end">Contábil (SAP)</th><th class="text-end">Diferença</th><th>Status</th><th class="pe-3 text-end">Ação</th></tr></thead>
+                    <tbody>
+                        {% for d in painel.divergencias_sap %}
+                        <tr class="table-{{ d.status_classe }}">
+                            <td class="ps-3">{{ forloop.counter }}</td>
+                            <td class="fw-semibold">{{ d.codigo_produto }}</td>
+                            <td>{{ d.descricao }}</td>
+                            <td class="text-end pn-num">{{ d.fisico|qtd }}</td>
+                            <td class="text-end pn-num">{{ d.contabil|qtd }}</td>
+                            <td class="text-end pn-num fw-semibold">{% if d.diferenca > 0 %}+{% endif %}{{ d.diferenca|qtd }}</td>
+                            <td><span class="badge text-bg-{{ d.status_classe }}">{{ d.status_label }}</span></td>
+                            <td class="pe-3 text-end"><a class="btn btn-sm btn-outline-primary pn-btn-ver" href="{% url 'comparativo:acompanhamento' comparativo.pk %}?canal={{ canal }}&visao=sku&q={{ d.codigo_produto|urlencode }}"><i class="bi bi-bar-chart-line me-1" aria-hidden="true"></i>Ver comparativo</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="pn-semdados">{% if painel.motivo_sap %}Sem dados · {{ painel.motivo_sap }}{% else %}Nenhum SKU com consenso diferente do SAP.{% endif %}</p>
+            {% endif %}
+        </div>
+        <div class="tab-pane fade" id="pn-div-contagens" role="tabpanel" aria-labelledby="pn-aba-contagens">
+            <p class="pn-sub">Top 10 SKUs sem dupla de contagens iguais, pela maior diferença entre as contagens (não indica qual operador errou)</p>
+            {% if painel.divergencias_contagens %}
+            <div class="table-responsive">
+                <table class="table align-middle mb-0 pn-tabela">
+                    <thead><tr><th class="ps-3">#</th><th>Posição</th><th>Código</th><th>Produto</th><th class="text-end">C1</th><th class="text-end">C2</th><th class="text-end">C3</th><th class="text-end">Amplitude</th><th>Situação</th><th class="pe-3 text-end">Ação</th></tr></thead>
+                    <tbody>
+                        {% for d in painel.divergencias_contagens %}
+                        <tr class="table-danger">
+                            <td class="ps-3">{{ forloop.counter }}</td>
+                            <td>{{ d.posicoes }}</td>
+                            <td class="fw-semibold">{{ d.codigo_produto }}</td>
+                            <td>{{ d.descricao }}</td>
+                            <td class="text-end pn-num">{{ d.quantidades|item:1|qtd }}</td>
+                            <td class="text-end pn-num">{{ d.quantidades|item:2|qtd }}</td>
+                            <td class="text-end pn-num">{{ d.quantidades|item:3|qtd }}</td>
+                            <td class="text-end pn-num fw-semibold">{{ d.amplitude|qtd }}</td>
+                            <td><span class="pn-situacao-pill">{{ d.situacao }}</span></td>
+                            <td class="pe-3 text-end"><a class="btn btn-sm btn-outline-primary pn-btn-ver" href="{% url 'comparativo:acompanhamento' comparativo.pk %}?canal={{ canal }}&visao=sku&q={{ d.codigo_produto|urlencode }}"><i class="bi bi-bar-chart-line me-1" aria-hidden="true"></i>Ver comparativo</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="pn-semdados">Nenhum SKU com contagens divergentes.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+        <div class="tab-pane fade{% if not comparativo %} show active{% endif %}" id="pn-div-inventario" role="tabpanel" aria-labelledby="pn-aba-inventario">
+            <p class="pn-sub">Top 10 produtos com maior divergência absoluta (Geral){% if painel.inventario_divergencias %} · inventário #{{ painel.inventario_divergencias.pk }}{% endif %}</p>
+            {% if painel.divergencias_inventario %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 pn-tabela">
+                    <thead><tr><th class="ps-3">#</th><th>Código</th><th>Produto</th><th>Físico</th><th>Contábil (SAP)</th><th>Diferença</th><th class="pe-3">Status</th></tr></thead>
+                    <tbody>
+                        {% for linha in painel.divergencias_inventario %}
+                        <tr class="table-{{ linha.status_classe }}">
+                            <td class="ps-3">{{ forloop.counter }}</td>
+                            <td class="fw-semibold">{{ linha.codigo_produto }}</td>
+                            <td>{{ linha.descricao }}</td>
+                            <td>{{ linha.fisico }}</td>
+                            <td>{{ linha.total_contabil }}</td>
+                            <td class="fw-semibold">{{ linha.diferenca }}</td>
+                            <td class="pe-3"><span class="badge text-bg-{{ linha.status_classe }}">{{ linha.status_label }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="pn-semdados">{% if painel.inventario_divergencias %}Nenhuma divergência no último inventário finalizado.{% else %}Nenhum inventário finalizado para análise de divergências.{% endif %}</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<p class="pn-rodape">Os indicadores não ajustam estoque nem alteram contagens. <a href="{% url 'dashboard_classico' %}">Dashboard anterior</a></p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/painel.js' %}"></script>
+{% endblock %}

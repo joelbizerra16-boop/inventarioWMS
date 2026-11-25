@@ -1,0 +1,35 @@
+{% load comparativo_tags l10n %}
+<div class="aud-regiao" data-aud-regiao="indicadores" data-aud-versao="{{ painel.versao }}">
+    {% if not painel.escopo.completo %}
+    <div class="aud-selos">
+        {% if not painel.escopo.completo %}
+        <span class="aud-selo-info"><i class="bi bi-funnel" aria-hidden="true"></i> Abrangência: números de {{ painel.escopo.rotulo }}; {{ painel.escopo.rotulo_privadas }} não {% if painel.escopo.privadas|length > 1 %}liberadas{% else %}liberada{% endif %}</span>
+        {% endif %}
+
+    </div>
+    {% endif %}
+
+    <div class="aud-cartoes">
+        {% include 'inventario/auditor/_velocimetro.html' with ind=painel.indicador titulo='Concordância das contagens' unidade='itens (posição + SKU)' id='audIndTitulo' %}
+
+        <section class="aud-card aud-cartao" aria-labelledby="audItensTit">
+            <div class="aud-cartao-topo">
+                <h2 class="aud-cartao-titulo" id="audItensTit">Itens contados</h2>
+                <span class="aud-cartao-icone" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+            </div>
+            <p class="aud-cartao-valor">{{ painel.cards.itens }}</p>
+            <p class="aud-cartao-sub">Posição + SKU · {{ painel.cards.skus }} SKU{{ painel.cards.skus|pluralize }} · {{ painel.cards.posicoes }} posiç{{ painel.cards.posicoes|pluralize:"ão,ões" }}</p>
+        </section>
+
+        {% include 'inventario/auditor/_velocimetro.html' with ind=painel.indicador_posicoes titulo='Posições contadas' unidade='posições com consenso' id='audPosTit' %}
+
+        <section class="aud-card aud-cartao aud-cartao-alerta" aria-labelledby="audDivTit">
+            <div class="aud-cartao-topo">
+                <h2 class="aud-cartao-titulo" id="audDivTit">Itens com divergência</h2>
+                <span class="aud-cartao-icone" aria-hidden="true"><i class="bi bi-exclamation-triangle"></i></span>
+            </div>
+            <p class="aud-cartao-valor">{{ painel.cards.divergentes|default_if_none:"—" }}</p>
+            <p class="aud-cartao-sub">{% if painel.cards.divergentes is None %}Sem dados suficientes para comparar{% elif painel.cards.divergentes %}Aguardando nova contagem{% else %}Nenhuma divergência pendente{% endif %}</p>
+        </section>
+    </div>
+</div>

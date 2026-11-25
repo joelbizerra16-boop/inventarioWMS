@@ -73,9 +73,12 @@ class InventarioDeleteViewExclusaoTestCase(ClienteAutenticadoMixin, TestCase):
             inventario_origem=self.inventario,
         )
 
-    def test_excluir_inventario_vinculado_exibe_mensagem_amigavel(self):
+    def test_excluir_inventario_desvincula_estoque_fisico_e_apaga(self):
+        estoque_id = EstoqueFisico.objects.get(inventario_origem=self.inventario).pk
         url = reverse('inventario:excluir', args=[self.inventario.pk])
         response = self.client.post(url)
 
         self.assertRedirects(response, reverse('inventario:lista'))
-        self.assertTrue(Inventario.objects.filter(pk=self.inventario.pk).exists())
+        self.assertFalse(Inventario.objects.filter(pk=self.inventario.pk).exists())
+        estoque = EstoqueFisico.objects.get(pk=estoque_id)
+        self.assertIsNone(estoque.inventario_origem_id)

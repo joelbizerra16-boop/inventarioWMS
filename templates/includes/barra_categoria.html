@@ -1,0 +1,18 @@
+{% if user.is_authenticated %}
+<nav class="barra-categoria border-bottom bg-white px-4 py-2" aria-label="Frente de inventário" id="barraCategoria" data-categoria-atual="{{ categoria_atual }}">
+    <form method="post" action="{% url 'categoria_selecionar' %}" class="d-flex flex-wrap align-items-center gap-2 mb-0">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <span class="small fw-semibold text-muted me-1">Frente de inventário:</span>
+        <div class="btn-group" role="group" aria-label="Lubrificantes, Filtros ou Agregados">
+            {% for opcao in categorias_opcoes %}
+            <button type="submit" name="categoria" value="{{ opcao.valor }}"
+                class="btn btn-sm {% if opcao.valor == categoria_atual %}btn-primary active fw-semibold{% else %}btn-outline-primary{% endif %}"
+                aria-pressed="{% if opcao.valor == categoria_atual %}true{% else %}false{% endif %}"
+                {% if opcao.valor == categoria_atual %}aria-current="true"{% endif %}
+                data-categoria-opcao="{{ opcao.valor }}">{{ opcao.rotulo }}</button>
+            {% endfor %}
+        </div>
+    </form>
+</nav>
+{% endif %}

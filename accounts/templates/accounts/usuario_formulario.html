@@ -44,6 +44,16 @@
                     {{ form.confirmar_senha }}
                     {% if form.confirmar_senha.errors %}<div class="text-danger small">{{ form.confirmar_senha.errors|join:', ' }}</div>{% endif %}
                 </div>
+                <div class="col-12" id="campoConferenciasAuditor">
+                    <label class="form-label fw-semibold">{{ form.conferencias_auditor.label }}</label>
+                    <div class="border rounded p-2 bg-light" style="max-height: 240px; overflow: auto">
+                        {% for opcao in form.conferencias_auditor %}
+                        <div class="form-check">{{ opcao.tag }} <label class="form-check-label" for="{{ opcao.id_for_label }}">{{ opcao.choice_label }}</label></div>
+                        {% empty %}<p class="text-muted small mb-0">Nenhuma conferência cadastrada em Comparativo de contagens.</p>{% endfor %}
+                    </div>
+                    <div class="form-text">{{ form.conferencias_auditor.help_text }}</div>
+                    {% if form.conferencias_auditor.errors %}<div class="text-danger small">{{ form.conferencias_auditor.errors|join:', ' }}</div>{% endif %}
+                </div>
                 <div class="col-12">
                     <div class="form-check">
                         {{ form.ativo }}
@@ -58,4 +68,18 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var perfil = document.getElementById('{{ form.perfil.id_for_label }}');
+    var campo = document.getElementById('campoConferenciasAuditor');
+    if (!perfil || !campo) { return; }
+    function atualizar() { campo.hidden = perfil.value !== 'AUDITOR'; }
+    perfil.addEventListener('change', atualizar);
+    atualizar();
+}());
+</script>
 {% endblock %}

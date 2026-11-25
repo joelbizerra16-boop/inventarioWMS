@@ -90,13 +90,19 @@ def _produtividade_tarefas(tarefas_qs) -> list[ProdutividadeOperador]:
     return resultado
 
 
-def obter_indicadores_geral(inventario_id: int | None = None) -> IndicadoresOperacionais:
+def obter_indicadores_geral(
+    inventario_id: int | None = None,
+    categoria: str | None = None,
+) -> IndicadoresOperacionais:
+    """Indicadores do inventário geral; sem inventário, restritos à categoria."""
     inventario = None
     if inventario_id:
         inventario = Inventario.objects.filter(pk=inventario_id).first()
+    filtro_categoria = {} if inventario or not categoria else {'inventario__categoria': categoria}
 
     tarefas_qs = InventarioTarefa.objects.filter(
         tipo_inventario=InventarioTarefa.TipoInventario.GERAL,
+        **filtro_categoria,
     )
     if inventario:
         tarefas_qs = tarefas_qs.filter(inventario=inventario)
@@ -115,7 +121,7 @@ def obter_indicadores_geral(inventario_id: int | None = None) -> IndicadoresOper
         ).count()
         produtividade = _produtividade_tarefas(tarefas_qs)
     else:
-        itens = InventarioItem.objects.all()
+        itens = InventarioItem.objects.filter(**filtro_categoria)
         if inventario:
             itens = itens.filter(inventario=inventario)
         total = itens.values('posicao_id').distinct().count()
@@ -127,6 +133,7 @@ def obter_indicadores_geral(inventario_id: int | None = None) -> IndicadoresOper
             inventario=inventario,
         ).count() if inventario else InventarioLock.objects.filter(
             ativo=True, tipo_inventario=InventarioLock.TipoInventario.GERAL,
+            **filtro_categoria,
         ).count()
         divergentes = 0
         finalizadas = contadas if inventario and inventario.status == Inventario.Status.FINALIZADO else 0
@@ -135,6 +142,7 @@ def obter_indicadores_geral(inventario_id: int | None = None) -> IndicadoresOper
     locks = InventarioLock.objects.filter(
         ativo=True,
         tipo_inventario=InventarioLock.TipoInventario.GERAL,
+        **filtro_categoria,
     )
     if inventario:
         locks = locks.filter(inventario=inventario)

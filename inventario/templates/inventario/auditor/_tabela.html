@@ -1,0 +1,96 @@
+{% load comparativo_tags %}
+<div class="aud-regiao" data-aud-regiao="tabela">
+    <div class="aud-painel{% if aba != 'posicao' %} d-none{% endif %}" data-aud-painel="posicao" role="tabpanel" aria-label="Por posição">
+        {% if linhas_pagina.object_list %}
+        <div class="aud-rolagem">
+            <table class="table aud-tabela mb-0">
+                <thead><tr><th scope="col">Posição</th><th scope="col">SKU</th><th scope="col" class="aud-col-desc">Descrição</th>{% for e in "123" %}{% with cab=painel.cabecalhos|item:forloop.counter %}<th scope="col" class="aud-th-contagem">{{ cab.rotulo }}<span class="aud-th-sub">{{ cab.detalhe }}</span></th>{% endwith %}{% endfor %}<th scope="col" class="aud-th-status">Status</th></tr></thead>
+                <tbody>
+                {% for l in linhas_pagina.object_list %}
+                <tr data-aud-linha="pos-{{ l.chave }}">
+                    <td class="aud-col-pos">{{ l.posicao }}</td>
+                    <td class="fw-semibold">{{ l.sku }}</td>
+                    <td class="aud-col-desc">{{ l.descricao }}</td>
+                    {% for e in "123" %}{% with c=l.celulas|item:forloop.counter %}
+                    <td class="aud-cel aud-tom-{{ c.tom }}">
+                        {% if c.estado == 'valor' %}
+                        <button type="button" class="aud-cel-btn" data-aud-detalhe
+                                data-titulo="Contagem {{ forloop.counter }} · {{ l.sku }}"
+                                data-posicao="{{ l.posicao }}" data-sku="{{ l.sku }}" data-descricao="{{ l.descricao }}"
+                                data-contagem="C{{ forloop.counter }}" data-quantidade="{{ c.texto }}" data-situacao="{{ c.tom_rotulo }}"
+                                data-operador="{{ c.operador }}" data-disponibilizado="{{ c.disponibilizado_em|data_hora }}"
+                                data-liberado="{% with cab=painel.cabecalhos|item:forloop.counter %}{{ cab.detalhe }}{% endwith %}"
+                                data-registrado="{% if c.registrado_em %}{{ c.registrado_em|data_hora }}{% else %}Horário da coleta não liberado pela gestão{% endif %}"
+                                {% if c.corrigido %}data-corrigido="{{ c.corrigido_por|default:'Não registrado' }}{% if c.corrigido_em %} em {{ c.corrigido_em|data_hora }}{% endif %}"{% endif %}
+                                title="{{ c.tom_rotulo }} · ver detalhes"
+                                aria-label="Contagem {{ forloop.counter }}, {{ l.sku }} em {{ l.posicao }}: {{ c.texto }}. {{ c.tom_rotulo }}. Ver detalhes">
+                            <span class="aud-cel-num">{{ c.texto }}</span><i class="bi {{ c.icone }} aud-cel-icone" aria-hidden="true"></i>
+                        </button>
+                        {% else %}
+                        <span class="aud-cel-estado" title="{{ c.tom_rotulo }}">{% if c.icone %}<i class="bi {{ c.icone }}" aria-hidden="true"></i>{% endif %}{{ c.texto }}</span>
+                        {% endif %}
+                    </td>
+                    {% endwith %}{% endfor %}
+                    <td class="aud-col-status"><span class="aud-status aud-status-{{ l.situacao }}" title="{% if l.situacao == 'coincidente' %}Coincidente: quantidade correta{% else %}{{ l.situacao_rotulo }}{% endif %}"><i class="bi {% if l.situacao == 'coincidente' %}bi-check-circle-fill{% elif l.situacao == 'divergente' %}bi-exclamation-circle-fill{% else %}bi-record-circle-fill{% endif %} " aria-hidden="true"></i>{{ l.situacao_rotulo }}</span>{% if l.situacao == 'coincidente' %}<span class="visually-hidden"> (coincidente)</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'inventario/auditor/_paginacao.html' with pagina=linhas_pagina param='pp' aba_destino='posicao' %}
+        {% else %}<p class="aud-semdados">Nenhum registro disponibilizado para os filtros atuais.</p>{% endif %}
+    </div>
+
+    <div class="aud-painel{% if aba != 'sku' %} d-none{% endif %}" data-aud-painel="sku" role="tabpanel" aria-label="Por SKU">
+        {% if skus_pagina.object_list %}
+        <div class="aud-rolagem">
+            <table class="table aud-tabela mb-0">
+                <thead><tr><th scope="col">SKU</th><th scope="col" class="aud-col-desc">Descrição</th>{% for e in "123" %}{% with cab=painel.cabecalhos|item:forloop.counter %}<th scope="col" class="aud-th-contagem">{{ cab.rotulo }}<span class="aud-th-sub">{{ cab.detalhe }}</span></th>{% endwith %}{% endfor %}<th scope="col" class="aud-th-status">Status</th></tr></thead>
+                <tbody>
+                {% for s in skus_pagina.object_list %}
+                <tr data-aud-linha="sku-{{ s.chave }}">
+                    <td class="fw-semibold">{{ s.sku }}</td>
+                    <td class="aud-col-desc">{{ s.descricao }}</td>
+                    {% for e in "123" %}{% with c=s.celulas|item:forloop.counter %}
+                    <td class="aud-cel aud-tom-{{ c.tom }}">
+                        {% if c.estado == 'valor' %}
+                        <button type="button" class="aud-cel-btn" data-aud-detalhe
+                                data-titulo="Contagem {{ forloop.counter }} · {{ s.sku }} (todas as posições)"
+                                data-sku="{{ s.sku }}" data-descricao="{{ s.descricao }}" data-contagem="C{{ forloop.counter }}"
+                                data-quantidade="{{ c.texto }}" data-situacao="{{ c.tom_rotulo }}"
+                                data-posicao="{{ c.posicoes }} de {{ s.posicoes }} posição(ões) com registro"
+                                title="{{ c.tom_rotulo }} · ver detalhes"
+                                aria-label="Contagem {{ forloop.counter }}, {{ s.sku }}: total {{ c.texto }} em {{ c.posicoes }} de {{ s.posicoes }} posições. {{ c.tom_rotulo }}. Ver detalhes">
+                            <span class="aud-cel-num">{{ c.texto }}</span><i class="bi {{ c.icone }} aud-cel-icone" aria-hidden="true"></i>
+                        </button>
+                        {% if c.parcial or c.divergentes %}<span class="aud-sub d-block">{{ c.tom_rotulo }}</span>{% endif %}
+                        {% else %}
+                        <span class="aud-cel-estado" title="{{ c.tom_rotulo }}">{% if c.icone %}<i class="bi {{ c.icone }}" aria-hidden="true"></i>{% endif %}{{ c.texto }}</span>
+                        {% endif %}
+                    </td>
+                    {% endwith %}{% endfor %}
+                    <td class="aud-col-status"><span class="aud-status aud-status-{{ s.situacao }}" title="{% if s.situacao == 'coincidente' %}Coincidente em todas as posições: quantidade correta{% else %}{{ s.situacao_rotulo }}{% endif %}"><i class="bi {% if s.situacao == 'coincidente' %}bi-check-circle-fill{% elif s.situacao == 'divergente' %}bi-exclamation-circle-fill{% else %}bi-record-circle-fill{% endif %} " aria-hidden="true"></i>{{ s.situacao_rotulo }}</span>{% if s.situacao == 'coincidente' %}<span class="visually-hidden"> (coincidente)</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include 'inventario/auditor/_paginacao.html' with pagina=skus_pagina param='ps' aba_destino='sku' %}
+        {% else %}<p class="aud-semdados">Nenhum SKU para os filtros atuais.</p>{% endif %}
+    </div>
+
+    <div class="aud-painel{% if aba != 'historico' %} d-none{% endif %}" data-aud-painel="historico" role="tabpanel" aria-label="Histórico">
+        {% if historico_pagina.object_list %}
+        <ol class="aud-timeline">
+            {% for ev in historico_pagina.object_list %}
+            <li class="aud-ev aud-ev-{{ ev.tipo }}">
+                <span class="aud-ev-hora">{{ ev.data_hora|data_hora }}</span>
+                <div><strong>{{ ev.titulo }}</strong>{% if ev.detalhe %} <span>· {{ ev.detalhe }}</span>{% endif %}
+                    <div class="aud-sub">{{ ev.usuario }}{% if ev.nota %} · {{ ev.nota }}{% endif %}</div></div>
+            </li>
+            {% endfor %}
+        </ol>
+        {% include 'inventario/auditor/_paginacao.html' with pagina=historico_pagina param='ph' aba_destino='historico' %}
+        {% else %}<p class="aud-semdados">Sem atividades disponibilizadas.</p>{% endif %}
+    </div>
+</div>

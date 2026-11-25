@@ -36,7 +36,9 @@ class EstoqueFisicoListView(
         context['somente_positivo'] = somente_positivo
         context['setores'] = obter_setores_disponiveis()
         context['termo_busca'] = termo_busca
-        context['info_publicacao'] = obter_info_publicacao()
+        from core.categorias import obter_categoria_sessao
+
+        context['info_publicacao'] = obter_info_publicacao(obter_categoria_sessao(self.request))
         return context
 
 

@@ -42,6 +42,7 @@ CSRF_TRUSTED_ORIGINS = [
     for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
     if origin.strip()
 ]
+CSRF_FAILURE_VIEW = 'accounts.login_http.csrf_failure'
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -71,6 +72,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'accounts.middleware.OperadorPocketMiddleware',
+    'accounts.middleware.AuditorMiddleware',
     'core.middleware.TratamentoExcecaoUsuarioMiddleware',
     'core.pocket_middleware.PocketPostRedirectGuardMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -92,6 +94,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'accounts.context_processors.perfil_operacional',
+                'core.context_processors.categoria_inventario',
             ],
         },
     },

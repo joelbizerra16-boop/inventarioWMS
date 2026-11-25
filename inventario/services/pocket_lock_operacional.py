@@ -63,6 +63,13 @@ def adquirir_lock_posicao_pocket_geral(request, inventario, codigo_posicao: str)
     if posicao is None:
         raise PocketLockOperacionalError('Posição inválida')
 
+    from inventario.services.categoria import CategoriaError, validar_posicao_no_inventario
+
+    try:
+        validar_posicao_no_inventario(inventario, posicao)
+    except CategoriaError as exc:
+        raise PocketLockOperacionalError(str(exc)) from exc
+
     if not posicao_atribuida_operador_geral(inventario, posicao, request.user):
         raise TarefaError('Posição não atribuída a você. Contate o supervisor.')
 

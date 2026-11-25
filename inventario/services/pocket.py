@@ -73,13 +73,16 @@ def validar_inventario_para_pocket(inventario: Inventario) -> None:
         raise PocketContagemError('Inventário consolidado não permite contagem.')
 
 
-def listar_inventarios_pocket():
-    return Inventario.objects.filter(
+def listar_inventarios_pocket(categoria: str | None = None):
+    queryset = Inventario.objects.filter(
         status__in=(
             Inventario.Status.ABERTO,
             Inventario.Status.EM_ANDAMENTO,
         ),
-    ).select_related('usuario').order_by('-data_criacao')
+    )
+    if categoria:
+        queryset = queryset.filter(categoria=categoria)
+    return queryset.select_related('usuario').order_by('-data_criacao')
 
 
 def buscar_posicao_por_codigo(codigo: str) -> Posicao | None:

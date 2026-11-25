@@ -3,6 +3,7 @@ from django.shortcuts import redirect, render
 from django.views import View
 
 from accounts.mixins import AcessoOperacionalMixin
+from core.categorias import obter_categoria_sessao
 from inventario.services.historico_exportacao import (
     exportar_historico_csv,
     exportar_historico_excel,
@@ -31,7 +32,7 @@ class HistoricoUnificadoView(AcessoOperacionalMixin, View):
             'tipo_filtro': tipo_filtro,
             'usuario_filtro': request.GET.get('usuario', '').strip(),
         }
-        linhas = listar_historico_unificado(**filtros)
+        linhas = listar_historico_unificado(**filtros, categoria=obter_categoria_sessao(request))
         return render(request, self.template_name, {
             'linhas': linhas,
             'indicadores': calcular_indicadores_historico(linhas),

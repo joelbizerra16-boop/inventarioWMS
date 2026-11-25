@@ -15,6 +15,13 @@ from accounts.mixins import (
     PaginacaoMixin,
     RequerEscritaInventarioMixin,
 )
+from core.categorias import obter_categoria_sessao
+from inventario.services.categoria import (
+    anotar_categoria_efetiva,
+    q_produto_categoria_efetiva,
+    q_produto_conflito_categoria,
+    q_produto_sem_classificacao_efetiva,
+)
 from core.services.perf_diagnostico import medir_etapa
 from estoque_sap.forms import EstoqueSAPImportacaoForm
 from estoque_sap.models import EstoqueSAP
@@ -33,6 +40,7 @@ from estoque_sap.services.importacao_estoque_sap import (
 SESSION_LINHAS_KEY = 'importacao_estoque_sap_linhas'
 SESSION_COLUNAS_DETECTADAS_KEY = 'importacao_estoque_sap_colunas_detectadas'
 SESSION_COLUNAS_NORMALIZADAS_KEY = 'importacao_estoque_sap_colunas_normalizadas'
+SESSION_CANAIS_CARREGADOS_KEY = 'importacao_estoque_sap_canais_carregados'
 SESSION_ARQUIVO_KEY = 'importacao_estoque_sap_arquivo'
 SESSION_ABA_KEY = 'importacao_estoque_sap_aba'
 logger = logging.getLogger(__name__)
@@ -45,7 +53,16 @@ class EstoqueSAPListView(AcessoOperacionalMixin, PaginacaoMixin, PaginacaoContex
     ordering = ['-data_importacao']
 
     def get_queryset(self):
-        queryset = EstoqueSAP.objects.select_related('produto')
+        # Somente leitura filtrada pela categoria da sessão: a tabela SAP é
+        # global e a importação continua substituindo o snapshot inteiro.
+        filtro = self._filtro_classificacao()
+        if filtro == 'sem':
+            escopo = q_produto_sem_classificacao_efetiva('produto__')
+        elif filtro == 'conflito':
+            escopo = q_produto_conflito_categoria(obter_categoria_sessao(self.request), 'produto__')
+        else:
+            escopo = q_produto_categoria_efetiva(obter_categoria_sessao(self.request), 'produto__')
+        queryset = EstoqueSAP.objects.select_related('produto').filter(escopo)
         termo = self.request.GET.get('q', '').strip()
 
         if termo:
@@ -56,9 +73,23 @@ class EstoqueSAPListView(AcessoOperacionalMixin, PaginacaoMixin, PaginacaoContex
 
         return queryset
 
+    def _filtro_classificacao(self) -> str:
+        valor = self.request.GET.get('classificacao', '').strip().lower()
+        return valor if valor in ('sem', 'conflito') else ''
+
+    def _somente_sem_classificacao(self) -> bool:
+        return self._filtro_classificacao() == 'sem'
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['termo_busca'] = self.request.GET.get('q', '')
+        context['somente_sem_classificacao'] = self._somente_sem_classificacao()
+        context['filtro_classificacao'] = self._filtro_classificacao()
+        # Categoria efetiva por linha: origem (setor/posição) e conflitos visíveis.
+        produtos = anotar_categoria_efetiva(registro.produto for registro in context['object_list'])
+        context['categorias_efetivas'] = {p.pk: p.categoria_efetiva for p in produtos}
+        for registro in context['object_list']:
+            registro.categoria_efetiva = context['categorias_efetivas'][registro.produto_id]
         return context
 
 
@@ -164,6 +195,7 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
             request.session[SESSION_LINHAS_KEY] = serializar_preview_sessao(preview)
         request.session[SESSION_COLUNAS_DETECTADAS_KEY] = preview.colunas_detectadas
         request.session[SESSION_COLUNAS_NORMALIZADAS_KEY] = preview.colunas_normalizadas
+        request.session[SESSION_CANAIS_CARREGADOS_KEY] = preview.canais_carregados
         request.session[SESSION_ARQUIVO_KEY] = arquivo.name
         request.session[SESSION_ABA_KEY] = preview.aba
         request.session.modified = True
@@ -281,6 +313,7 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
                 linhas_validas,
                 arquivo_origem=arquivo_origem,
                 rejeitados=rejeitados,
+                canais_carregados=request.session.get(SESSION_CANAIS_CARREGADOS_KEY),
             )
         logger.info(
             'IMPORTACAO RESULTADO inseridos=%s atualizados=%s',
@@ -316,5 +349,6 @@ class EstoqueSAPImportarView(RequerEscritaInventarioMixin, View):
         request.session.pop(SESSION_LINHAS_KEY, None)
         request.session.pop(SESSION_COLUNAS_DETECTADAS_KEY, None)
         request.session.pop(SESSION_COLUNAS_NORMALIZADAS_KEY, None)
+        request.session.pop(SESSION_CANAIS_CARREGADOS_KEY, None)
         request.session.pop(SESSION_ARQUIVO_KEY, None)
         request.session.pop(SESSION_ABA_KEY, None)

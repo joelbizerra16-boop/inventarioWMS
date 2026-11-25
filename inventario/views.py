@@ -17,6 +17,7 @@ from accounts.mixins import (
     RequerEscritaInventarioMixin,
     RequerNaoOperadorMixin,
 )
+from core.categorias import alinhar_categoria_sessao, obter_categoria_sessao, rotulo_categoria
 from core.logging_auditoria import registrar_evento
 from core.mixins import ExclusaoSeguraMixin
 from accounts.services.perfil import (
@@ -35,7 +36,13 @@ from inventario.services.contagem import (
 )
 from inventario.services.locks import LockError
 from inventario.services.tarefas import TarefaError
+from inventario.services.consulta_contagem import queryset_contagens
 from inventario.services.confronto import CanalConfronto, executar_confronto
+from inventario.services.exportacao_excel import (
+    parametros_confronto,
+    resposta_excel_confronto,
+    resposta_excel_contagem,
+)
 from inventario.services.aprovacao import (
     AprovacaoError,
     consultar_aprovacao,
@@ -130,7 +137,9 @@ class InventarioListView(AcessoOperacionalMixin, PaginacaoMixin, PaginacaoContex
     ordering = ['-data_criacao']
 
     def get_queryset(self):
-        queryset = Inventario.objects.select_related('usuario').annotate(
+        queryset = Inventario.objects.select_related('usuario').filter(
+            categoria=obter_categoria_sessao(self.request),
+        ).annotate(
             total_itens=Count('itens'),
         ).order_by('-data_criacao')
         termo = self.request.GET.get('q', '').strip()
@@ -169,10 +178,22 @@ class InventarioCreateView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin,
         context['botao'] = 'Salvar'
         return context
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        # A frente vem marcada com a categoria da sessão; o usuário escolhe.
+        kwargs['categoria_inicial'] = obter_categoria_sessao(self.request)
+        return kwargs
+
     def form_valid(self, form):
         form.instance.status = Inventario.Status.ABERTO
-        messages.success(self.request, 'Inventário criado com sucesso.')
-        return super().form_valid(form)
+        # Categoria (frente) escolhida no formulário, gravada no inventário.
+        resposta = super().form_valid(form)
+        alinhar_categoria_sessao(self.request, self.object.categoria)
+        messages.success(
+            self.request,
+            f'Inventário de {rotulo_categoria(self.object.categoria)} criado com sucesso.',
+        )
+        return resposta
 
 
 class InventarioUpdateView(RequerEscritaInventarioMixin, UpdateView):
@@ -201,6 +222,8 @@ class InventarioUpdateView(RequerEscritaInventarioMixin, UpdateView):
         context = super().get_context_data(**kwargs)
         context['titulo'] = 'Editar Inventário'
         context['botao'] = 'Atualizar'
+        if self.request.method == 'GET':
+            alinhar_categoria_sessao(self.request, self.object.categoria)
         return context
 
     def form_valid(self, form):
@@ -232,6 +255,30 @@ class InventarioDeleteView(RequerEscritaInventarioMixin, ExclusaoSeguraMixin, De
             )
             return redirect('inventario:lista')
         return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        from inventario.models_comparativo import ComparativoContagem
+
+        context = super().get_context_data(**kwargs)
+        conferencias = list(
+            ComparativoContagem.objects.filter(associacoes__inventario=self.object).order_by('nome')
+        )
+        context['conferencias_finalizadas'] = [c for c in conferencias if c.finalizado]
+        context['conferencias_abertas'] = [c for c in conferencias if not c.finalizado]
+        return context
+
+    def executar_exclusao_segura(self, objeto):
+        from core.services.exclusao import ExclusaoBloqueadaError
+        from inventario.services.comparativo_contagens import (
+            ComparativoError,
+            preparar_exclusao_inventario_aberto,
+        )
+
+        try:
+            preparar_exclusao_inventario_aberto(objeto)
+        except ComparativoError as exc:
+            raise ExclusaoBloqueadaError(str(exc)) from exc
+        super().executar_exclusao_segura(objeto)
 
 
 class InventarioFinalizarView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, View):
@@ -297,7 +344,10 @@ class InventarioContagemMixin:
     inventario_url_kwarg = 'pk'
 
     def get_inventario(self):
-        return get_object_or_404(Inventario, pk=self.kwargs[self.inventario_url_kwarg])
+        inventario = get_object_or_404(Inventario, pk=self.kwargs[self.inventario_url_kwarg])
+        if self.request.method == 'GET':
+            alinhar_categoria_sessao(self.request, inventario.categoria)
+        return inventario
 
     def inventario_permite_contagem(self, inventario):
         return inventario.status in (
@@ -325,26 +375,10 @@ class ContagemListView(AcessoOperacionalMixin, InventarioContagemMixin, ListView
     ordering = ['posicao__codigo', 'produto__codigo_produto']
 
     def get_queryset(self):
-        inventario = self.get_inventario()
-        queryset = InventarioItem.objects.filter(
-            inventario=inventario,
-        ).select_related(
-            'posicao',
-            'produto',
-            'usuario_contagem',
-            'usuario_contagem__perfil_operacional',
+        return queryset_contagens(
+            self.get_inventario(),
+            self.request.GET.get('q', ''),
         )
-
-        termo = self.request.GET.get('q', '').strip()
-        if termo:
-            queryset = queryset.filter(
-                Q(produto__codigo_produto__icontains=termo)
-                | Q(produto__descricao__icontains=termo)
-                | Q(posicao__codigo__icontains=termo)
-                | Q(posicao__posicao__icontains=termo)
-            )
-
-        return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -352,7 +386,66 @@ class ContagemListView(AcessoOperacionalMixin, InventarioContagemMixin, ListView
         context['inventario'] = inventario
         context['termo_busca'] = self.request.GET.get('q', '')
         context['permite_contagem'] = self.inventario_permite_contagem(inventario)
+        context['pode_incluir_produto'] = usuario_pode_escrever_inventario(self.request.user)
+        context['produtos_incluidos'] = list(
+            inventario.produtos_incluidos.select_related('produto').order_by('produto__codigo_produto')
+        )
         return context
+
+
+class InventarioIncluirProdutoView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, InventarioContagemMixin, View):
+    """Inclusão explícita de produto sem classificação no inventário (POST)."""
+
+    http_method_names = ['post']
+
+    def post(self, request, pk):
+        from inventario.services.categoria import CategoriaError, incluir_produto_sem_classificacao
+        from produtos.models import Produto
+
+        inventario = self.get_inventario()
+        if not self.inventario_permite_contagem(inventario):
+            messages.error(request, 'Inventário finalizado não permite alterações.')
+            return redirect('inventario:contagem_lista', pk=inventario.pk)
+        codigo = (request.POST.get('codigo_produto') or '').strip().upper()
+        produto = Produto.objects.filter(codigo_produto=codigo).first() if codigo else None
+        if produto is None:
+            messages.error(request, f'Produto {codigo or "(vazio)"} não encontrado.')
+            return redirect('inventario:contagem_lista', pk=inventario.pk)
+        try:
+            _inclusao, criada = incluir_produto_sem_classificacao(
+                inventario,
+                produto,
+                obter_usuario_operacional(request.user),
+            )
+        except CategoriaError as exc:
+            messages.error(request, str(exc))
+            return redirect('inventario:contagem_lista', pk=inventario.pk)
+        registrar_evento(
+            'inventario_produto_incluido',
+            usuario=request.user,
+            inventario_id=inventario.pk,
+            categoria=inventario.categoria,
+            produto_id=produto.pk,
+            codigo_produto=produto.codigo_produto,
+            setor=produto.setor,
+            nova=criada,
+        )
+        if criada:
+            messages.success(
+                request,
+                f'Produto {produto.codigo_produto} incluído somente neste inventário '
+                f'#{inventario.pk} ({inventario.categoria_rotulo}).',
+            )
+        else:
+            messages.info(request, f'Produto {produto.codigo_produto} já estava incluído.')
+        return redirect('inventario:contagem_lista', pk=inventario.pk)
+
+
+class ContagemExportarView(AcessoOperacionalMixin, InventarioContagemMixin, View):
+    def get(self, request, pk):
+        inventario = self.get_inventario()
+        contagens = queryset_contagens(inventario, request.GET.get('q', ''))
+        return resposta_excel_contagem(inventario, contagens)
 
 
 class ContagemCreateView(RequerEscritaInventarioMixin, InventarioContagemMixin, CreateView):
@@ -379,6 +472,11 @@ class ContagemCreateView(RequerEscritaInventarioMixin, InventarioContagemMixin, 
         context['titulo'] = 'Nova Contagem'
         context['botao'] = 'Salvar'
         return context
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['inventario'] = self.get_inventario()
+        return kwargs
 
     def form_valid(self, form):
         inventario = self.get_inventario()
@@ -418,6 +516,11 @@ class ContagemUpdateView(RequerEscritaInventarioMixin, InventarioContagemMixin, 
         context['titulo'] = 'Editar Contagem'
         context['botao'] = 'Atualizar'
         return context
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['inventario'] = self.get_inventario()
+        return kwargs
 
     def form_valid(self, form):
         inventario = self.get_inventario()
@@ -467,7 +570,7 @@ class ContagemDeleteView(
         return context
 
     def executar_exclusao_segura(self, objeto):
-        excluir_contagem(objeto)
+        excluir_contagem(objeto, usuario=self.request.user)
 
     def get_success_url(self):
         return reverse('inventario:contagem_lista', kwargs={'pk': self.get_inventario().pk})
@@ -477,11 +580,14 @@ class ConfrontoListView(AcessoOperacionalMixin, View):
     template_name = 'inventario/confronto.html'
 
     def get(self, request):
-        inventarios = Inventario.objects.select_related('usuario').order_by('-data_criacao')
-        inventario_id = request.GET.get('inventario', '').strip()
-        filtro_status = request.GET.get('filtro', 'todos')
-        termo_busca = request.GET.get('q', '')
-        canal = CanalConfronto.normalizar(request.GET.get('canal', ''))
+        inventarios = Inventario.objects.select_related('usuario').filter(
+            categoria=obter_categoria_sessao(request),
+        ).order_by('-data_criacao')
+        consulta = parametros_confronto(request.GET)
+        inventario_id = consulta['inventario_id']
+        filtro_status = consulta['filtro_status']
+        termo_busca = consulta['termo_busca']
+        canal = consulta['canal']
 
         resultado = None
         inventario_selecionado = None
@@ -507,12 +613,31 @@ class ConfrontoListView(AcessoOperacionalMixin, View):
         })
 
 
+class ConfrontoExportarView(AcessoOperacionalMixin, View):
+    def get(self, request):
+        consulta = parametros_confronto(request.GET)
+        inventario_id = consulta['inventario_id']
+        if not inventario_id.isdigit():
+            messages.error(request, 'Selecione um inventário para exportar.')
+            return redirect('confronto')
+
+        inventario = get_object_or_404(Inventario, pk=int(inventario_id))
+        resultado = executar_confronto(
+            inventario_id=inventario.pk,
+            filtro_status=consulta['filtro_status'],
+            termo_busca=consulta['termo_busca'],
+            canal=consulta['canal'],
+        )
+        return resposta_excel_confronto(inventario, resultado.linhas, consulta['canal'])
+
+
 class AprovacaoView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, View):
     template_name = 'inventario/aprovacao.html'
 
     def get(self, request):
         inventarios = Inventario.objects.filter(
             status=Inventario.Status.FINALIZADO,
+            categoria=obter_categoria_sessao(request),
         ).select_related('usuario').order_by('-data_criacao')
 
         inventario_id = request.GET.get('inventario', '').strip()
@@ -608,7 +733,7 @@ class ConsolidacaoView(RequerNaoOperadorMixin, RequerEscritaInventarioMixin, Vie
         from inventario.services.consolidacao import _queryset_inventarios_finalizados
 
         return (
-            _queryset_inventarios_finalizados()
+            _queryset_inventarios_finalizados(obter_categoria_sessao(self.request))
             .select_related('usuario')
             .order_by('-pk')
         )

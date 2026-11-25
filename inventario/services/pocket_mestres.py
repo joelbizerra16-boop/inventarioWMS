@@ -2,15 +2,29 @@ from posicoes.models import Posicao
 from produtos.models import Produto
 
 
-def obter_mapas_mestres_pocket() -> dict:
+def obter_mapas_mestres_pocket(inventario=None) -> dict:
+    """Mapas de posições/produtos/EAN usados pelo Pocket (cache no aparelho).
+
+    Com ``inventario``: somente posições da categoria gravada nele e produtos
+    da mesma categoria (mais os sem classificação incluídos explicitamente).
+    Sem ``inventario``: comportamento original (todos os ativos).
+    """
+    posicoes = Posicao.objects.filter(ativo=True)
+    produtos = Produto.objects.elegiveis_para_inventario()
+    if inventario is not None:
+        from inventario.services.categoria import produtos_contaveis_no_inventario
+
+        posicoes = posicoes.filter(categoria=inventario.categoria)
+        produtos = produtos_contaveis_no_inventario(inventario, produtos)
+
     mapa_posicoes = {
         posicao['codigo']: posicao['posicao']
-        for posicao in Posicao.objects.filter(ativo=True).values('codigo', 'posicao')
+        for posicao in posicoes.values('codigo', 'posicao')
     }
     mapa_produtos: dict[str, str] = {}
     mapa_ean: dict[str, dict] = {}
     mapa_embalagens: dict[str, str] = {}
-    for produto in Produto.objects.elegiveis_para_inventario().values(
+    for produto in produtos.values(
         'codigo_produto',
         'descricao',
         'codigo_ean',

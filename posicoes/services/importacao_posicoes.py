@@ -3,9 +3,11 @@ from dataclasses import dataclass, field
 import pandas as pd
 from django.db import transaction
 
+from core.categorias import interpretar_categoria_informada, rotulo_categoria
 from posicoes.models import Posicao
 
-COLUNAS_OBRIGATORIAS = ['codigo', 'posicao']
+COLUNA_CATEGORIA = 'categoria'
+COLUNAS_OBRIGATORIAS = ['codigo', 'posicao', COLUNA_CATEGORIA]
 
 
 @dataclass
@@ -15,6 +17,8 @@ class LinhaImportacao:
     posicao: str
     valida: bool
     erros: list[str] = field(default_factory=list)
+    categoria: str = ''
+    categoria_informada: str = ''
 
 
 @dataclass
@@ -53,17 +57,56 @@ def _validar_colunas(dataframe: pd.DataFrame) -> None:
         )
 
 
-def _validar_linha(linha: LinhaImportacao) -> LinhaImportacao:
+def _erro_categoria(codigo: str, categoria: str, existentes: dict[str, str]) -> str | None:
+    """Regras de categoria da posição na importação (sem alteração silenciosa).
+
+    - Toda linha exige categoria válida (Lubrificantes, Filtros ou Agregados).
+    - Posição existente mantém a sua categoria; informar outra é erro claro.
+    """
+    if not categoria:
+        return 'Categoria é obrigatória (Lubrificantes, Filtros ou Agregados).'
+    atual = existentes.get(codigo.upper())
+    if atual is None:
+        return None
+    if categoria != atual:
+        return (
+            f'Código {codigo} já pertence a {rotulo_categoria(atual)}; '
+            f'não pode ser importado como {rotulo_categoria(categoria)}.'
+        )
+    return None
+
+
+def _validar_linha(linha: LinhaImportacao, existentes: dict[str, str] | None = None) -> LinhaImportacao:
     erros = []
 
     if not linha.codigo:
         erros.append('Código é obrigatório.')
     if not linha.posicao:
         erros.append('Posição é obrigatória.')
+    if linha.categoria_informada and not linha.categoria:
+        erros.append(
+            f'Categoria inválida: {linha.categoria_informada!r} '
+            '(use Lubrificantes, Filtros ou Agregados).'
+        )
+    elif linha.codigo and existentes is not None:
+        erro = _erro_categoria(linha.codigo, linha.categoria, existentes)
+        if erro:
+            erros.append(erro)
 
     linha.valida = not erros
     linha.erros = erros
     return linha
+
+
+def _mapa_categorias_existentes(codigos) -> dict[str, str]:
+    codigos = {c.upper() for c in codigos if c}
+    if not codigos:
+        return {}
+    mapa = {}
+    for codigo, categoria in Posicao.objects.values_list('codigo', 'categoria'):
+        if codigo.upper() in codigos:
+            mapa[codigo.upper()] = categoria
+    return mapa
 
 
 def processar_arquivo(arquivo) -> ResultadoPreview:
@@ -72,15 +115,20 @@ def processar_arquivo(arquivo) -> ResultadoPreview:
     _validar_colunas(dataframe)
     dataframe = dataframe.fillna('')
 
-    linhas = []
+    brutas = []
     for indice, registro in dataframe.iterrows():
-        linha = LinhaImportacao(
+        informada = _limpar_valor(registro.get(COLUNA_CATEGORIA, ''))
+        brutas.append(LinhaImportacao(
             linha=int(indice) + 2,
             codigo=_limpar_valor(registro.get('codigo')),
             posicao=_limpar_valor(registro.get('posicao')),
             valida=False,
-        )
-        linhas.append(_validar_linha(linha))
+            categoria=interpretar_categoria_informada(informada) or '',
+            categoria_informada=informada,
+        ))
+
+    existentes = _mapa_categorias_existentes(linha.codigo for linha in brutas)
+    linhas = [_validar_linha(linha, existentes) for linha in brutas]
 
     validas = sum(1 for linha in linhas if linha.valida)
     invalidas = len(linhas) - validas
@@ -98,6 +146,7 @@ def serializar_linhas_validas(preview: ResultadoPreview) -> list[dict]:
         {
             'codigo': linha.codigo,
             'posicao': linha.posicao,
+            'categoria': linha.categoria,
         }
         for linha in preview.linhas
         if linha.valida
@@ -110,17 +159,26 @@ def importar_dados(linhas_validas: list[dict], rejeitados: int = 0) -> Resultado
     atualizados = 0
 
     for dados in linhas_validas:
-        posicao, criada = Posicao.objects.update_or_create(
-            codigo=dados['codigo'],
-            defaults={
-                'posicao': dados['posicao'],
-            },
-        )
-
-        if criada:
+        categoria = dados.get('categoria') or ''
+        existente = Posicao.objects.select_for_update().filter(codigo=dados['codigo']).first()
+        # Revalida na confirmação: o cadastro pode ter mudado após a prévia.
+        if not categoria:
+            rejeitados += 1
+            continue
+        if existente is None:
+            Posicao.objects.create(
+                codigo=dados['codigo'],
+                posicao=dados['posicao'],
+                categoria=categoria,
+            )
             inseridos += 1
-        else:
-            atualizados += 1
+            continue
+        if categoria != existente.categoria:
+            rejeitados += 1
+            continue
+        existente.posicao = dados['posicao']
+        existente.save(update_fields=['posicao'])
+        atualizados += 1
 
     return ResultadoImportacao(
         inseridos=inseridos,

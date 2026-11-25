@@ -18,10 +18,12 @@ from django.contrib import admin
 from django.urls import include, path
 
 from core.pwa import manifest_pwa, service_worker_pwa
-from dashboard.views import HomeView
+from core.views_categoria import SelecionarCategoriaView
+from dashboard.views import DashboardClassicoView, HomeView
 from dashboard.views_operacional import DashboardOperacionalApiView
 from inventario.views import (
     AprovacaoView,
+    ConfrontoExportarView,
     ConfrontoListView,
     ConsolidacaoView,
 )
@@ -36,13 +38,17 @@ urlpatterns = [
     path('sw.js', service_worker_pwa, name='pwa_service_worker'),
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
+    path('categoria/selecionar/', SelecionarCategoriaView.as_view(), name='categoria_selecionar'),
     path('', HomeView.as_view(), name='home'),
+    path('dashboard/classico/', DashboardClassicoView.as_view(), name='dashboard_classico'),
     path(
         'dashboard/operacional/api/',
         DashboardOperacionalApiView.as_view(),
         name='dashboard_operacional_api',
     ),
     path('confronto/', ConfrontoListView.as_view(), name='confronto'),
+    path('confronto/exportar/', ConfrontoExportarView.as_view(), name='confronto_exportar'),
+    path('comparativo-contagens/', include('inventario.comparativo_urls')),
     path('aprovacao/', AprovacaoView.as_view(), name='aprovacao'),
     path('consolidacao/', ConsolidacaoView.as_view(), name='consolidacao'),
     path('historico/', HistoricoUnificadoView.as_view(), name='historico_unificado'),
@@ -62,6 +68,7 @@ urlpatterns = [
     path('estoque-fisico/', include('estoque_fisico.urls')),
     path('inventarios/', include('inventario.urls')),
     path('pocket/', include('inventario.pocket_urls')),
+    path('auditor/', include('inventario.auditor_urls')),
 ]
 
 handler404 = 'core.views.handler404'

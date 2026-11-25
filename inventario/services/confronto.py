@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.db.models import Sum
 
 from estoque_sap.models import EstoqueSAP
-from inventario.models import InventarioItem
+from inventario.models import Inventario, InventarioItem
 from produtos.models import Produto
 
 
@@ -83,10 +83,20 @@ def _decimal(valor) -> Decimal:
     return Decimal(valor)
 
 
-def _obter_estoque_sap_por_produto() -> dict[int, EstoqueSAP]:
+def _obter_estoque_sap_por_produto(inventario: Inventario | None = None) -> dict[int, EstoqueSAP]:
+    """Saldos SAP de referência.
+
+    Com ``inventario``: somente produtos da categoria gravada nele (mais os sem
+    classificação incluídos explicitamente). A tabela SAP continua global.
+    """
     estoques = {}
+    produtos = Produto.objects.elegiveis_para_inventario()
+    if inventario is not None:
+        from inventario.services.categoria import produtos_do_inventario
+
+        produtos = produtos_do_inventario(inventario, produtos)
     registros = EstoqueSAP.objects.select_related('produto').filter(
-        produto__in=Produto.objects.elegiveis_para_inventario(),
+        produto__in=produtos,
     ).order_by(
         'produto_id',
         '-data_importacao',
@@ -274,7 +284,8 @@ def executar_confronto(
         fisico=Sum('quantidade_fisica'),
     )
 
-    sap_por_produto = _obter_estoque_sap_por_produto()
+    inventario = Inventario.objects.filter(pk=inventario_id).only('pk', 'categoria').first()
+    sap_por_produto = _obter_estoque_sap_por_produto(inventario)
     produtos_processados: set[int] = set()
     linhas: list[LinhaConfronto] = []
 

@@ -6,6 +6,7 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, ListView, UpdateView
 
+from core.categorias import obter_categoria_sessao
 from core.logging_auditoria import registrar_evento
 from accounts.mixins import (
     AcessoOperacionalMixin,
@@ -36,7 +37,7 @@ class PosicaoListView(AcessoOperacionalMixin, PaginacaoMixin, PaginacaoContextMi
     context_object_name = 'posicoes'
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().filter(categoria=obter_categoria_sessao(self.request))
         termo = self.request.GET.get('q', '').strip()
 
         if termo:

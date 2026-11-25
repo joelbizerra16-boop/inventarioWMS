@@ -1,17 +1,20 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.views import LoginView, LogoutView
+from django.core.exceptions import PermissionDenied, SuspiciousOperation, ValidationError
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from accounts.forms import UsuarioForm
+from accounts.forms import OperacionalAuthenticationForm, UsuarioForm
+from accounts.login_http import resposta_erro_interno_login
+from accounts.services.perfil import usuario_e_auditor
 from accounts.mixins import PaginacaoContextMixin, PaginacaoMixin, RequerAdministradorMixin
 from accounts.models import Usuario
-from core.logging_auditoria import ip_do_request, registrar_evento
-from core.pocket_http import is_pocket_ajax, json_erro_pocket
-from core.mixins import ExclusaoSeguraMixin
 from accounts.services.perfil import usuario_pode_acessar
 from accounts.services.usuarios import (
     UsuarioServiceError,
@@ -22,17 +25,42 @@ from accounts.services.usuarios import (
     filtrar_usuarios,
     obter_resumo_usuarios,
 )
+from core.logging_auditoria import ip_do_request, registrar_evento
+from core.mixins import ExclusaoSeguraMixin
+from core.pocket_http import json_erro_pocket, requisicao_ajax_pocket
+
+logger = logging.getLogger('inventario.auditoria')
 
 
 class OperacionalLoginView(LoginView):
     template_name = 'accounts/login.html'
+    form_class = OperacionalAuthenticationForm
     redirect_authenticated_user = False
 
     def dispatch(self, request, *args, **kwargs):
+        try:
+            return self._dispatch_operacional(request, *args, **kwargs)
+        except (PermissionDenied, Http404, SuspiciousOperation):
+            raise
+        except ValidationError as exc:
+            from accounts.login_http import resposta_login_mensagem
+
+            texto = ' '.join(str(item) for item in exc.messages) or (
+                'Não foi possível validar o acesso.'
+            )
+            return resposta_login_mensagem(request, texto, status=400)
+        except Exception as exc:
+            try:
+                if getattr(request.user, 'is_authenticated', False):
+                    logout(request)
+            except Exception:
+                logger.exception('Falha ao encerrar sessão após erro de login')
+            return resposta_erro_interno_login(request, exc)
+
+    def _dispatch_operacional(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            if usuario_pode_acessar(request.user):
-                referer = request.META.get('HTTP_REFERER', '') or ''
-                if is_pocket_ajax(request) or '/pocket/' in referer:
+            if usuario_pode_acessar(request.user) or usuario_e_auditor(request.user):
+                if requisicao_ajax_pocket(request):
                     return json_erro_pocket(
                         request,
                         'Sessão expirada. Faça login novamente.',
@@ -46,7 +74,7 @@ class OperacionalLoginView(LoginView):
     def form_valid(self, form):
         user = form.get_user()
         login(self.request, user)
-        if not usuario_pode_acessar(user):
+        if not (usuario_pode_acessar(user) or usuario_e_auditor(user)):
             logout(self.request)
             messages.error(self.request, 'Usuário sem perfil operacional vinculado.')
             registrar_evento(
@@ -72,6 +100,8 @@ class OperacionalLoginView(LoginView):
 
         if usuario_e_operador_pocket(self.request.user):
             return reverse('pocket:selecionar')
+        if usuario_e_auditor(self.request.user):
+            return reverse('auditor:inicio')
         return super().get_success_url()
 
 
@@ -133,6 +163,16 @@ class UsuarioDetailView(RequerAdministradorMixin, DetailView):
     context_object_name = 'usuario_operacional'
 
 
+def _definir_conferencias_auditor(usuario, form, responsavel) -> None:
+    """Grava as conferências do auditor (ou revoga, se o perfil deixou de ser Auditor)."""
+    from inventario.services.auditor_publicacao import definir_conferencias_do_auditor
+
+    if usuario is None or not getattr(usuario, 'user_id', None):
+        return
+    usuario.user.refresh_from_db()
+    definir_conferencias_do_auditor(usuario.user, form.cleaned_data.get('conferencias_auditor') or [], responsavel)
+
+
 class UsuarioCreateView(RequerAdministradorMixin, CreateView):
     model = Usuario
     form_class = UsuarioForm
@@ -152,7 +192,7 @@ class UsuarioCreateView(RequerAdministradorMixin, CreateView):
 
     def form_valid(self, form):
         try:
-            criar_usuario_operacional(
+            usuario = criar_usuario_operacional(
                 nome=form.cleaned_data['nome'],
                 login=form.cleaned_data['login'],
                 setor=form.cleaned_data['setor'],
@@ -164,6 +204,7 @@ class UsuarioCreateView(RequerAdministradorMixin, CreateView):
             form.add_error('login', str(exc))
             return self.form_invalid(form)
 
+        _definir_conferencias_auditor(usuario, form, self.request.user)
         messages.success(self.request, 'Usuário criado com sucesso.')
         return redirect(self.success_url)
 
@@ -183,7 +224,7 @@ class UsuarioUpdateView(RequerAdministradorMixin, UpdateView):
     def form_valid(self, form):
         senha = form.cleaned_data.get('senha') or None
         try:
-            atualizar_usuario_operacional(
+            usuario = atualizar_usuario_operacional(
                 self.object,
                 nome=form.cleaned_data['nome'],
                 login=form.cleaned_data['login'],
@@ -196,6 +237,7 @@ class UsuarioUpdateView(RequerAdministradorMixin, UpdateView):
             form.add_error('login', str(exc))
             return self.form_invalid(form)
 
+        _definir_conferencias_auditor(usuario, form, self.request.user)
         messages.success(self.request, 'Usuário atualizado com sucesso.')
         return redirect(self.success_url)
 

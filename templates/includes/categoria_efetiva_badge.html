@@ -1,0 +1,9 @@
+{% if efetiva %}{% if efetiva.conflito %}
+<span class="badge text-bg-warning categoria-badge categoria-badge-conflito ms-1" data-categoria-origem="CONFLITO" title="Produto sem classificação em posições de categorias diferentes. Regularize antes de publicar.">{{ efetiva.rotulo }}</span>
+{% elif efetiva.incompativel %}
+<span class="badge text-bg-warning categoria-badge categoria-badge-conflito ms-1" data-categoria-origem="INCOMPATIVEL" title="Setor oficial diferente da categoria das posições onde o produto está.">Incompatível com a posição</span>
+{% elif efetiva.origem == 'POSICAO' %}
+<span class="badge text-bg-light border categoria-badge categoria-badge-posicao ms-1" data-categoria-origem="POSICAO" title="Sem setor válido: categoria definida pela posição física.">{{ efetiva.rotulo }} · pela posição</span>
+{% elif efetiva.origem == 'SEM_CLASSIFICACAO' %}
+<span class="badge text-bg-secondary categoria-badge categoria-badge-sem ms-1" data-categoria-origem="SEM_CLASSIFICACAO">Sem classificação</span>
+{% endif %}{% endif %}

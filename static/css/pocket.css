@@ -898,3 +898,86 @@
         scroll-margin: 4.5rem;
     }
 }
+
+.pocket-consulta-inventario {
+    margin: 0.35rem 0.15rem 0.55rem;
+    color: var(--pocket-title, #1e3a5f);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.pocket-consulta-aviso,
+.pocket-consulta-vazio,
+.pocket-consulta-falha {
+    margin: 0.65rem 0 0;
+    font-size: 0.875rem;
+    line-height: 1.35;
+}
+
+.pocket-consulta-falha {
+    color: var(--pocket-erro, #dc2626);
+    font-weight: 600;
+}
+
+.pocket-consulta-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+}
+
+.pocket-consulta-card {
+    background: #fff;
+    border: 1px solid var(--pocket-border, #d8dee6);
+    border-radius: 8px;
+    padding: 0.7rem 0.8rem;
+}
+
+.pocket-consulta-rotulo {
+    margin: 0.35rem 0 0;
+    color: var(--pocket-muted, #5f6b7a);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.pocket-consulta-card .pocket-consulta-rotulo:first-child {
+    margin-top: 0;
+}
+
+.pocket-consulta-valor {
+    margin: 0;
+    color: var(--pocket-value, #1f2937);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.pocket-consulta-paginas {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+    font-size: 0.8125rem;
+}
+
+.pocket-consulta-paginas-acoes {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.pocket-consulta-paginas-acoes a {
+    flex: 1;
+    text-align: center;
+    padding: 0.45rem 0.5rem;
+    border: 1px solid var(--pocket-border, #d8dee6);
+    border-radius: 6px;
+    background: #fff;
+    text-decoration: none;
+}
+
+.pocket-consulta-voltar {
+    margin-top: 0.75rem;
+}

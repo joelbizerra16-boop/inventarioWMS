@@ -9,6 +9,7 @@
         <p class="text-muted mb-0">
             Inventário #{{ inventario.pk }} — {{ inventario.usuario.nome }}
             — {{ inventario.get_status_display }}
+            — Categoria: <strong data-categoria-inventario="{{ inventario.categoria }}">{{ inventario.categoria_rotulo }}</strong>
         </p>
     </div>
     <div class="d-flex gap-2">
@@ -23,10 +24,34 @@
     </div>
 </div>
 
+{% if permite_contagem and pode_incluir_produto %}
+<div class="card border-0 shadow-sm mb-4" id="inclusaoProdutoSemClassificacao">
+    <div class="card-body">
+        <form method="post" action="{% url 'inventario:incluir_produto' inventario.pk %}" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <div class="col-md-7">
+                <label for="codigoProdutoInclusao" class="form-label">Incluir produto sem classificação</label>
+                <input type="text" id="codigoProdutoInclusao" name="codigo_produto" class="form-control" maxlength="50" required placeholder="Código do produto">
+                <div class="form-text">Somente produtos sem categoria no setor. O setor do produto não é alterado.</div>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-outline-primary w-100">Incluir no inventário</button>
+            </div>
+        </form>
+        {% if produtos_incluidos %}
+        <div class="small text-muted mt-3">
+            Incluídos explicitamente:
+            {% for inclusao in produtos_incluidos %}<span class="badge text-bg-light border me-1">{{ inclusao.produto.codigo_produto }}</span>{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
         <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-10">
+            <div class="col-md-7">
                 <label for="q" class="form-label">Pesquisar</label>
                 <input
                     type="text"
@@ -41,6 +66,14 @@
                 <button type="submit" class="btn btn-outline-primary">
                     <i class="bi bi-search me-1"></i>Buscar
                 </button>
+            </div>
+            <div class="col-md-3 d-grid">
+                <a
+                    href="{% url 'inventario:contagem_exportar' inventario.pk %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}"
+                    class="btn btn-outline-success"
+                >
+                    <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
+                </a>
             </div>
         </form>
     </div>

@@ -30,6 +30,24 @@
                     {% endif %}
                 </div>
 
+                <div class="col-12" id="escolhaFrente">
+                    <span class="form-label d-block">{{ form.categoria.label }}</span>
+                    <div class="d-flex flex-wrap gap-2" role="radiogroup" aria-label="{{ form.categoria.label }}">
+                        {% for opcao in form.categoria %}
+                        <div class="form-check form-check-inline border rounded px-4 py-2 me-0{% if opcao.data.selected %} border-primary{% endif %}" data-frente="{{ opcao.data.value }}">
+                            {{ opcao.tag }}
+                            <label class="form-check-label fw-semibold" for="{{ opcao.id_for_label }}">{{ opcao.choice_label }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if form.categoria.errors %}
+                    <div class="text-danger small mt-1">{{ form.categoria.errors }}</div>
+                    {% endif %}
+                    <div class="form-text">
+                        {% if form.categoria.help_text %}{{ form.categoria.help_text }}{% else %}A frente fica gravada no inventário e não pode mudar depois do início da contagem.{% endif %}
+                    </div>
+                </div>
+
                 <div class="col-12">
                     <label for="{{ form.observacao.id_for_label }}" class="form-label">
                         {{ form.observacao.label }}

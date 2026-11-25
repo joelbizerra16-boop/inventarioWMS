@@ -12,9 +12,12 @@ def queryset_base() -> QuerySet:
     ).order_by('-data_atualizacao')
 
 
-def obter_info_publicacao() -> dict | None:
+def obter_info_publicacao(categoria: str | None = None) -> dict | None:
+    registros = EstoqueFisico.objects.all()
+    if categoria:
+        registros = registros.filter(categoria=categoria)
     registro = (
-        EstoqueFisico.objects
+        registros
         .select_related('inventario_origem')
         .exclude(inventario_origem__isnull=True)
         .order_by('-data_publicacao')
@@ -60,8 +63,12 @@ def obter_parametros_filtro(request) -> tuple[str, str, bool]:
 
 def obter_queryset_filtrado(request) -> QuerySet:
     termo_busca, setor, somente_positivo = obter_parametros_filtro(request)
+    from core.categorias import obter_categoria_sessao
+
+    # Lista e exportação mostram somente a categoria da sessão (campo gravado
+    # na publicação). Nenhum registro de outra categoria é alterado.
     return aplicar_filtros(
-        queryset_base(),
+        queryset_base().filter(categoria=obter_categoria_sessao(request)),
         termo_busca=termo_busca,
         setor=setor,
         somente_positivo=somente_positivo,

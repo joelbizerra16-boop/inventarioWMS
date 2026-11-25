@@ -58,12 +58,15 @@ def distribuir_tarefas_geral(
     if not operadores:
         raise TarefaError('Informe ao menos um operador.')
 
-    posicoes = Posicao.objects.filter(ativo=True)
+    # Somente posições da área de inventário (categoria) gravada no inventário.
+    posicoes = Posicao.objects.filter(ativo=True, categoria=inventario.categoria)
     if criterio_area:
         posicoes = posicoes.filter(_filtro_area(criterio_area))
     posicoes = list(posicoes.order_by('codigo'))
     if not posicoes:
-        raise TarefaError('Nenhuma posição encontrada para distribuição.')
+        raise TarefaError(
+            f'Nenhuma posição de {inventario.categoria_rotulo} encontrada para distribuição.'
+        )
 
     tarefas_criadas: list[InventarioTarefa] = []
     for indice, posicao in enumerate(posicoes):

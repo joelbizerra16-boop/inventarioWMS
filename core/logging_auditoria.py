@@ -13,6 +13,25 @@ def ip_do_request(request) -> str:
     return request.META.get('REMOTE_ADDR', '') or ''
 
 
+def registrar_excecao(
+    evento: str,
+    *,
+    identificador: str,
+    exc: BaseException,
+    usuario: str = '',
+    path: str = '',
+) -> None:
+    """Registra falha técnica sem corpo do login, senha, cookie ou token."""
+    logger.exception(
+        'evento=%s id=%s usuario=%s path=%s tipo=%s',
+        evento,
+        identificador,
+        (usuario or 'anonimo')[:150],
+        path,
+        type(exc).__name__,
+    )
+
+
 def registrar_evento(evento: str, usuario=None, ip: str | None = None, **contexto) -> None:
     usuario_ref = 'anonimo'
     if usuario is not None:

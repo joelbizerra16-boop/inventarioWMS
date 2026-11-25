@@ -79,6 +79,7 @@ class HistoricoLinhaUnificada:
     divergentes: int
     quantidade_itens: int
     conciliados: int
+    frente: str = ''
 
 
 @dataclass
@@ -185,6 +186,7 @@ def _linha_inventario(inventario: Inventario) -> HistoricoLinhaUnificada:
         divergentes=inventario.quantidade_divergentes or 0,
         quantidade_itens=inventario.quantidade_produtos or inventario.quantidade_itens or 0,
         conciliados=inventario.quantidade_conciliados or 0,
+        frente=inventario.categoria_rotulo,
     )
 
 
@@ -233,7 +235,9 @@ def listar_historico_unificado(
     status_filtro: str = '',
     tipo_filtro: str = '',
     usuario_filtro: str = '',
+    categoria: str | None = None,
 ) -> list[HistoricoLinhaUnificada]:
+    """Histórico de inventários finalizados (da categoria, quando informada)."""
     inicio = _parse_date(periodo_inicio)
     fim = _parse_date(periodo_fim)
     usuario_filtro = usuario_filtro.strip()
@@ -245,6 +249,8 @@ def listar_historico_unificado(
             .select_related('usuario', 'usuario_finalizacao')
             .order_by('-data_finalizacao', '-data_criacao')
         )
+        if categoria:
+            inventarios = inventarios.filter(categoria=categoria)
         for inventario in inventarios:
             linha = _linha_inventario(inventario)
             if not _filtra_periodo(linha.data_referencia, inicio, fim):

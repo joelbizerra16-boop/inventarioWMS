@@ -14,7 +14,7 @@ from core.services.importacao_excel import (
     limpar_valor,
 )
 from core.services.perf_diagnostico import medir_etapa
-from estoque_sap.models import EstoqueSAP
+from estoque_sap.models import EstoqueSAP, ImportacaoEstoqueSAP
 from produtos.models import Produto
 
 logger = logging.getLogger(__name__)
@@ -98,6 +98,7 @@ class ResultadoPreviewSAP(ResultadoPreview):
     colunas_detectadas: list[str] = field(default_factory=list)
     colunas_normalizadas: list[str] = field(default_factory=list)
     aba: str = ''
+    canais_carregados: list[str] = field(default_factory=list)
 
 
 def _normalizar_nome_coluna(nome) -> str:
@@ -159,7 +160,9 @@ def _detectar_linha_cabecalho(bruto: pd.DataFrame) -> int | None:
     return None
 
 
-def _dataframe_da_aba(excel: pd.ExcelFile, sheet_name: str) -> tuple[pd.DataFrame, list[str]] | None:
+def _dataframe_da_aba(
+    excel: pd.ExcelFile, sheet_name: str,
+) -> tuple[pd.DataFrame, list[str], list[str]] | None:
     bruto = pd.read_excel(excel, sheet_name=sheet_name, dtype=str, header=None)
     if bruto.empty:
         return None
@@ -174,28 +177,30 @@ def _dataframe_da_aba(excel: pd.ExcelFile, sheet_name: str) -> tuple[pd.DataFram
     dataframe = normalizar_colunas_importacao(dataframe)
     if not _tem_layout_sap(list(dataframe.columns)):
         return None
+    # Canais presentes na planilha, antes de completar os ausentes com vazio.
+    canais_carregados = [campo for campo in CAMPOS_CANAIS if campo in dataframe.columns]
     for campo in CAMPOS_CANAIS:
         if campo not in dataframe.columns:
             dataframe[campo] = ''
     if 'descricao' not in dataframe.columns:
         dataframe['descricao'] = ''
-    return dataframe.fillna(''), colunas_detectadas
+    return dataframe.fillna(''), colunas_detectadas, canais_carregados
 
 
-def _ler_planilha(arquivo) -> tuple[pd.DataFrame, list[str], list[str], str]:
+def _ler_planilha(arquivo) -> tuple[pd.DataFrame, list[str], list[str], str, list[str]]:
     excel = pd.ExcelFile(arquivo)
     melhor = None
     for sheet_name in excel.sheet_names:
         lido = _dataframe_da_aba(excel, sheet_name)
         if lido is None:
             continue
-        dataframe, colunas_detectadas = lido
+        dataframe, colunas_detectadas, canais_carregados = lido
         linhas_com_codigo = sum(
             1
             for valor in dataframe.get('codigo_produto', [])
             if normalizar_codigo_produto(valor)
         )
-        candidato = (linhas_com_codigo, sheet_name, dataframe, colunas_detectadas)
+        candidato = (linhas_com_codigo, sheet_name, dataframe, colunas_detectadas, canais_carregados)
         if melhor is None or linhas_com_codigo > melhor[0]:
             melhor = candidato
 
@@ -204,14 +209,14 @@ def _ler_planilha(arquivo) -> tuple[pd.DataFrame, list[str], list[str], str]:
             'Não foi possível localizar as colunas do SAP (CodProduto e canais) em nenhuma aba.'
         )
 
-    linhas_com_codigo, sheet_name, dataframe, colunas_detectadas = melhor
+    linhas_com_codigo, sheet_name, dataframe, colunas_detectadas, canais_carregados = melhor
     logger.info(
         'IMPORTACAO_SAP_ABA aba=%s linhas_com_codigo=%s total_linhas=%s',
         sheet_name,
         linhas_com_codigo,
         len(dataframe),
     )
-    return dataframe, colunas_detectadas, list(dataframe.columns), str(sheet_name)
+    return dataframe, colunas_detectadas, list(dataframe.columns), str(sheet_name), canais_carregados
 
 
 def _converter_decimal(valor, nome_campo: str) -> tuple[Decimal | None, str | None]:
@@ -517,7 +522,7 @@ def linha_permite_validar_produto(linha: LinhaImportacao) -> bool:
 
 
 def processar_arquivo(arquivo) -> ResultadoPreviewSAP:
-    dataframe, colunas_detectadas, colunas_normalizadas, aba = _ler_planilha(arquivo)
+    dataframe, colunas_detectadas, colunas_normalizadas, aba, canais_carregados = _ler_planilha(arquivo)
 
     linhas_parciais = []
     mapa_produtos = _mapa_codigos_produto()
@@ -581,6 +586,7 @@ def processar_arquivo(arquivo) -> ResultadoPreviewSAP:
         colunas_detectadas=colunas_detectadas,
         colunas_normalizadas=colunas_normalizadas,
         aba=aba,
+        canais_carregados=canais_carregados,
     )
 
 
@@ -649,7 +655,13 @@ def importar_dados(
     linhas_validas: list[dict],
     arquivo_origem: str,
     rejeitados: int = 0,
+    canais_carregados: list[str] | None = None,
 ) -> ResultadoImportacao:
+    """Substitui o snapshot SAP e registra o lote concluído.
+
+    `canais_carregados=None` significa "não informado" (chamadas antigas);
+    o comparativo trata esse caso como base sem registro de canais.
+    """
     if not linhas_validas:
         return ResultadoImportacao(inseridos=0, atualizados=0, rejeitados=rejeitados)
 
@@ -680,6 +692,18 @@ def importar_dados(
     )
     inseridos = len(produto_ids_importados - produtos_com_estoque_antes)
     atualizados = len(produto_ids_importados & produtos_com_estoque_antes)
+
+    importacao = ImportacaoEstoqueSAP.objects.create(
+        arquivo_origem=arquivo_origem,
+        data_importacao=agora,
+        canais_carregados=(
+            [campo for campo in CAMPOS_CANAIS if campo in canais_carregados]
+            if canais_carregados is not None else None
+        ),
+        quantidade_produtos=len(produto_ids_importados),
+    )
+    for registro in registros:
+        registro.importacao = importacao
 
     with medir_etapa('estoque_sap.importar.confirmar.substituir_snapshot'):
         EstoqueSAP.objects.exclude(produto_id__in=produto_ids_importados).delete()

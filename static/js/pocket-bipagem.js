@@ -849,6 +849,9 @@
         var csrfToken = config.csrfToken;
         var btnSalvar = config.btnSalvar;
         config.posicaoComLock = '';
+        // Mensagens de código fora do mapa (escopo de categoria do inventário).
+        var msgPosicaoInvalida = config.mensagemPosicaoInvalida || 'Posição inválida';
+        var msgProdutoNaoEncontrado = config.mensagemProdutoNaoEncontrado || 'Produto/EAN não encontrado';
 
         function telaLimpaOpts() {
             return {
@@ -935,7 +938,7 @@
                 if (silencioso) {
                     marcarErro(posicaoInput, true);
                 } else {
-                    sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                    sinalizarCodigoInvalido(posicaoInput, msgPosicaoInvalida, Sons.posicaoInvalida);
                 }
                 responderValidacao(callback, false);
             });
@@ -991,7 +994,7 @@
                 } else {
                     sinalizarCodigoInvalido(
                         produtoInput,
-                        'Produto/EAN não encontrado',
+                        msgProdutoNaoEncontrado,
                         Sons.produtoInvalido
                     );
                 }
@@ -1023,7 +1026,7 @@
                 }
                 if (!ok) {
                     ocultarPosicao(posicaoConfirm, posicaoLabel);
-                    sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                    sinalizarCodigoInvalido(posicaoInput, msgPosicaoInvalida, Sons.posicaoInvalida);
                     terminar('invalido');
                     return;
                 }
@@ -1045,7 +1048,7 @@
                         var texto = (msg || '').toLowerCase();
                         if (texto.indexOf('inválida') >= 0 || texto.indexOf('invalida') >= 0) {
                             ocultarPosicao(posicaoConfirm, posicaoLabel);
-                            sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                            sinalizarCodigoInvalido(posicaoInput, msgPosicaoInvalida, Sons.posicaoInvalida);
                             terminar('invalido');
                             return;
                         }
@@ -1097,7 +1100,7 @@
                         terminar('obsoleto');
                         return;
                     }
-                    sinalizarCodigoInvalido(posicaoInput, 'Posição inválida', Sons.posicaoInvalida);
+                    sinalizarCodigoInvalido(posicaoInput, msgPosicaoInvalida, Sons.posicaoInvalida);
                     if (focoNoCampo(produtoInput)) focarCampo(posicaoInput);
                     terminar('dependencia');
                     return;
@@ -1163,8 +1166,8 @@
                         }
                         if (detalheProd && detalheProd.obsoleta) return;
                         Sons.produtoInvalido();
-                        toast('Produto/EAN não encontrado', 'erro');
-                        mostrarMensagemCampo(produtoInput, 'Produto/EAN não encontrado');
+                        toast(msgProdutoNaoEncontrado, 'erro');
+                        mostrarMensagemCampo(produtoInput, msgProdutoNaoEncontrado);
                         focarCampo(produtoInput);
                         return;
                     }

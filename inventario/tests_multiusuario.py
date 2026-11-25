@@ -46,7 +46,7 @@ class LocksMultiusuarioTestCase(CiclicoAuditoriaBaseMixin, TestCase):
         self.op1 = _criar_op('op1', Usuario.Perfil.OPERADOR)
         self.op2 = _criar_op('op2', Usuario.Perfil.OPERADOR)
         self.posicao = Posicao.objects.create(codigo='L01', posicao='Loc 01', rua='A')
-        self.produto = Produto.objects.create(
+        self.produto = Produto.objects.create(setor='LUBRIFICANTE',
             codigo_produto='L100',
             descricao='Prod Lock',
             participa_ciclico=True,
@@ -194,7 +194,7 @@ class TarefasMultiusuarioTestCase(CiclicoAuditoriaBaseMixin, TestCase):
             [self.op1, self.op2],
             atribuido_por=self.supervisor,
         )
-        produto = Produto.objects.create(codigo_produto='TG01', descricao='Teste')
+        produto = Produto.objects.create(setor='LUBRIFICANTE', codigo_produto='TG01', descricao='Teste')
         with self.assertRaises(TarefaError):
             salvar_contagem(
                 inventario=self.inventario,
@@ -215,7 +215,7 @@ class RecontagemTerceiroOperadorTestCase(CiclicoAuditoriaBaseMixin, TestCase):
         self.op2 = _criar_op('rc2', Usuario.Perfil.OPERADOR)
         self.op3 = _criar_op('rc3', Usuario.Perfil.OPERADOR)
         self.posicao = Posicao.objects.create(codigo='RC01', posicao='RC-01')
-        self.produto = Produto.objects.create(
+        self.produto = Produto.objects.create(setor='LUBRIFICANTE',
             codigo_produto='RC100',
             descricao='Prod Recontagem',
             participa_ciclico=True,
@@ -277,7 +277,7 @@ class ConcorrenciaCargaTestCase(TransactionTestCase):
             for i in range(5)
         ]
         self.posicao = Posicao.objects.create(codigo='C01', posicao='C-01')
-        self.produto = Produto.objects.create(codigo_produto='C100', descricao='Carga')
+        self.produto = Produto.objects.create(setor='LUBRIFICANTE', codigo_produto='C100', descricao='Carga')
         self.inventario = Inventario.objects.create(
             usuario=Usuario.objects.get(login='supc'),
             status=Inventario.Status.ABERTO,
@@ -315,7 +315,7 @@ class MultiplosOperadoresPosicoesDistintasTestCase(CiclicoAuditoriaBaseMixin, Te
             usuario=Usuario.objects.get(login='supm'),
             status=Inventario.Status.ABERTO,
         )
-        self.produto = Produto.objects.create(
+        self.produto = Produto.objects.create(setor='LUBRIFICANTE',
             codigo_produto='MULTI01',
             descricao='Prod Multi',
         )
@@ -366,7 +366,7 @@ class PocketLockHttpTestCase(CiclicoAuditoriaBaseMixin, TestCase):
         self.op1 = _criar_op('pock1', Usuario.Perfil.INVENTARIO)
         self.op2 = _criar_op('pock2', Usuario.Perfil.INVENTARIO)
         self.posicao = Posicao.objects.create(codigo='PLK01', posicao='Pocket Lock 01')
-        self.produto = Produto.objects.create(
+        self.produto = Produto.objects.create(setor='LUBRIFICANTE',
             codigo_produto='PLKPRD',
             descricao='Prod Pocket Lock',
             codigo_ean='7895556667777',

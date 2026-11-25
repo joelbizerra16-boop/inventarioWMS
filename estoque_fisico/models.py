@@ -2,6 +2,8 @@ from django.db import models
 
 
 
+from core.categorias import CATEGORIA_CHOICES, CATEGORIA_PADRAO, MAX_LENGTH_CATEGORIA
+
 from posicoes.models import Posicao
 
 from produtos.models import Produto
@@ -56,6 +58,16 @@ class EstoqueFisico(models.Model):
 
         blank=True,
 
+    )
+
+    # Categoria do inventário que publicou o saldo. A publicação de uma
+    # categoria substitui somente os registros desta mesma categoria.
+    categoria = models.CharField(
+        'categoria',
+        max_length=MAX_LENGTH_CATEGORIA,
+        choices=CATEGORIA_CHOICES,
+        default=CATEGORIA_PADRAO,
+        db_index=True,
     )
 
     data_publicacao = models.DateTimeField('data de publicação', null=True, blank=True)

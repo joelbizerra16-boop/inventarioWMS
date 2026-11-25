@@ -26,13 +26,13 @@ class ContagemWebIntegridadeTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='INT01',
             descricao='Produto integridade',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.produto_b = Produto.objects.create(
             codigo_produto='INT02',
             descricao='Produto integridade B',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(codigo='INT01', posicao='I-01')
@@ -234,7 +234,7 @@ class FinalizacaoAtomicaTestCase(ClienteAutenticadoMixin, TestCase):
         self.produto = Produto.objects.create(
             codigo_produto='FINX',
             descricao='Produto falha snapshot',
-            setor='A',
+            setor='LUBRIFICANTE',
             embalagem='Unidade',
         )
         self.posicao = Posicao.objects.create(codigo='FINX', posicao='F-99')

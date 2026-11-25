@@ -94,6 +94,7 @@ class HomologacaoPosicaoTestCase(TestCase):
         posicao = criar_precadastro_posicao(
             usuario=self.usuario,
             origem='POCKET_CICLICO',
+            categoria='LUBRIFICANTES',
             rua='A',
             predio='01',
             nivel='02',

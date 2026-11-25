@@ -15,6 +15,13 @@ from accounts.mixins import (
     PaginacaoMixin,
     RequerEscritaCadastroMixin,
 )
+from core.categorias import obter_categoria_sessao
+from inventario.services.categoria import (
+    anotar_categoria_efetiva,
+    q_produto_categoria_efetiva,
+    q_produto_conflito_categoria,
+    q_produto_sem_classificacao_efetiva,
+)
 from core.logging_auditoria import registrar_evento
 from core.services.perf_diagnostico import medir_etapa
 from core.mixins import ExclusaoSeguraMixin
@@ -40,8 +47,24 @@ class ProdutoListView(AcessoOperacionalMixin, PaginacaoMixin, PaginacaoContextMi
     template_name = 'produtos/lista.html'
     context_object_name = 'produtos'
 
+    def _filtro_classificacao(self) -> str:
+        valor = self.request.GET.get('classificacao', '').strip().lower()
+        return valor if valor in ('sem', 'conflito') else ''
+
+    def _somente_sem_classificacao(self) -> bool:
+        return self._filtro_classificacao() == 'sem'
+
     def get_queryset(self):
         queryset = super().get_queryset()
+        # Categoria interpretada do setor legado (sem regravar o campo):
+        # categoria da sessão ou, sob demanda, os produtos sem classificação.
+        filtro = self._filtro_classificacao()
+        if filtro == 'sem':
+            queryset = queryset.filter(q_produto_sem_classificacao_efetiva())
+        elif filtro == 'conflito':
+            queryset = queryset.filter(q_produto_conflito_categoria(obter_categoria_sessao(self.request)))
+        else:
+            queryset = queryset.filter(q_produto_categoria_efetiva(obter_categoria_sessao(self.request)))
         termo = self.request.GET.get('q', '').strip()
 
         if termo:
@@ -58,6 +81,13 @@ class ProdutoListView(AcessoOperacionalMixin, PaginacaoMixin, PaginacaoContextMi
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['termo_busca'] = self.request.GET.get('q', '')
+        context['somente_sem_classificacao'] = self._somente_sem_classificacao()
+        context['filtro_classificacao'] = self._filtro_classificacao()
+        context['total_conflitos'] = Produto.objects.filter(
+            q_produto_conflito_categoria(obter_categoria_sessao(self.request)),
+        ).count()
+        # Categoria efetiva (setor oficial, posição física ou conflito) por linha.
+        anotar_categoria_efetiva(context['object_list'])
         return context
 
 

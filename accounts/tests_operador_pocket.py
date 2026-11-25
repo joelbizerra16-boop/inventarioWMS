@@ -57,6 +57,13 @@ class OperadorPocketAcessoTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertContains(response, 'Cadastrar Posição')
 
     def test_operador_precadastra_produto(self):
+        # O pré-cadastro só aceita embalagem já existente no catálogo de produtos.
+        Produto.objects.create(
+            codigo_produto='CAT-CAIXA',
+            descricao='Catálogo de embalagem',
+            setor='A',
+            embalagem='CAIXA',
+        )
         response = self.client.post(reverse('pocket:operador_precadastro_produto'), {
             'codigo_produto': 'OP-100',
             'descricao': 'Produto operador',
@@ -69,6 +76,7 @@ class OperadorPocketAcessoTestCase(ClienteAutenticadoMixin, TestCase):
 
     def test_operador_precadastra_posicao(self):
         response = self.client.post(reverse('pocket:operador_precadastro_posicao'), {
+            'categoria': 'LUBRIFICANTES',
             'codigo': 'A-01-02-03',
             'posicao': 'Posição A-01-02-03',
         })

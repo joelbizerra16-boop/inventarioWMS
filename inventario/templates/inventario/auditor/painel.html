@@ -1,0 +1,125 @@
+{% extends 'base_auditor.html' %}
+{% load static comparativo_tags %}
+
+{% block title %}Portal do Auditor · {{ comparativo.nome }}{% endblock %}
+
+{% block topo_acoes %}
+<button type="button" class="aud-icone" id="audAtualizar" title="Atualizar dados agora" aria-label="Atualizar dados agora"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button>
+<button type="button" class="aud-icone" id="audTelaCheia" aria-pressed="false" title="Entrar ou sair da tela cheia (Esc para sair)"><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i><span class="visually-hidden">Tela cheia</span></button>
+{% endblock %}
+
+{% block content %}
+<div id="audPainel" data-url="{{ urls.conteudo }}?{{ request.GET.urlencode }}" data-intervalo="{{ intervalo }}">
+{% if previa %}
+<div class="aud-previa" role="note">
+    <i class="bi bi-eye" aria-hidden="true"></i>
+    <span><strong>Visualizar como auditor:</strong> esta é exatamente a visão do auditor, com as mesmas regras de liberação. Nada aqui altera dados.</span>
+    <a href="{{ urls.voltar }}" class="aud-btn aud-btn-ghost">Voltar à configuração</a>
+</div>
+{% endif %}
+
+<div class="aud-titulo-pagina">
+    <div>
+        <h1 class="aud-h1">Acompanhamento do inventário</h1>
+        <p class="aud-subtitulo mb-0" data-categoria-conferencia="{{ comparativo.categoria }}">Categoria: {{ comparativo.categoria_rotulo }}</p>
+        {% if not previa and conferencias|length > 1 %}
+        <p class="aud-subtitulo">
+            <label class="visually-hidden" for="audConferencia">Conferência</label>
+            <select id="audConferencia" class="aud-select-inline" data-aud-navegar title="Trocar de conferência">
+                {% for c in conferencias %}<option value="{% url 'auditor:painel' c.pk %}" {% if c.pk == comparativo.pk %}selected{% endif %}>{{ c.nome }} · {{ c.categoria_rotulo }}</option>{% endfor %}
+            </select>
+        </p>
+        {% endif %}
+    </div>
+    {% if urls.exportar %}
+    <div class="aud-exportar">
+        <button type="button" class="aud-btn aud-btn-primario aud-btn-lg" id="audExportar" data-url="{{ urls.exportar }}" title="Exportar a visão selecionada para Excel (respeita filtros e liberações)"><i class="bi bi-download" aria-hidden="true"></i><span>Exportar Excel</span></button>
+        <span class="aud-exportar-status" id="audExportarStatus" role="status" aria-live="polite"></span>
+    </div>
+    {% endif %}
+</div>
+
+{% include 'inventario/auditor/_indicadores.html' %}
+
+{% include 'inventario/auditor/_graficos.html' %}
+
+<section class="aud-card aud-dados" aria-label="Contagens">
+    <div class="aud-barra-ferramentas">
+        <div class="aud-segmento aud-segmento-azul" role="tablist" aria-label="Visão da tabela">
+            <button type="button" role="tab" class="aud-seg aud-aba{% if aba == 'posicao' %} ativa{% endif %}" data-aud-aba="posicao" aria-selected="{% if aba == 'posicao' %}true{% else %}false{% endif %}">Por posição</button>
+            <button type="button" role="tab" class="aud-seg aud-aba{% if aba == 'sku' %} ativa{% endif %}" data-aud-aba="sku" aria-selected="{% if aba == 'sku' %}true{% else %}false{% endif %}">Por SKU</button>
+        </div>
+        <form method="get" class="aud-filtros" id="audFiltros" role="search">
+            <input type="hidden" name="aba" value="{{ aba }}" data-aud-aba-campo>
+            {% if filtros.operador %}<input type="hidden" name="operador" value="{{ filtros.operador }}">{% if filtros.etapa %}<input type="hidden" name="etapa" value="{{ filtros.etapa }}">{% endif %}{% endif %}
+            <label class="aud-busca">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <span class="visually-hidden">Buscar posição, SKU ou descrição</span>
+                <input id="f-q" name="q" type="search" value="{{ filtros.termo }}" placeholder="Buscar posição, SKU ou produto">
+            </label>
+            <label class="visually-hidden" for="f-status">Status</label>
+            <select id="f-status" name="status" class="aud-select" title="Filtrar por status" data-aud-autoenvio>
+                <option value="">Todos os status</option>
+                {% for valor, rotulo in status_opcoes %}<option value="{{ valor }}" {% if filtros.status == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="visually-hidden">Filtrar</button>
+            <a href="{{ urls.limpar }}" class="aud-icone aud-icone-borda{% if not filtros.ativos %} d-none{% endif %}" title="Limpar filtros" aria-label="Limpar filtros"><i class="bi bi-x-lg" aria-hidden="true"></i></a>
+        </form>
+        <ul class="aud-legenda" aria-label="Legenda">
+            <li><span class="aud-ponto aud-ponto-verde" aria-hidden="true"></span>Coincidente</li>
+            <li><span class="aud-ponto aud-ponto-laranja" aria-hidden="true"></span>Divergente</li>
+            <li><span class="aud-ponto aud-ponto-azul" aria-hidden="true"></span>Sem comparação</li>
+            <li><button type="button" class="aud-icone aud-icone-sm" data-bs-toggle="collapse" data-bs-target="#audLegenda" aria-expanded="false" aria-controls="audLegenda" title="Legenda completa"><i class="bi bi-question-circle" aria-hidden="true"></i><span class="visually-hidden">Legenda completa</span></button></li>
+            <li><button type="button" class="aud-icone aud-icone-sm aud-aba" data-aud-aba="historico" title="Histórico de atividade" aria-label="Histórico de atividade"><i class="bi bi-clock-history" aria-hidden="true"></i></button></li>
+        </ul>
+    </div>
+    <div class="collapse" id="audLegenda">
+        <ul class="aud-legenda-lista">
+            <li class="aud-tom-confere"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Concordância confirmada</li>
+            <li class="aud-tom-divergente"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i> Divergência (ou valor diferente do consenso)</li>
+            <li class="aud-tom-registrado"><i class="bi bi-record-circle-fill" aria-hidden="true"></i> Contado, sem comparação suficiente</li>
+            <li class="aud-tom-nao_contado"><i class="bi bi-dash-circle" aria-hidden="true"></i> Não contado</li>
+            <li class="aud-tom-nao_liberada"><i class="bi bi-lock-fill" aria-hidden="true"></i> Contagem não liberada</li>
+            <li class="aud-tom-nao_necessaria"><i class="bi bi-slash-circle" aria-hidden="true"></i> Não necessária (C1 = C2 dispensa C3)</li>
+        </ul>
+        <p class="aud-nota">Status comparam somente as contagens físicas liberadas. Por SKU, a célula só fica verde se todas as posições concordarem. Clique numa quantidade para ver os detalhes.</p>
+    </div>
+    {% if filtros.operador %}
+    <p class="aud-selecao" role="status"><i class="bi bi-person-check" aria-hidden="true"></i>
+        Mostrando registros de <strong>{{ filtros.operador }}</strong>{% if filtros.etapa %} em C{{ filtros.etapa }}{% endif %}.
+        <a href="?{{ filtros_sem_operador }}" class="aud-link" title="Limpar seleção de contador"><i class="bi bi-x-circle" aria-hidden="true"></i> Limpar seleção</a></p>
+    {% endif %}
+    {% include 'inventario/auditor/_tabela.html' %}
+</section>
+</div>
+
+<div class="modal fade" id="audDetalhe" tabindex="-1" aria-labelledby="audDetalheTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content aud-modal">
+            <div class="modal-header">
+                <h2 class="modal-title" id="audDetalheTitulo">Detalhes da contagem</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="aud-detalhe-lista" id="audDetalheCorpo"></dl>
+                <p class="aud-nota mb-0">Consulta somente leitura. Liberação = quando o auditor recebeu acesso; coleta = quando a contagem foi realizada.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block rodape %}
+<footer class="aud-rodape">
+    <span class="aud-sync" id="audSync" aria-live="polite">
+        <span class="aud-sync-ponto" aria-hidden="true"></span>
+        <span id="audSyncTexto">Atualizado às <span id="audSyncHora">{{ agora|date:"H:i:s" }}</span></span>
+    </span>
+    <span class="aud-rodape-sep" aria-hidden="true"></span>
+    <span>Datas da coleta preservadas</span>
+</footer>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/auditor.js' %}"></script>
+{% endblock %}

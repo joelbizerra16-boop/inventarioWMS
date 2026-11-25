@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% load comparativo_tags %}
+
+{% block title %}Painel do Auditor · {{ comparativo.nome }} | Sistema de Inventário{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
+    <div>
+        <a href="{% url 'comparativo:acompanhamento' comparativo.pk %}" class="small text-decoration-none"><i class="bi bi-arrow-left"></i> {{ comparativo.nome }}</a>
+        <h1 class="h3 fw-semibold mt-1 mb-1">Painel do Auditor · liberação das contagens</h1>
+        <p class="text-muted small mb-0">
+            Cada contagem tem a própria liberação: modo, duração e andamento. Liberar uma contagem nunca libera as outras,
+            não inicia nem altera a coleta, e não muda lançamentos (autores e horários originais são preservados).
+        </p>
+    </div>
+    <a href="{% url 'comparativo:auditoria_previa' comparativo.pk %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye me-1"></i>Visualizar como auditor</a>
+</div>
+
+{% if legado_liberado %}
+<div class="alert alert-warning small">
+    <strong>Configuração anterior encontrada:</strong> esta conferência estava marcada como “Liberar para auditor” (liberação da conferência inteira).
+    Esse modelo foi substituído pela liberação por contagem e <strong>não foi convertido automaticamente</strong>. Libere abaixo somente as contagens desejadas.
+</div>
+{% endif %}
+{% if legado_programada %}
+<div class="alert alert-secondary small">
+    <strong>Publicação programada geral anterior:</strong> {{ publicacao.get_status_display|lower }}, {{ publicacao.total_publicado }} de {{ publicacao.total_previsto }} itens.
+    Ela deixou de controlar a visão do auditor: agora a programação é definida em cada contagem. O histórico dela continua na trilha abaixo.
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+            <h2 class="h6 fw-semibold mb-0">Contagens desta conferência</h2>
+            <span class="small text-muted">Auditores autorizados: {% if auditores_ativos %}<strong>{{ auditores_ativos|join:", " }}</strong>{% else %}<span class="text-danger">nenhum (configure abaixo)</span>{% endif %}</span>
+        </div>
+        <div class="row g-3">
+            {% for c in contagens %}
+            <div class="col-xl-4">
+                <div class="border rounded-3 p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div>
+                            <div class="fs-5 fw-bold">{{ c.rotulo }}</div>
+                            <div class="small text-muted">{% if c.associacao %}Inventário #{{ c.associacao.inventario.pk }} · {{ c.inventario_status }}{% if c.em_execucao %} · <span class="badge text-bg-info">sendo atualizada</span>{% endif %}{% else %}Não associada{% endif %}</div>
+                        </div>
+                        <span class="badge {% if c.status == Liberacao.LIBERADA %}text-bg-success{% elif c.status == Liberacao.SUSPENSA %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ c.status_rotulo }}</span>
+                    </div>
+                    {% if c.inventario_trocado %}<div class="small text-danger mb-2">O inventário desta etapa mudou depois da liberação: libere novamente se desejar.</div>{% endif %}
+
+                    <dl class="row small mb-2">
+                        <dt class="col-6">Visíveis / registros</dt><dd class="col-6 text-end">{{ c.visiveis }} / {{ c.registros }}</dd>
+                        <dt class="col-6">Última atualização</dt><dd class="col-6 text-end">{{ c.ultima_atualizacao|data_hora }}</dd>
+                        {% if c.liberacao.liberado_em %}<dt class="col-6">Liberada por</dt><dd class="col-6 text-end">{{ c.liberacao.liberado_por|nome_usuario }} · {{ c.liberacao.liberado_em|data_hora }}</dd>{% endif %}
+                        {% if c.liberacao.suspenso_em %}<dt class="col-6">{% if c.status == Liberacao.SUSPENSA %}Suspensa por{% else %}Última suspensão{% endif %}</dt><dd class="col-6 text-end">{{ c.liberacao.suspenso_por|nome_usuario }} · {{ c.liberacao.suspenso_em|data_hora }}<div class="text-muted">{{ c.liberacao.motivo_suspensao }}</div></dd>{% endif %}
+                    </dl>
+
+                    {% if c.liberada %}
+                    {% with l=c.liberacao %}
+                    <div class="small mb-2"><strong>Modo:</strong> {{ l.get_modo_display }}{% if l.modo == Modo.PROGRAMADA %} · {{ l.duracao_minutos }} min · {{ l.get_ordem_display|lower }}{% endif %}</div>
+                    {% if l.modo == Modo.PROGRAMADA %}
+                    <div class="bg-light rounded p-2 mb-2 small">
+                        <div class="d-flex justify-content-between"><strong>{{ l.get_programacao_display }}</strong><span>{{ l.total_publicado }} de {{ l.total_programado }} · {{ l.percentual|pct }}</span></div>
+                        <div class="progress my-1" role="progressbar" aria-label="Andamento da liberação de {{ c.rotulo }}" aria-valuenow="{{ l.percentual|pct_css }}" aria-valuemin="0" aria-valuemax="100" style="height: 8px"><div class="progress-bar" style="width: {{ l.percentual|pct_css }}%"></div></div>
+                        <div class="text-muted">Início {{ l.inicio_real|default:l.inicio_previsto|data_hora }} · {% if l.termino_real %}término {{ l.termino_real|data_hora }}{% else %}previsão {{ l.termino_previsto|data_hora }}{% endif %}</div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        {% if l.programacao == Programacao.EM_LIBERACAO or l.programacao == Programacao.AGENDADA %}
+                        <form method="post">{% csrf_token %}<input type="hidden" name="etapa" value="{{ c.etapa }}"><button name="acao" value="pausar" class="btn btn-sm btn-outline-warning">Pausar</button></form>
+                        {% endif %}
+                        {% if l.programacao == Programacao.PAUSADA %}
+                        <form method="post">{% csrf_token %}<input type="hidden" name="etapa" value="{{ c.etapa }}"><button name="acao" value="retomar" class="btn btn-sm btn-outline-primary">Retomar</button></form>
+                        {% endif %}
+                        {% if c.programacao_ativa %}
+                        <form method="post" onsubmit="return confirm('Disponibilizar agora todos os registros restantes de {{ c.rotulo }}?');">{% csrf_token %}<input type="hidden" name="etapa" value="{{ c.etapa }}"><button name="acao" value="concluir" class="btn btn-sm btn-outline-success">Concluir agora</button></form>
+                        <form method="post" onsubmit="return confirm('Cancelar os lotes restantes de {{ c.rotulo }}? O que já foi disponibilizado continua visível.');">{% csrf_token %}<input type="hidden" name="etapa" value="{{ c.etapa }}"><button name="acao" value="interromper" class="btn btn-sm btn-outline-secondary">Interromper</button></form>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                    <details>
+                        <summary class="btn btn-sm btn-outline-danger">Suspender {{ c.rotulo }}…</summary>
+                        <form method="post" class="border rounded p-2 mt-2 bg-light small">
+                            {% csrf_token %}<input type="hidden" name="acao" value="suspender"><input type="hidden" name="etapa" value="{{ c.etapa }}">
+                            <label class="form-label mb-1" for="motivo-{{ c.etapa }}">Motivo da suspensão</label>
+                            <textarea id="motivo-{{ c.etapa }}" name="motivo" class="form-control form-control-sm mb-2" rows="2" minlength="5" maxlength="255" required></textarea>
+                            <p class="text-muted mb-2">Bloqueia novas consultas e atualizações de {{ c.rotulo }} e retira os dados da tela do auditor na próxima sincronização.
+                                Não recolhe arquivos já exportados nem informações já visualizadas. Dados operacionais e histórico continuam intactos.</p>
+                            <button type="submit" class="btn btn-sm btn-danger">Confirmar suspensão</button>
+                        </form>
+                    </details>
+                    {% elif c.associacao %}
+                    <details>
+                        <summary class="btn btn-sm btn-outline-success">Liberar {{ c.rotulo }}…</summary>
+                        <form method="post" class="border rounded p-2 mt-2 bg-light small" data-liberacao>
+                            {% csrf_token %}<input type="hidden" name="acao" value="liberar"><input type="hidden" name="etapa" value="{{ c.etapa }}">
+                            <fieldset class="mb-2">
+                                <legend class="form-label fs-6 mb-1">Como {{ c.rotulo }} chega ao auditor</legend>
+                                <div class="form-check"><input class="form-check-input" type="radio" name="modo" id="modo-{{ c.etapa }}-tr" value="{{ Modo.TEMPO_REAL }}" checked><label class="form-check-label" for="modo-{{ c.etapa }}-tr">Tempo real: tudo agora, e novos registros e correções conforme gravados</label></div>
+                                <div class="form-check"><input class="form-check-input" type="radio" name="modo" id="modo-{{ c.etapa }}-pg" value="{{ Modo.PROGRAMADA }}"><label class="form-check-label" for="modo-{{ c.etapa }}-pg">Liberação programada: os {{ c.registros }} registros atuais em lotes ao longo do tempo</label></div>
+                            </fieldset>
+                            <div class="row g-2 mb-2">
+                                <div class="col-sm-4"><label class="form-label mb-0" for="dur-{{ c.etapa }}">Duração (min)</label><input id="dur-{{ c.etapa }}" type="number" name="duracao_minutos" class="form-control form-control-sm" min="1" max="1440" value="60"></div>
+                                <div class="col-sm-8"><label class="form-label mb-0" for="ord-{{ c.etapa }}">Ordem</label><select id="ord-{{ c.etapa }}" name="ordem" class="form-select form-select-sm">{% for valor, rotulo in Ordem.choices %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}</select></div>
+                                <div class="col-12"><label class="form-label mb-0" for="ini-{{ c.etapa }}">Início (vazio = agora)</label><input id="ini-{{ c.etapa }}" type="datetime-local" name="inicio_previsto" class="form-control form-control-sm"></div>
+                            </div>
+                            <p class="mb-2"><strong>Alcance:</strong>
+                                {% if auditores_ativos %}{{ auditores_ativos|join:", " }}{% else %}nenhum auditor autorizado ainda{% endif %} passará(ão) a ver
+                                {{ c.rotulo }} (Inventário #{{ c.associacao.inventario.pk }}, {{ c.registros }} registro(s) hoje). As outras contagens não são afetadas.
+                                Duração e ordem valem só para a liberação programada.</p>
+                            <button type="submit" class="btn btn-sm btn-success">Confirmar liberação de {{ c.rotulo }}</button>
+                        </form>
+                    </details>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="small text-muted mt-3 mb-0">
+            Liberação programada: os registros existentes no momento da liberação são congelados e disponibilizados em lotes (~15 s) até o fim da duração.
+            Registros gravados depois do início são reais e novos, então aparecem conforme gravados. Os lotes avançam pelo processo
+            <code>processar_publicacoes_auditor</code> e também a cada acesso a esta tela ou ao painel do auditor.
+        </p>
+    </div>
+</div>
+
+<form method="post" class="card border-0 shadow-sm mb-3">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="salvar">
+    <div class="card-body">
+        <h2 class="h6 fw-semibold">Auditores autorizados e horário real</h2>
+        <div class="border rounded p-2" style="max-height: 180px; overflow:auto">
+            {% for opcao in form.auditores %}<div class="form-check">{{ opcao.tag }} <label class="form-check-label" for="{{ opcao.id_for_label }}">{{ opcao.choice_label }}</label></div>
+            {% empty %}<p class="text-muted small mb-0">Nenhum usuário com perfil Auditor. Cadastre em Usuários.</p>{% endfor %}
+        </div>
+        <div class="form-check form-switch mt-3">
+            {{ form.mostrar_horario_real }}
+            <label class="form-check-label fw-semibold" for="{{ form.mostrar_horario_real.id_for_label }}">{{ form.mostrar_horario_real.label }}</label>
+            <div class="form-text">{{ form.mostrar_horario_real.help_text }}</div>
+        </div>
+    </div>
+    <div class="card-footer bg-white text-end"><button type="submit" class="btn btn-primary btn-sm">Salvar</button></div>
+</form>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <h2 class="h6 fw-semibold">Trilha de auditoria (imutável)</h2>
+        {% if eventos %}
+        <div class="table-responsive"><table class="table table-sm small mb-0">
+            <thead><tr><th>Data/hora</th><th>Evento</th><th>Usuário</th><th>Detalhes</th></tr></thead>
+            <tbody>{% for ev in eventos %}<tr><td class="text-nowrap">{{ ev.data_hora|data_hora }}</td><td>{{ ev.get_tipo_display }}{% if ev.dados.etapa %} · C{{ ev.dados.etapa }}{% endif %}{% if ev.lote is not None %} · lote {{ ev.lote }}{% endif %}</td><td>{{ ev.usuario|nome_usuario:"Processo automático" }}</td><td class="text-muted">{% if ev.dados.motivo %}Motivo: {{ ev.dados.motivo }}{% else %}{{ ev.dados }}{% endif %}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        {% else %}<p class="text-muted small mb-0">Nenhum evento registrado.</p>{% endif %}
+    </div>
+</div>
+{% endblock %}

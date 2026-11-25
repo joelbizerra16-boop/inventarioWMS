@@ -19,7 +19,19 @@
 
         <h1 class="h3 fw-semibold text-dark mb-1">Produtos</h1>
 
-        <p class="text-muted mb-0">Cadastro e manutenção de produtos.</p>
+        <p class="text-muted mb-0">Cadastro e manutenção de produtos ·
+            {% if filtro_classificacao == 'sem' %}
+            <strong data-categoria-lista>Sem classificação</strong>
+            · <a href="{% url 'produtos:lista' %}">ver {{ categoria_atual_rotulo }}</a>
+            {% elif filtro_classificacao == 'conflito' %}
+            <strong data-categoria-lista>Conflitos de categoria ({{ categoria_atual_rotulo }})</strong>
+            · <a href="{% url 'produtos:lista' %}">ver {{ categoria_atual_rotulo }}</a>
+            {% else %}
+            Categoria: <strong data-categoria-lista>{{ categoria_atual_rotulo }}</strong>
+            · <a href="{% url 'produtos:lista' %}?classificacao=sem">ver sem classificação</a>
+            {% if total_conflitos %}· <a href="{% url 'produtos:lista' %}?classificacao=conflito" class="text-danger" data-link-conflitos>ver conflitos ({{ total_conflitos }})</a>{% endif %}
+            {% endif %}
+        </p>
 
     </div>
 
@@ -68,6 +80,8 @@
                     value="{{ termo_busca }}"
 
                 >
+
+                {% if filtro_classificacao %}<input type="hidden" name="classificacao" value="{{ filtro_classificacao }}">{% endif %}
 
             </div>
 
@@ -132,7 +146,7 @@
 
                         <td>{{ produto.embalagem|default:"—" }}</td>
 
-                        <td>{{ produto.setor }}</td>
+                        <td>{{ produto.setor }}{% include 'includes/categoria_efetiva_badge.html' with efetiva=produto.categoria_efetiva %}</td>
 
                         <td>{{ produto.codigo_ean|default:"—" }}</td>
 

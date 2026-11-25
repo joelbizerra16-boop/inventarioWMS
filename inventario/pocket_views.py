@@ -71,6 +71,9 @@ from inventario.services.pocket_lock_operacional import (
     liberar_lock_posicao_pocket_geral,
 )
 from inventario.services.tarefas import TarefaError
+from django.utils.cache import add_never_cache_headers
+
+from core.categorias import alinhar_categoria_sessao, obter_categoria_sessao
 from core.logging_auditoria import ip_do_request
 from core.pocket_http import (
     is_pocket_ajax,
@@ -147,7 +150,7 @@ class PocketSelecionarView(AcessoOperacionalMixin, View):
 
             'modo': MODO_INVENTARIO,
 
-            'inventarios': listar_inventarios_pocket(),
+            'inventarios': listar_inventarios_pocket(obter_categoria_sessao(request)),
 
         })
 
@@ -166,7 +169,23 @@ class PocketMestresSyncView(AcessoOperacionalMixin, View):
     def get(self, request):
         from inventario.services.pocket_mestres import obter_mapas_mestres_pocket
 
-        return JsonResponse({'ok': True, **obter_mapas_mestres_pocket()})
+        inventario = None
+        inventario_id = (request.GET.get('inventario_id') or '').strip()
+        if inventario_id:
+            if not inventario_id.isdigit():
+                return JsonResponse({'ok': False, 'message': 'Inventário inválido.'}, status=400)
+            inventario = Inventario.objects.filter(pk=int(inventario_id)).first()
+            if inventario is None:
+                return JsonResponse({'ok': False, 'message': 'Inventário não encontrado.'}, status=404)
+        resposta = JsonResponse({
+            'ok': True,
+            # Identifica de qual inventário/categoria são os mapas (sem reuso cruzado).
+            'inventario_id': inventario.pk if inventario else None,
+            'categoria': inventario.categoria if inventario else None,
+            **obter_mapas_mestres_pocket(inventario),
+        })
+        add_never_cache_headers(resposta)
+        return resposta
 
 
 class PocketContagemView(RequerEscritaPocketMixin, View):
@@ -218,6 +237,7 @@ class PocketContagemView(RequerEscritaPocketMixin, View):
     def _contexto(self, request, inventario, form=None, codigo_posicao=None):
         if form is None:
             form = PocketContagemForm(
+                inventario=inventario,
                 initial={'codigo_posicao': codigo_posicao or ''},
             )
         return {
@@ -243,6 +263,9 @@ class PocketContagemView(RequerEscritaPocketMixin, View):
             )
             messages.error(request, str(exc))
             return redirect('pocket:selecionar')
+
+        # Seletor e conteúdo sempre na categoria gravada no inventário aberto.
+        alinhar_categoria_sessao(request, inventario.categoria)
 
         try:
 
@@ -334,7 +357,7 @@ class PocketContagemView(RequerEscritaPocketMixin, View):
         if acao in ('lock_posicao', 'liberar_posicao'):
             return self._post_lock_operacional_geral(request, inventario, acao)
 
-        form = PocketContagemForm(request.POST)
+        form = PocketContagemForm(request.POST, inventario=inventario)
 
         if not form.is_valid():
 

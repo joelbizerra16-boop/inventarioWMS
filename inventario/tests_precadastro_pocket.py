@@ -113,6 +113,7 @@ class OperadorPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
 
     def test_cria_posicao_com_zero_a_esquerda_sem_confundir_codigo_e_descricao(self):
         resposta = self.client.post(reverse('pocket:operador_precadastro_posicao'), {
+            'categoria': 'LUBRIFICANTES',
             'codigo': '001',
             'posicao': 'Docas 001',
         })
@@ -130,6 +131,7 @@ class OperadorPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
 
     def test_posicao_obrigatoria_mantem_codigo(self):
         resposta = self.client.post(reverse('pocket:operador_precadastro_posicao'), {
+            'categoria': 'LUBRIFICANTES',
             'codigo': '001',
             'posicao': '',
         })
@@ -141,6 +143,7 @@ class OperadorPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
     def test_codigo_duplicado_nao_sobrescreve_posicao(self):
         Posicao.objects.create(codigo='001', posicao='Antiga', ativo=True)
         resposta = self.client.post(reverse('pocket:operador_precadastro_posicao'), {
+            'categoria': 'LUBRIFICANTES',
             'codigo': '001',
             'posicao': 'Nova',
         })
@@ -157,6 +160,7 @@ class OperadorPrecadastroPocketTestCase(ClienteAutenticadoMixin, TestCase):
             ativo=False,
         )
         resposta = self.client.post(reverse('pocket:operador_precadastro_posicao'), {
+            'categoria': 'LUBRIFICANTES',
             'codigo': '00999',
             'posicao': 'Tentativa',
         })
@@ -414,10 +418,9 @@ class EmbalagemComboboxPrecadastroTestCase(TestCase):
         self.assertNotIn('\t', opcoes)
         self.assertNotIn('\n', opcoes)
         self.assertNotIn(' \r\n ', opcoes)
-        self.assertEqual(
-            opcoes,
-            sorted(opcoes, key=lambda valor: (valor.casefold(), valor)),
-        )
+        # Ordem determinística feita em Python (independe da collation do banco):
+        # chave com strip + Unicode + casefold; valor original preservado.
+        self.assertEqual(opcoes, ['BOMBONA', 'bombona', '  CX ', 'Tambor'])
         self.assertEqual(Produto.objects.get(codigo_produto='CAT-5').embalagem, '  CX ')
 
     def test_selecao_valida_grava_o_valor_exato_nos_dois_fluxos(self):
@@ -569,3 +572,60 @@ class EmbalagemComboboxPrecadastroTestCase(TestCase):
 
         settings_src = Path(settings.BASE_DIR, 'core', 'settings.py').read_text(encoding='utf-8')
         self.assertIn("os.environ.get('POCKET_STATIC_VERSION', '20261002f')", settings_src)
+
+
+class OrdenacaoEmbalagensDeterministicaTestCase(TestCase):
+    """Ordem das embalagens feita em Python: igual em qualquer banco/collation."""
+
+    VALORES = ['Óleo', 'oleo', ' OLEO', 'Ácido', 'acido', 'Caixa', 'caixa ', 'Zeta', 'água']
+    ESPERADO = ['acido', 'Ácido', 'água', 'Caixa', 'caixa ', ' OLEO', 'oleo', 'Óleo', 'Zeta']
+
+    def setUp(self):
+        for indice, valor in enumerate(self.VALORES, start=1):
+            _criar_catalogo(f'ORD-{indice}', valor)
+        _criar_catalogo('ORD-VAZIO-1', '')
+        _criar_catalogo('ORD-VAZIO-2', '  \t ')
+
+    def test_espacos_maiusculas_e_acentos_em_ordem_deterministica(self):
+        self.assertEqual(listar_embalagens_distintas(), self.ESPERADO)
+
+    def test_chave_normaliza_somente_a_ordenacao(self):
+        from produtos.forms import chave_ordenacao_embalagem
+
+        self.assertEqual(chave_ordenacao_embalagem('  Óleo ')[0], 'oleo')
+        self.assertEqual(chave_ordenacao_embalagem('ÁCIDO')[0], 'acido')
+        # Formas Unicode equivalentes (NFC x NFD) têm a mesma chave primária.
+        self.assertEqual(
+            chave_ordenacao_embalagem('Óleo')[:2],
+            chave_ordenacao_embalagem('Óleo')[:2],
+        )
+        # O último elemento da chave é sempre o valor original.
+        self.assertEqual(chave_ordenacao_embalagem(' OLEO')[2], ' OLEO')
+
+    def test_preserva_valor_original_sem_regravar_e_exclui_vazios(self):
+        antes = dict(Produto.objects.values_list('codigo_produto', 'embalagem'))
+        opcoes = listar_embalagens_distintas()
+        self.assertIn(' OLEO', opcoes)
+        self.assertIn('caixa ', opcoes)
+        self.assertNotIn('', opcoes)
+        self.assertNotIn('  \t ', opcoes)
+        self.assertEqual(
+            dict(Produto.objects.values_list('codigo_produto', 'embalagem')),
+            antes,
+        )
+
+    @unittest.skipUnless(connection.vendor == 'postgresql', 'Requer PostgreSQL.')
+    def test_postgresql_ordem_independe_da_collation(self):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT embalagem FROM ('
+                'SELECT DISTINCT embalagem FROM produtos_produto '
+                "WHERE codigo_produto LIKE 'ORD-%' "
+                "AND codigo_produto NOT LIKE 'ORD-VAZIO-%'"
+                ') AS distintas ORDER BY embalagem COLLATE "C"'
+            )
+            ordem_collation_c = [linha[0] for linha in cursor.fetchall()]
+        # A ordem binária do banco é outra; a função não depende dela.
+        self.assertNotEqual(ordem_collation_c, self.ESPERADO)
+        self.assertEqual(sorted(ordem_collation_c), sorted(self.ESPERADO))
+        self.assertEqual(listar_embalagens_distintas(), self.ESPERADO)

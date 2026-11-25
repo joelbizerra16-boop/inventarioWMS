@@ -2,6 +2,7 @@ from django.http import JsonResponse
 from django.views import View
 
 from accounts.mixins import AcessoOperacionalMixin
+from core.categorias import obter_categoria_sessao
 from dashboard.services.dashboard_operacional import (
     obter_indicadores_ciclico,
     obter_indicadores_geral,
@@ -19,7 +20,7 @@ class DashboardOperacionalApiView(AcessoOperacionalMixin, View):
         ref_pk = int(referencia_id) if referencia_id and referencia_id.isdigit() else None
 
         if tipo == 'GERAL':
-            indicadores = obter_indicadores_geral(ref_pk)
+            indicadores = obter_indicadores_geral(ref_pk, obter_categoria_sessao(request))
         else:
             indicadores = obter_indicadores_ciclico(ref_pk)
 

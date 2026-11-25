@@ -9,6 +9,7 @@ class Usuario(models.Model):
         OPERADOR = 'OPERADOR', 'Operador (Pocket)'
         INVENTARIO = 'INVENTARIO', 'Operador de Inventário'
         CONSULTA = 'CONSULTA', 'Consulta'
+        AUDITOR = 'AUDITOR', 'Auditor (somente contagens físicas)'
 
     nome = models.CharField('nome', max_length=150)
     login = models.CharField('login', max_length=100)
