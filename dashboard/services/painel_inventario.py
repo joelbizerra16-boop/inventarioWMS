@@ -18,6 +18,11 @@ from dashboard.services.dashboard import (
     _montar_maiores_divergencias,
     _obter_confronto_ultimo_inventario_finalizado,
 )
+from inventario.services.fechamento import (
+    MENSAGEM_INDISPONIVEL,
+    acuracidade_do_fechamento,
+    preencher_painel_congelado,
+)
 from inventario.models_comparativo import ComparativoContagem
 from inventario.services.comparativo_contagens import (
     NAO_REGISTRADO,
@@ -433,6 +438,9 @@ class PainelInventario:
     divergencias_contagens: list[DivergenciaContagens] = field(default_factory=list)
     divergencias_inventario: list = field(default_factory=list)
     inventario_divergencias: object = None
+    aviso: str = ''
+    aviso_inventario: str = ''
+    acuracidade_fechamento: object = None
 
     @property
     def provisorio(self) -> bool:
@@ -462,22 +470,34 @@ def montar_painel(
     comparativo: ComparativoContagem | None,
     canal: str,
     categoria: str | None = None,
+    aviso: str = '',
 ) -> PainelInventario:
     canal = Canal.normalizar(canal)
     # "Maiores divergências (Geral)": último inventário finalizado da mesma
-    # categoria da conferência exibida (ou da sessão, sem conferência).
+    # categoria, lido só do snapshot. Sem fotografia, não consulta o SAP atual.
     categoria = comparativo.categoria if comparativo is not None else categoria
-    inventario, resultado_confronto = _obter_confronto_ultimo_inventario_finalizado(categoria)
+    inventario, resultado_confronto, aviso_inventario = _obter_confronto_ultimo_inventario_finalizado(categoria)
     painel = PainelInventario(
         comparativo=comparativo,
         canal=canal,
         divergencias_inventario=_montar_maiores_divergencias(resultado_confronto),
         inventario_divergencias=inventario,
+        aviso=aviso,
+        aviso_inventario=aviso_inventario,
     )
     if comparativo is None:
         return painel
+    if aviso:
+        return painel
 
     dados = carregar_dados(comparativo)
+    if dados.congelado and preencher_painel_congelado(painel, comparativo, dados, canal):
+        return painel
+    if dados.congelado and canal:
+        from inventario.services.fechamento import canais_com_resultado
+        if canal not in canais_com_resultado(comparativo):
+            painel.aviso = painel.aviso or MENSAGEM_INDISPONIVEL
+            return painel
     linhas_sku = montar_linhas_sku(dados, canal)
     linhas_posicao = montar_linhas_posicao(dados)
     indicador_posicao = calcular_indicador_posicao(linhas_posicao, dados)
@@ -506,4 +526,25 @@ def montar_painel(
     painel.motivo_sap = dados.motivo_sap(canal)
     painel.divergencias_sap = montar_divergencias_sap(linhas_sku, painel.motivo_sap)
     painel.divergencias_contagens = montar_divergencias_contagens(linhas_sku)
+    if dados.congelado:
+        painel.acuracidade_fechamento = acuracidade_do_fechamento(comparativo, canal)
+        if painel.acuracidade_fechamento.disponivel:
+            painel.indicador_sku = _indicador_do_registro(painel.acuracidade_fechamento)
+        else:
+            painel.aviso = painel.aviso or MENSAGEM_INDISPONIVEL
     return painel
+
+
+def _indicador_do_registro(acuracidade):
+    return Indicador(
+        chave='sku',
+        titulo='Acuracidade por SKU',
+        subtitulo='Registro do fechamento',
+        numerador=acuracidade.acertos,
+        denominador=acuracidade.avaliados,
+        percentual=acuracidade.percentual,
+        motivo='',
+        descricao_base='Registro vinculado à finalização.',
+        linhas=[f'{acuracidade.acertos} de {acuracidade.avaliados} SKUs iguais ao SAP'],
+        provisorio=False,
+    )

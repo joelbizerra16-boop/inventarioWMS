@@ -181,6 +181,39 @@ def _registros_visiveis(comparativo: ComparativoContagem, liberacoes: dict) -> l
     return registros
 
 
+def _lancamentos_do_snapshot(comparativo: ComparativoContagem, horario_real: bool) -> list[Lancamento]:
+    """Lançamentos gravados na finalização. Não lê item, produto nem posição atuais."""
+    from datetime import datetime
+
+    snap = comparativo.snapshot_resultado or {}
+    produtos = snap.get('produtos') or {}
+
+    def momento(valor):
+        return datetime.fromisoformat(valor) if valor else None
+
+    lancamentos = []
+    for item in snap.get('lancamentos') or []:
+        produto = produtos.get(str(item.get('produto_id'))) or {}
+        descricao = produto.get('descricao') if produto else 'Dado não disponível no fechamento'
+        sku = produto.get('codigo_produto') if produto else 'Dado não disponível no fechamento'
+        lancamentos.append(Lancamento(
+            id=item.get('id') or 0,
+            etapa=item.get('ordem') or 0,
+            posicao_id=item.get('posicao_id') or 0,
+            posicao=item.get('descricao_posicao') or item.get('codigo_posicao') or '',
+            sku=sku or 'Dado não disponível no fechamento',
+            descricao=descricao or 'Dado não disponível no fechamento',
+            quantidade=Decimal(str(item.get('quantidade') or '0')),
+            operador=item.get('operador') or NAO_REGISTRADO,
+            disponibilizado_em=momento(item.get('data_registro')),
+            corrigido=bool(item.get('data_alteracao')),
+            registrado_em=momento(item.get('data_registro')) if horario_real else None,
+            corrigido_por=item.get('autor_alteracao') or '',
+            corrigido_em=momento(item.get('data_alteracao')) if horario_real else None,
+        ))
+    return lancamentos
+
+
 def carregar_lancamentos(
     comparativo: ComparativoContagem, liberacoes: dict | None = None, horario_real: bool = False,
 ) -> list[Lancamento]:
@@ -189,6 +222,8 @@ def carregar_lancamentos(
     Sem permissão de horário real, os horários de captura e correção nem
     entram na estrutura (não há como vazarem para tela, API ou Excel).
     """
+    if comparativo.snapshot_resultado is not None:
+        return _lancamentos_do_snapshot(comparativo, horario_real)
     liberacoes = liberacoes_visiveis(comparativo) if liberacoes is None else liberacoes
     registros = _registros_visiveis(comparativo, liberacoes)
     nomes = _nomes((
@@ -607,6 +642,8 @@ def montar_painel(comparativo: ComparativoContagem, filtros: FiltrosAuditor | No
     associadas = frozenset(comparativo.associacoes.values_list('ordem', flat=True))
     liberacoes = liberacoes_visiveis(comparativo)
     liberadas = set(liberacoes)
+    if comparativo.snapshot_resultado is not None:
+        liberadas = set(associadas)
     publicacao = getattr(comparativo, 'publicacao_auditoria', None)
     horario_real = bool(publicacao and publicacao.mostrar_horario_real)
     lancamentos = carregar_lancamentos(comparativo, liberacoes, horario_real)

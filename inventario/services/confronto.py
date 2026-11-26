@@ -68,7 +68,7 @@ class ResumoConfronto:
     produtos_divergentes: int
     produtos_excesso_fisico: int
     produtos_deficit_fisico: int
-    acuracidade: Decimal
+    acuracidade: Decimal | None
 
 
 @dataclass

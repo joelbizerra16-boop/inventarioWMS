@@ -834,6 +834,9 @@ class DadosComparativo:
     # Posições atribuídas por tarefa nos inventários associados:
     # {posicao_id: (codigo, descricao)}. Vazio quando não há planejamento.
     posicoes_planejadas: dict[int, tuple[str, str]] = field(default_factory=dict)
+    # Conferência finalizada: `snapshot` é o JSON gravado; nada disso vem de tabela atual.
+    congelado: bool = False
+    snapshot: dict | None = None
 
     @property
     def ordens_associadas(self) -> frozenset[int]:
@@ -1204,6 +1207,8 @@ def dados_do_snapshot(comparativo: ComparativoContagem) -> DadosComparativo:
         posicoes_planejadas={
             pid: (codigo, descricao) for pid, codigo, descricao in snap.get('posicoes_planejadas', [])
         },
+        congelado=True,
+        snapshot=snap,
     )
 
 
@@ -1581,6 +1586,8 @@ def salvar_acuracidade(
     dados: DadosComparativo | None = None,
 ) -> ComparativoAcuracidade:
     """Grava o cálculo atual (somente leitura das contagens) como registro."""
+    if comparativo.snapshot_resultado is not None:
+        raise ComparativoError('Conferência finalizada não recalcula acuracidade.')
     canal = Canal.normalizar(canal)
     dados = dados or carregar_dados(comparativo)
     acuracidade = calcular_acuracidade(
@@ -1628,7 +1635,8 @@ def finalizar_comparativo(comparativo: ComparativoContagem, usuario) -> Comparat
         if acuracidade.disponivel:
             acuracidades.append(salvar_acuracidade(comparativo, canal, usuario, dados=dados))
     estado_anterior = comparativo.estado
-    comparativo.snapshot_resultado = serializar_dados(dados)
+    from inventario.services.fechamento import anexar_fechamento
+    comparativo.snapshot_resultado = anexar_fechamento(serializar_dados(dados), dados, comparativo)
     comparativo.data_finalizacao = dados.gerado_em
     comparativo.usuario_finalizacao = usuario if getattr(usuario, 'is_authenticated', False) else None
     comparativo.estado = ComparativoContagem.Estado.ENCERRADA
@@ -1989,6 +1997,9 @@ def analisar(
     canal = Canal.normalizar(canal)
     visao = Visao.normalizar(visao)
     dados = dados or carregar_dados(comparativo)
+    if dados.congelado:
+        from inventario.services.fechamento import resultado_congelado
+        return resultado_congelado(comparativo, dados, canal, visao, filtros)
     # Indicadores gerais: calculados sobre todas as linhas (antes de pesquisa,
     # filtros e paginação) e a partir da mesma leitura de dados da tabela.
     linhas_sku = montar_linhas_sku(dados, canal)

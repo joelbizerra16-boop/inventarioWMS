@@ -58,7 +58,8 @@
         <div class="dashboard-kpi">
             <span class="dashboard-kpi-icon bg-laranja"><i class="bi bi-graph-up"></i></span>
             <p class="dashboard-kpi-label">Acuracidade Geral</p>
-            <p class="dashboard-kpi-value">{{ indicadores.acuracidade }}%</p>
+            <p class="dashboard-kpi-value" id="acuracidade-geral">{% if indicadores.acuracidade is None %}—{% else %}{{ indicadores.acuracidade }}%{% endif %}</p>
+            {% if indicadores.aviso_inventario %}<p class="dashboard-kpi-label">{{ indicadores.aviso_inventario }}</p>{% endif %}
         </div>
     </div>
 </div>
@@ -153,7 +154,9 @@
         </div>
         {% else %}
         <p class="text-muted text-center py-4 mb-0">
-            {% if indicadores.maiores_divergencias_inventario %}
+            {% if indicadores.aviso_inventario %}
+                {{ indicadores.aviso_inventario }}
+            {% elif indicadores.maiores_divergencias_inventario %}
                 Nenhuma divergência no último inventário finalizado.
             {% else %}
                 Nenhum inventário finalizado para análise de divergências.

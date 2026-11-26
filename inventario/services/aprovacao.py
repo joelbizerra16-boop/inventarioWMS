@@ -1,5 +1,4 @@
 from django.db import transaction
-from django.utils import timezone
 
 from inventario.models import Inventario
 from inventario.services.confronto import ResultadoConfronto, executar_confronto
@@ -47,25 +46,32 @@ def _validar_inventario_finalizado(inventario: Inventario) -> None:
         raise AprovacaoError('Somente inventários finalizados podem ser aprovados.')
 
 
-def _registrar_confronto_executado(inventario: Inventario) -> None:
-    inventario.confronto_executado_em = timezone.now()
-    if inventario.status_aprovacao != StatusAprovacao.APROVADO:
-        inventario.status_aprovacao = StatusAprovacao.PENDENTE_APROVACAO
-    inventario.save(update_fields=['confronto_executado_em', 'status_aprovacao'])
-
-
 def consultar_aprovacao(
     inventario_id: int,
     termo_busca: str = '',
 ) -> ResultadoConfronto:
+    """Lê divergências para a tela de aprovação, sem gravar.
+
+    Inventário finalizado sai só da fotografia. Inventário ainda aberto
+    confronta ao vivo. Nenhum dos dois caminhos altera confronto_executado_em
+    nem recalcula o fechamento.
+    """
     inventario = Inventario.objects.get(pk=inventario_id)
-    resultado = executar_confronto(
+    if inventario.status == Inventario.Status.FINALIZADO:
+        from inventario.services.inventario_snapshot import leitura_inventario_congelado
+
+        resultado, _aviso = leitura_inventario_congelado(
+            inventario,
+            canal=None,
+            filtro_status='divergencias',
+            termo_busca=termo_busca,
+        )
+        return resultado
+    return executar_confronto(
         inventario_id=inventario_id,
         filtro_status='divergencias',
         termo_busca=termo_busca,
     )
-    _registrar_confronto_executado(inventario)
-    return resultado
 
 
 @transaction.atomic
@@ -75,11 +81,6 @@ def aprovar_inventario(inventario: Inventario) -> None:
 
     if inventario.status_aprovacao == StatusAprovacao.APROVADO:
         raise AprovacaoError('Inventário já está aprovado.')
-
-    if inventario.confronto_executado_em is None:
-        raise AprovacaoError(
-            'Execute o confronto antes de aprovar o inventário.',
-        )
 
     inventario.status_aprovacao = StatusAprovacao.APROVADO
     inventario.save(update_fields=['status_aprovacao'])
@@ -105,14 +106,27 @@ def reabrir_inventario(inventario: Inventario) -> None:
 
 
 def pode_aprovar(inventario_id: int) -> bool:
-    return obter_status_aprovacao(inventario_id) == StatusAprovacao.PENDENTE_APROVACAO
+    registro = (
+        Inventario.objects.filter(pk=inventario_id)
+        .values_list('status', 'status_aprovacao')
+        .first()
+    )
+    if registro is None:
+        return False
+    status, status_aprovacao = registro
+    return (
+        status == Inventario.Status.FINALIZADO
+        and status_aprovacao != StatusAprovacao.APROVADO
+    )
 
 
 def pode_reabrir(inventario_id: int) -> bool:
-    return obter_status_aprovacao(inventario_id) in (
-        StatusAprovacao.PENDENTE_APROVACAO,
-        StatusAprovacao.APROVADO,
+    status = (
+        Inventario.objects.filter(pk=inventario_id)
+        .values_list('status', flat=True)
+        .first()
     )
+    return status == Inventario.Status.FINALIZADO
 
 
 def listar_ids_inventarios_aprovados() -> list[int]:

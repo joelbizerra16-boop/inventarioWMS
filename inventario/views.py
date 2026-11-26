@@ -38,6 +38,7 @@ from inventario.services.locks import LockError
 from inventario.services.tarefas import TarefaError
 from inventario.services.consulta_contagem import queryset_contagens
 from inventario.services.confronto import CanalConfronto, executar_confronto
+from inventario.services.inventario_snapshot import leitura_inventario_congelado
 from inventario.services.exportacao_excel import (
     parametros_confronto,
     resposta_excel_confronto,
@@ -594,12 +595,20 @@ class ConfrontoListView(AcessoOperacionalMixin, View):
 
         if inventario_id.isdigit():
             inventario_selecionado = get_object_or_404(Inventario, pk=int(inventario_id))
-            resultado = executar_confronto(
-                inventario_id=inventario_selecionado.pk,
-                filtro_status=filtro_status,
-                termo_busca=termo_busca,
-                canal=canal,
-            )
+            if inventario_selecionado.status == Inventario.Status.FINALIZADO:
+                resultado, _aviso = leitura_inventario_congelado(
+                    inventario_selecionado,
+                    canal=canal,
+                    filtro_status=filtro_status,
+                    termo_busca=termo_busca,
+                )
+            else:
+                resultado = executar_confronto(
+                    inventario_id=inventario_selecionado.pk,
+                    filtro_status=filtro_status,
+                    termo_busca=termo_busca,
+                    canal=canal,
+                )
 
         return render(request, self.template_name, {
             'inventarios': inventarios,
@@ -622,12 +631,20 @@ class ConfrontoExportarView(AcessoOperacionalMixin, View):
             return redirect('confronto')
 
         inventario = get_object_or_404(Inventario, pk=int(inventario_id))
-        resultado = executar_confronto(
-            inventario_id=inventario.pk,
-            filtro_status=consulta['filtro_status'],
-            termo_busca=consulta['termo_busca'],
-            canal=consulta['canal'],
-        )
+        if inventario.status == Inventario.Status.FINALIZADO:
+            resultado, _aviso = leitura_inventario_congelado(
+                inventario,
+                canal=consulta['canal'],
+                filtro_status=consulta['filtro_status'],
+                termo_busca=consulta['termo_busca'],
+            )
+        else:
+            resultado = executar_confronto(
+                inventario_id=inventario.pk,
+                filtro_status=consulta['filtro_status'],
+                termo_busca=consulta['termo_busca'],
+                canal=consulta['canal'],
+            )
         return resposta_excel_confronto(inventario, resultado.linhas, consulta['canal'])
 
 

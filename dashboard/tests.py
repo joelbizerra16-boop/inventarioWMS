@@ -97,6 +97,8 @@ class DashboardServiceTestCase(TestCase):
             quantidade=Decimal('10'),
             data_contagem=timezone.now(),
         )
+        from inventario.services.inventario_snapshot import congelar_snapshot_inventario
+        congelar_snapshot_inventario(inventario_finalizado, usuario)
 
         indicadores = obter_indicadores_dashboard()
 
@@ -143,6 +145,8 @@ class DashboardServiceTestCase(TestCase):
             total=Decimal('25'),
             arquivo_origem='teste.xlsx',
         )
+        from inventario.services.inventario_snapshot import congelar_snapshot_inventario
+        congelar_snapshot_inventario(inventario, usuario)
 
         indicadores = obter_indicadores_dashboard()
 
@@ -328,6 +332,9 @@ class DashboardMaioresDivergenciasTestCase(TestCase):
                 quantidade_fisica=fisico,
             )
             EstoqueSAP.objects.create(produto=produto, total=sap, arquivo_origem='t.xlsx')
+
+        from inventario.services.inventario_snapshot import congelar_snapshot_inventario
+        congelar_snapshot_inventario(inventario, usuario)
 
         indicadores = obter_indicadores_dashboard()
         linhas = indicadores.maiores_divergencias
