@@ -40,6 +40,12 @@ from inventario.services.comparativo_contagens import (
     NOME_CANAL,
 )
 from inventario.services.comparativo_exportacao import resposta_excel_comparativo
+from inventario.services.fechamento import (
+    acuracidade_exibida,
+    registros_finalizacao,
+    resolver_canal,
+    PRIORIDADE_CANAIS,
+)
 
 LINHAS_POR_PAGINA = 50
 
@@ -125,7 +131,7 @@ class ComparativoListaView(ComparativoAcessoMixin, View):
             comparativo.contagens_ordenadas = sorted(
                 comparativo.associacoes.all(), key=lambda a: a.ordem,
             )
-            comparativo.ultima_acuracidade = next(iter(comparativo.acuracidades.all()), None)
+            comparativo.ultima_acuracidade = acuracidade_exibida(comparativo)
             comparativo.pode_reabrir = pode_reabrir_comparativo(comparativo)
         return render(request, self.template_name, {
             'page_obj': pagina,
@@ -221,9 +227,18 @@ class ComparativoFormularioView(RequerEscritaInventarioMixin, ComparativoAcessoM
 
 def _parametros(request):
     visao = Visao.normalizar(request.GET.get('visao'))
-    canal = Canal.normalizar(request.GET.get('canal'))
+    canal = request.GET.get('canal') if 'canal' in request.GET else None
     filtros = FiltrosComparativo.de_parametros(request.GET, visao)
     return canal, visao, filtros
+
+
+def _acuracidades_visiveis(comparativo):
+    if comparativo.snapshot_resultado is None:
+        return list(
+            comparativo.acuracidades.select_related('usuario', 'usuario__perfil_operacional')[:10]
+        )
+    registros = registros_finalizacao(comparativo)
+    return [registros[canal] for canal in PRIORIDADE_CANAIS if canal in registros]
 
 
 def _querystring(canal_atual, visao_atual, filtros, **substituir) -> str:
@@ -255,7 +270,8 @@ class ComparativoAcompanhamentoView(ComparativoAcessoMixin, View):
         )
         alinhar_categoria_sessao(request, comparativo.categoria)
         comparativo.pode_reabrir = pode_reabrir_comparativo(comparativo)
-        canal, visao, filtros = _parametros(request)
+        canal_pedido, visao, filtros = _parametros(request)
+        canal, aviso_canal = resolver_canal(comparativo, canal_pedido)
         parcial = request.GET.get('parcial') == '1'
         forcar = request.GET.get('forcar') == '1'
         # Conferência aberta acompanha a importação SAP concluída mais recente
@@ -305,9 +321,8 @@ class ComparativoAcompanhamentoView(ComparativoAcessoMixin, View):
             'fuso_rotulo': FUSO_ROTULO,
             'atualizado_em': timezone.localtime(resultado.dados.gerado_em),
             'pode_editar': usuario_pode_escrever_inventario(request.user),
-            'acuracidades_salvas': list(
-                comparativo.acuracidades.select_related('usuario', 'usuario__perfil_operacional')[:10]
-            ),
+            'aviso_canal': aviso_canal,
+            'acuracidades_salvas': _acuracidades_visiveis(comparativo),
             'rotulos_canal': Canal.ROTULOS,
         }
         if parcial:
@@ -419,7 +434,8 @@ class ComparativoExportarView(ComparativoAcessoMixin, View):
         comparativo = get_object_or_404(
             ComparativoContagem.objects.select_related('referencia_sap'), pk=pk,
         )
-        canal, _visao, _filtros = _parametros(request)
+        canal_pedido, _visao, _filtros = _parametros(request)
+        canal, _aviso = resolver_canal(comparativo, canal_pedido)
         filtros = FiltrosComparativo.de_parametros(request.GET, Visao.SKU)
         sincronizar_referencia_sap(comparativo, request.user)
         return resposta_excel_comparativo(

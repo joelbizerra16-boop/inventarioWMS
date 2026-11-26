@@ -1,4 +1,9 @@
-"""Histórico unificado de inventários gerais e cíclicos."""
+"""Histórico unificado de inventários gerais e cíclicos.
+
+O Inventário Cíclico fica de fora do hotfix de fotografia: a tela está oculta
+em produção e o detalhe encerrado ainda lê produtos, posições e SAP atuais.
+Não há snapshot de linhas cíclicas para preservar.
+"""
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -124,6 +129,7 @@ class HistoricoDetalheUnificado:
     conciliados: int
     divergentes: int
     produtos: list[HistoricoProdutoDetalhe]
+    aviso: str = ''
 
 
 def _parse_date(valor: str) -> date | None:
@@ -320,25 +326,49 @@ def obter_detalhe_historico_unificado(tipo: str, pk: int) -> HistoricoDetalheUni
             return None
         _, status_label, status_badge = _status_inventario(inventario)
         produtos: list[HistoricoProdutoDetalhe] = []
-        snapshot = inventario.snapshot_resultado or {}
-        for item in snapshot.get('produtos', []):
-            produtos.append(HistoricoProdutoDetalhe(
-                codigo_produto=item.get('codigo_produto', '—'),
-                descricao=item.get('descricao', '—'),
-                embalagem=item.get('embalagem', '—'),
-                sap=item.get('sap', '0'),
-                contado=item.get('contado', '0'),
-                diferenca=item.get('diferenca', '0'),
-                status=item.get('status', '—'),
-                posicoes=[
-                    HistoricoPosicaoDetalhe(
-                        alocacao=p.get('alocacao', '—'),
-                        codigo=p.get('codigo', '—'),
-                        quantidade=p.get('quantidade', '0'),
-                    )
-                    for p in item.get('posicoes', [])
-                ],
-            ))
+        snapshot = inventario.snapshot_resultado if isinstance(inventario.snapshot_resultado, dict) else None
+        aviso = ''
+        if not snapshot or 'produtos' not in snapshot:
+            aviso = 'Dado não disponível no fechamento'
+            acuracidade = None
+            quantidade = 0
+            conciliados = 0
+            divergentes = 0
+        else:
+            resumo = snapshot.get('resumo') or {}
+            acuracidade = (
+                Decimal(str(resumo['acuracidade'])) if resumo.get('acuracidade') is not None
+                else inventario.taxa_acuracidade
+            )
+            quantidade = int(resumo.get('total_produtos') or inventario.quantidade_produtos or 0)
+            conciliados = int(resumo.get('conciliados') or inventario.quantidade_conciliados or 0)
+            divergentes = int(resumo.get('divergentes') or inventario.quantidade_divergentes or 0)
+            for item in snapshot.get('produtos', []):
+                fotos = item.get('fotos') if isinstance(item.get('fotos'), dict) else {}
+                foto_total = fotos.get('total') if isinstance(fotos.get('total'), dict) else {}
+                if foto_total.get('status_label'):
+                    status = foto_total['status_label']
+                elif 'status' in item:
+                    status = item['status']
+                else:
+                    status = 'Dado não disponível no fechamento'
+                produtos.append(HistoricoProdutoDetalhe(
+                    codigo_produto=item['codigo_produto'] if 'codigo_produto' in item else 'Dado não disponível no fechamento',
+                    descricao=item['descricao'] if 'descricao' in item else 'Dado não disponível no fechamento',
+                    embalagem=item.get('embalagem', '—'),
+                    sap=item['sap'] if 'sap' in item else 'Dado não disponível no fechamento',
+                    contado=item['contado'] if 'contado' in item else 'Dado não disponível no fechamento',
+                    diferenca=item['diferenca'] if 'diferenca' in item else 'Dado não disponível no fechamento',
+                    status=status,
+                    posicoes=[
+                        HistoricoPosicaoDetalhe(
+                            alocacao=p.get('alocacao', '—'),
+                            codigo=p.get('codigo', '—'),
+                            quantidade=p.get('quantidade', '0'),
+                        )
+                        for p in item.get('posicoes', [])
+                    ],
+                ))
         return HistoricoDetalheUnificado(
             pk=inventario.pk,
             tipo=TipoHistorico.GERAL,
@@ -348,13 +378,16 @@ def obter_detalhe_historico_unificado(tipo: str, pk: int) -> HistoricoDetalheUni
             responsavel=_responsavel_inventario(inventario),
             status_label=status_label,
             status_badge=status_badge,
-            acuracidade=inventario.taxa_acuracidade,
-            quantidade_itens=inventario.quantidade_produtos or 0,
-            conciliados=inventario.quantidade_conciliados or 0,
-            divergentes=inventario.quantidade_divergentes or 0,
+            acuracidade=acuracidade,
+            quantidade_itens=quantidade,
+            conciliados=conciliados,
+            divergentes=divergentes,
             produtos=produtos,
+            aviso=aviso,
         )
 
+    # Cíclico encerrado continua ao vivo: a funcionalidade está oculta em
+    # produção e este hotfix não grava nem reescreve snapshot cíclico.
     if tipo == TipoHistorico.CICLICO:
         detalhe_ciclo = obter_detalhe_historico_ciclo(pk)
         if detalhe_ciclo is None:

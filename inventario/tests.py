@@ -104,18 +104,19 @@ class AprovacaoServiceTestCase(TestCase):
             total=Decimal('10'),
             arquivo_origem='teste.xlsx',
         )
+        from inventario.services.inventario_snapshot import congelar_snapshot_inventario
+        congelar_snapshot_inventario(self.inventario, self.usuario)
 
     def tearDown(self):
         limpar_estado_aprovacao()
         limpar_estado_consolidacao()
 
-    def test_consultar_aprovacao_marca_pendente_e_calcula_resumo(self):
+    def test_consultar_aprovacao_le_fotografia_sem_gravar(self):
         resultado = consultar_aprovacao(self.inventario.pk)
 
-        self.assertEqual(
-            obter_status_aprovacao(self.inventario.pk),
-            StatusAprovacao.PENDENTE_APROVACAO,
-        )
+        self.assertIsNone(obter_status_aprovacao(self.inventario.pk))
+        self.inventario.refresh_from_db()
+        self.assertIsNone(self.inventario.confronto_executado_em)
         self.assertEqual(resultado.resumo.total_produtos, 3)
         self.assertEqual(resultado.resumo.produtos_corretos, 1)
         self.assertEqual(resultado.resumo.produtos_divergentes, 2)
@@ -125,9 +126,42 @@ class AprovacaoServiceTestCase(TestCase):
         self.assertEqual(len(resultado.linhas), 2)
         self.assertTrue(all(linha.possui_divergencia for linha in resultado.linhas))
 
-    def test_aprovar_inventario_exige_confronto(self):
-        with self.assertRaises(AprovacaoError):
-            aprovar_inventario(self.inventario)
+    def test_inventario_em_andamento_confronta_ao_vivo_sem_gravar(self):
+        aberto = Inventario.objects.create(
+            usuario=self.usuario,
+            status=Inventario.Status.EM_ANDAMENTO,
+        )
+        InventarioItem.objects.create(
+            inventario=aberto,
+            posicao=self.posicao,
+            produto=self.produto_excesso,
+            quantidade_fisica=Decimal('15'),
+        )
+        antes = consultar_aprovacao(aberto.pk)
+        aberto.refresh_from_db()
+        self.assertIsNone(aberto.confronto_executado_em)
+        self.assertIsNone(aberto.snapshot_resultado)
+        excesso = next(linha for linha in antes.linhas if linha.codigo_produto == 'P002')
+        self.assertEqual(excesso.diferenca, Decimal('5'))
+
+        EstoqueSAP.objects.filter(produto=self.produto_excesso).update(total=Decimal('15'))
+        depois = consultar_aprovacao(aberto.pk)
+        self.assertFalse(any(linha.codigo_produto == 'P002' for linha in depois.linhas))
+        aberto.refresh_from_db()
+        self.assertIsNone(aberto.confronto_executado_em)
+
+    def test_aprovar_grava_decisao_sem_recalcular_fechamento(self):
+        import json
+        foto = json.dumps(self.inventario.snapshot_resultado, sort_keys=True)
+        aprovar_inventario(self.inventario)
+
+        self.inventario.refresh_from_db()
+        self.assertEqual(
+            obter_status_aprovacao(self.inventario.pk),
+            StatusAprovacao.APROVADO,
+        )
+        self.assertIsNone(self.inventario.confronto_executado_em)
+        self.assertEqual(json.dumps(self.inventario.snapshot_resultado, sort_keys=True), foto)
 
     def test_aprovar_inventario_com_sucesso(self):
         consultar_aprovacao(self.inventario.pk)
@@ -413,6 +447,8 @@ class ConfrontoCanalViewTestCase(ClienteAutenticadoMixin, TestCase):
             total=Decimal('15'),
             arquivo_origem='teste.xlsx',
         )
+        from inventario.services.inventario_snapshot import congelar_snapshot_inventario
+        congelar_snapshot_inventario(self.inventario, self.user.perfil_operacional)
 
     def test_default_sem_parametro_e_ambos(self):
         response = self.client.get(reverse('confronto'), {'inventario': self.inventario.pk})
@@ -492,6 +528,8 @@ class AprovacaoViewTestCase(ClienteAutenticadoMixin, TestCase):
             total=Decimal('10'),
             arquivo_origem='teste.xlsx',
         )
+        from inventario.services.inventario_snapshot import congelar_snapshot_inventario
+        congelar_snapshot_inventario(self.inventario_finalizado, self.usuario)
         self.autenticar_cliente(Usuario.Perfil.INVENTARIO)
 
     def tearDown(self):
@@ -505,10 +543,9 @@ class AprovacaoViewTestCase(ClienteAutenticadoMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Resumo executivo')
         self.assertContains(response, 'Aprovar Inventário')
-        self.assertEqual(
-            obter_status_aprovacao(self.inventario_finalizado.pk),
-            StatusAprovacao.PENDENTE_APROVACAO,
-        )
+        self.assertIsNone(obter_status_aprovacao(self.inventario_finalizado.pk))
+        self.inventario_finalizado.refresh_from_db()
+        self.assertIsNone(self.inventario_finalizado.confronto_executado_em)
 
     def test_post_aprovar(self):
         consultar_aprovacao(self.inventario_finalizado.pk)

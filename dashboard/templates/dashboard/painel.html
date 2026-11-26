@@ -32,9 +32,11 @@
         <a href="{% url 'comparativo:acompanhamento' comparativo.pk %}?canal={{ canal }}&visao=sku" class="btn btn-sm btn-outline-primary">
             <i class="bi bi-layout-three-columns me-1" aria-hidden="true"></i>Abrir comparativo
         </a>
+        {% if painel.provisorio %}
         <a href="?conferencia={{ comparativo.pk }}&canal={{ canal }}" class="btn btn-sm btn-outline-secondary">
             <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Atualizar
         </a>
+        {% endif %}
     </div>
     {% endif %}
 </header>
@@ -66,6 +68,12 @@
     {% endif %}
 </div>
 
+{% if painel.aviso %}
+<div class="pn-aviso" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{ painel.aviso }}</div>
+{% endif %}
+{% if painel.acuracidade_fechamento %}
+<div class="pn-aviso" role="status">Acuracidade do fechamento{% if painel.acuracidade_fechamento.disponivel %}: <strong>{{ painel.acuracidade_fechamento.percentual|qtd }}%</strong> ({{ painel.acuracidade_fechamento.acertos }}/{{ painel.acuracidade_fechamento.avaliados }}){% else %}: {{ painel.acuracidade_fechamento.motivo }}{% endif %}</div>
+{% endif %}
 {% if painel.motivo_sap %}
 <div class="pn-aviso" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Comparação com SAP indisponível: {{ painel.motivo_sap }}.</div>
 {% endif %}
@@ -291,7 +299,7 @@
                 </table>
             </div>
             {% else %}
-            <p class="pn-semdados">{% if painel.inventario_divergencias %}Nenhuma divergência no último inventário finalizado.{% else %}Nenhum inventário finalizado para análise de divergências.{% endif %}</p>
+            <p class="pn-semdados">{% if painel.aviso_inventario %}{{ painel.aviso_inventario }}{% elif painel.inventario_divergencias %}Nenhuma divergência no último inventário finalizado.{% else %}Nenhum inventário finalizado para análise de divergências.{% endif %}</p>
             {% endif %}
         </div>
     </div>

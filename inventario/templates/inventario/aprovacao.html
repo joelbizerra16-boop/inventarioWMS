@@ -45,6 +45,9 @@
 </div>
 
 {% if inventario_selecionado and resultado %}
+{% if resultado.aviso %}
+<div class="alert alert-warning" role="status">{{ resultado.aviso }}</div>
+{% endif %}
 <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
     <span>
         Inventário <strong>#{{ inventario_selecionado.pk }}</strong>
@@ -85,7 +88,7 @@
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body text-center">
                 <p class="text-muted small mb-1">Acuracidade</p>
-                <p class="h4 fw-semibold text-primary mb-0">{{ resultado.resumo.acuracidade }}%</p>
+                <p class="h4 fw-semibold text-primary mb-0" id="acuracidade-aprovacao">{% if resultado.resumo.acuracidade is None %}—{% else %}{{ resultado.resumo.acuracidade }}%{% endif %}</p>
             </div>
         </div>
     </div>
@@ -166,7 +169,7 @@
                     {% empty %}
                     <tr>
                         <td colspan="6" class="text-center text-muted py-5">
-                            Nenhuma divergência encontrada para os filtros selecionados.
+                            {% if resultado.aviso %}{{ resultado.aviso }}{% else %}Nenhuma divergência encontrada para os filtros selecionados.{% endif %}
                         </td>
                     </tr>
                     {% endfor %}

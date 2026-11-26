@@ -9,6 +9,9 @@
 </div>
 
 {% if inventario_selecionado and resultado %}
+{% if resultado.aviso %}
+<div class="alert alert-warning" role="status">{{ resultado.aviso }}</div>
+{% endif %}
 <div class="row g-3 mb-4">
     <div class="col-sm-6 col-xl-3">
         <div class="card border-0 shadow-sm">
@@ -38,7 +41,7 @@
         <div class="card border-0 shadow-sm">
             <div class="card-body text-center">
                 <p class="text-muted small mb-1">Acuracidade</p>
-                <p class="h4 fw-semibold text-primary mb-0">{{ resultado.resumo.acuracidade }}%</p>
+                <p class="h4 fw-semibold text-primary mb-0" id="acuracidade-confronto">{% if resultado.resumo.acuracidade is None %}—{% else %}{{ resultado.resumo.acuracidade }}%{% endif %}</p>
             </div>
         </div>
     </div>
@@ -149,7 +152,7 @@
                     {% empty %}
                     <tr>
                         <td colspan="{% if canal == 'ambos' %}10{% else %}9{% endif %}" class="text-center text-muted py-5">
-                            Nenhum produto encontrado para os filtros selecionados.
+                            {% if resultado.aviso %}{{ resultado.aviso }}{% else %}Nenhum produto encontrado para os filtros selecionados.{% endif %}
                         </td>
                     </tr>
                     {% endfor %}

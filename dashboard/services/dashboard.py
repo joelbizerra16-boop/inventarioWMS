@@ -14,6 +14,7 @@ from inventario.services.ciclico import (
     obter_indicadores_ciclico_dashboard,
 )
 from inventario.services.confronto import ResultadoConfronto, executar_confronto
+from inventario.services.inventario_snapshot import leitura_inventario_congelado
 from posicoes.models import Posicao
 from produtos.models import Produto
 
@@ -57,7 +58,7 @@ class IndicadoresDashboard:
     inventarios_finalizados: int
     produtos_corretos: int
     produtos_divergentes: int
-    acuracidade: Decimal
+    acuracidade: Decimal | None
     ciclico_itens_planejados: int
     ciclico_itens_contados: int
     ciclico_percentual_concluido: Decimal
@@ -67,6 +68,7 @@ class IndicadoresDashboard:
     graficos_ciclico: list[GraficoDashboard]
     maiores_divergencias: list[LinhaDivergenciaDashboard]
     maiores_divergencias_inventario: Inventario | None
+    aviso_inventario: str = ''
 
     @property
     def grafico_inventarios_labels(self) -> list[str]:
@@ -118,18 +120,16 @@ def _obter_inventario_finalizado_mais_recente(categoria: str | None = None) -> I
 
 def _obter_confronto_ultimo_inventario_finalizado(
     categoria: str | None = None,
-) -> tuple[Inventario | None, ResultadoConfronto | None]:
-    """Confronto do último inventário geral finalizado.
+) -> tuple[Inventario | None, ResultadoConfronto | None, str]:
+    """Último inventário finalizado, só pela fotografia gravada.
 
-    Reaproveitado pelos cards de Acuracidade Geral/Corretos/Divergentes e
-    pela análise "Maiores Divergências", para não duplicar a regra de
-    cálculo nem repetir a consulta. Usa `canal=None` (comportamento legado,
-    soma total do SAP) — o mesmo conceito que este Dashboard já usa hoje.
+    Sem snapshot não há consulta ao SAP nem às contagens atuais.
     """
     inventario = _obter_inventario_finalizado_mais_recente(categoria)
     if inventario is None:
-        return None, None
-    return inventario, executar_confronto(inventario.pk)
+        return None, None, ''
+    resultado, aviso = leitura_inventario_congelado(inventario, canal=None)
+    return inventario, resultado, aviso
 
 
 def _montar_evolucao_acuracidade(limite: int = 10, categoria: str | None = None) -> GraficoDashboard:
@@ -477,10 +477,12 @@ def obter_indicadores_dashboard(categoria: str | None = None) -> IndicadoresDash
         ).count()
 
     with medir_etapa('dashboard.obter_indicadores_dashboard.confronto_ultimo_inventario'):
-        maiores_divergencias_inventario, resultado_ultimo_inventario = (
+        maiores_divergencias_inventario, resultado_ultimo_inventario, aviso_inventario = (
             _obter_confronto_ultimo_inventario_finalizado(categoria)
         )
-        if resultado_ultimo_inventario is None:
+        if aviso_inventario:
+            produtos_corretos, produtos_divergentes, acuracidade = 0, 0, None
+        elif resultado_ultimo_inventario is None:
             produtos_corretos, produtos_divergentes, acuracidade = 0, 0, Decimal('0')
         else:
             produtos_corretos = resultado_ultimo_inventario.resumo.produtos_corretos
@@ -520,4 +522,5 @@ def obter_indicadores_dashboard(categoria: str | None = None) -> IndicadoresDash
         graficos_ciclico=graficos_ciclico,
         maiores_divergencias=maiores_divergencias,
         maiores_divergencias_inventario=maiores_divergencias_inventario,
+        aviso_inventario=aviso_inventario,
     )

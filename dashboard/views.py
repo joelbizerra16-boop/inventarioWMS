@@ -9,6 +9,7 @@ from dashboard.services.dashboard import obter_indicadores_dashboard
 from dashboard.services.painel_inventario import comparativo_padrao, montar_painel
 from inventario.models_comparativo import ComparativoContagem
 from inventario.services.comparativo_contagens import FUSO_ROTULO, Canal, sincronizar_referencia_sap
+from inventario.services.fechamento import resolver_canal
 
 
 def _serializar_grafico(grafico) -> dict:
@@ -33,12 +34,14 @@ class HomeView(AcessoOperacionalMixin, TemplateView):
                 categoria = comparativo.categoria
         if comparativo is None:
             comparativo = comparativo_padrao(categoria)
-        canal = Canal.normalizar(self.request.GET.get('canal'))
         if comparativo is not None:
             # Conferência aberta acompanha a importação SAP mais recente (auditado).
+            # Finalizada não grava nem troca a referência.
             sincronizar_referencia_sap(comparativo, self.request.user)
+        canal_pedido = self.request.GET.get('canal') if 'canal' in self.request.GET else None
+        canal, aviso = resolver_canal(comparativo, canal_pedido)
         with medir_etapa('HomeView.montar_painel'):
-            painel = montar_painel(comparativo, canal, categoria)
+            painel = montar_painel(comparativo, canal, categoria, aviso=aviso)
         context.update({
             'painel': painel,
             'comparativo': comparativo,

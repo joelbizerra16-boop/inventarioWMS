@@ -270,16 +270,17 @@ def gerar_pasta(comparativo, *, canal: str, filtros, usuario) -> tuple[Workbook,
     dados = carregar_dados(comparativo)
     ordens = [o for o in ORDENS if o in dados.ordens_associadas or o in (1, 2)]
     colunas_sap = Canal.colunas_sap(canal)
-
-    linhas_sku = filtrar_linhas(montar_linhas_sku(dados, canal), filtros)
     filtros_posicao = type(filtros)(
         termo=filtros.termo,
         status_contagem=filtros.status_contagem,
         status_sap='',
         necessita_c3=filtros.necessita_c3,
     )
-    linhas_posicao = filtrar_linhas(montar_linhas_posicao(dados), filtros_posicao)
     resultado = analisar(comparativo, canal=canal, visao=Visao.SKU, filtros=filtros, dados=dados)
+    linhas_sku = resultado.linhas
+    linhas_posicao = analisar(
+        comparativo, canal=canal, visao=Visao.POSICAO, filtros=filtros_posicao, dados=dados,
+    ).linhas
 
     pasta = Workbook()
     resumo = pasta.active
@@ -305,10 +306,18 @@ def gerar_pasta(comparativo, *, canal: str, filtros, usuario) -> tuple[Workbook,
                 f' · {contagem.total_lancamentos} lançamento(s)'
             )
         linhas_resumo.append((rotulo_ordem(ordem), texto, TEXTO))
-    referencia = comparativo.referencia_sap
+    if getattr(dados, 'congelado', False):
+        from inventario.services.fechamento import referencia_congelada
+        referencia_foto = referencia_congelada(comparativo, dados)
+        base_sap = referencia_foto['descricao']
+        data_sap = _data_excel(referencia_foto['data_importacao'])
+    else:
+        referencia = comparativo.referencia_sap
+        base_sap = referencia.descricao if referencia else 'Sem referência SAP'
+        data_sap = _data_excel(referencia.data_importacao_origem) if referencia else None
     linhas_resumo.extend([
-        ('Base SAP', referencia.descricao if referencia else 'Sem referência SAP', TEXTO),
-        ('Data da base SAP', _data_excel(referencia.data_importacao_origem) if referencia else None, DATA),
+        ('Base SAP', base_sap, TEXTO),
+        ('Data da base SAP', data_sap, DATA),
         ('Canal SAP', Canal.DESCRICOES[canal], TEXTO),
         ('Canal COSAN (110)', 'carregado' if dados.canal_carregado('cosan') else 'não carregado', TEXTO),
         ('Canal BRIDA (1)', 'carregado' if dados.canal_carregado('brida') else 'não carregado', TEXTO),

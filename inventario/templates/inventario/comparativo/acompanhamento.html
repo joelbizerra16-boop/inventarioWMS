@@ -62,6 +62,10 @@
 </div>
 {% endif %}
 
+{% if aviso_canal %}
+<div class="alert alert-warning py-2" role="status">{{ aviso_canal }}</div>
+{% endif %}
+
 {% if aviso_sap %}
 <div class="alert alert-warning py-2 small" role="status"><i class="bi bi-exclamation-triangle me-1"></i>{{ aviso_sap }}</div>
 {% endif %}
